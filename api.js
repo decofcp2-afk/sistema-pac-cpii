@@ -13,7 +13,7 @@
  * Aplicativo da Web).
  */
 
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/SUBSTITUA_PELO_ID_DA_IMPLANTACAO/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwrWWfQ7pEM4GRE51WHC_RvQ8XIXEwjFxJXCI3L-4Ydkwny3nYZznDYZzSiDW9B2_4Sgg/exec';
 
 function _pacFetch(body, onSuccess, onFailure) {
   fetch(APPS_SCRIPT_URL, {
