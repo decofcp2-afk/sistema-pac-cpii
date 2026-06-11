@@ -304,9 +304,10 @@
   </div>
 </div>
 
+<script src="api.js"></script>
 <script>
-  const APP_URL = '<?= ScriptApp.getService().getUrl() ?>';
-  const _di     = (function(){ try { return <?= dadosIniciais ?>; } catch(e){ return {}; } })();
+  const APP_URL = APPS_SCRIPT_URL;
+  const _di     = {};
 
   let _dados    = null;
   let _chart    = null;
@@ -426,10 +427,8 @@
   }
 
   function navegar(page, token) {
-    document.getElementById('nav-page').value  = page;
-    document.getElementById('nav-token').value = token || '';
-    document.getElementById('nav-form').action = APP_URL;
-    document.getElementById('nav-form').submit();
+    if (token) { try { localStorage.setItem('pac_token', token); } catch(e) {} }
+    window.location.href = page + '.html';
   }
 
   // ── Filtros públicos ──────────────────────────────────────────────────────

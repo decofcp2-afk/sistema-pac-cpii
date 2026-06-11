@@ -79,13 +79,6 @@
 </head>
 <body>
 
-<? var ctx = JSON.parse(dados); ?>
-
-<!-- Formulário oculto para navegação segura (escapa do sandbox) -->
-<form id="nav-form" method="get" target="_top" style="display:none">
-  <input type="hidden" id="nav-page"  name="page"  value="dashboard">
-  <input type="hidden" id="nav-token" name="token" value="">
-</form>
 
 <!-- ── TELA DE LOGIN ── -->
 <div class="card" id="tela-login">
@@ -181,6 +174,7 @@
   </button>
 </div>
 
+<script src="api.js"></script>
 <script>
   let _token = '';
   let _primeiroAcesso = false;
@@ -198,16 +192,8 @@
 
   // ── Redirecionamento seguro via form (escapa do sandbox do Apps Script) ────
   function navegarParaDashboard(token) {
-    google.script.run
-      .withSuccessHandler(function(htmlRedirect) {
-        document.open();
-        document.write(htmlRedirect);
-        document.close();
-      })
-      .withFailureHandler(function(err) {
-        mostrarErro('erro-login', 'Erro ao redirecionar: ' + err.message);
-      })
-      .criarPaginaRedirect(token, 'dashboard');
+    try { localStorage.setItem('pac_token', token); } catch(e) {}
+    window.location.href = 'dashboard.html';
   }
 
   // ── Login ──────────────────────────────────────────────────────────────────

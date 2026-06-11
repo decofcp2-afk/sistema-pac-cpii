@@ -75,47 +75,14 @@ function doPost(e) {
     const acao    = payload.acao  || '';
     const token   = payload.token || '';
 
-    if (acao === 'login')        return _json(_acaoLogin(payload));
-    if (acao === 'trocar_senha') return _json(_acaoTrocarSenha(payload));
-
-    const sessao = _verificarSessao(token);
-    if (!sessao) return _json({ ok: false, erro: 'Sessão inválida ou expirada.' });
-
-    const usuario = lerPor(SHEET_NAMES.USUARIOS, 'id_usuario', sessao.id_usuario);
-    if (!usuario || String(usuario.ativo).toUpperCase() !== 'TRUE') {
-      return _json({ ok: false, erro: 'Usuário inativo.' });
+    // Ações públicas (sem sessão) — usadas pelo painel público estático
+    if (acao === 'dados_publicos_pac') {
+      return _json(chamarAcaoPublica(acao, JSON.stringify(payload)));
     }
 
-    switch (acao) {
-      case 'logout':           return _json(_acaoLogout(token));
-      case 'dados_usuario':    return _json(_acaoDadosUsuario(usuario));
-      case 'listar_demandas':  return _json(_acaoListarDemandas(usuario, payload));
-      case 'salvar_demanda':   return _json(_acaoSalvarDemanda(usuario, payload));
-      case 'enviar_demanda':   return _json(_acaoEnviarDemanda(usuario, payload));
-      case 'aprovar_demanda':  return _json(_acaoAprovarDemanda(usuario, payload));
-      case 'reprovar_demanda': return _json(_acaoReprovarDemanda(usuario, payload));
-      case 'listar_usuarios':
-        _exigirPapel(usuario, ['licitacoes']);
-        return _json(_acaoListarUsuarios(usuario));
-      case 'salvar_usuario':
-        _exigirPapel(usuario, ['licitacoes']);
-        return _json(_acaoSalvarUsuario(payload, usuario));
-      case 'listar_unidades':  return _json(_acaoListarUnidades(usuario));
-      case 'salvar_dotacao':
-        _exigirPapel(usuario, ['chefia','ord_despesas','licitacoes']);
-        return _json(_acaoSalvarDotacao(usuario, payload));
-      case 'distribuir_orcamento':
-        _exigirPapel(usuario, ['chefia','ord_despesas']);
-        return _json(_acaoDistribuirOrcamento(usuario, payload));
-      case 'salvar_gut':
-        _exigirPapel(usuario, ['chefia','ord_despesas']);
-        return _json(_acaoSalvarGut(usuario, payload));
-      case 'homologar_plano':
-        _exigirPapel(usuario, ['ord_despesas']);
-        return _json(_acaoHomologarPlano(usuario, payload));
-      default:
-        return _json({ ok: false, erro: 'Ação desconhecida: ' + acao });
-    }
+    // Demais ações (login, trocar_senha e ações autenticadas) — delega para
+    // chamarAcao, que já implementa o conjunto completo de ações do sistema.
+    return _json(chamarAcao(token, acao, JSON.stringify(payload)));
   } catch(err) {
     return _json({ ok: false, erro: err.message });
   }

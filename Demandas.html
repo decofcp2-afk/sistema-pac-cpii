@@ -130,7 +130,6 @@
 </head>
 <body>
 
-<? var dadosObj = JSON.parse(dados); ?>
 
 <form id="nav-form" method="get" target="_top">
   <input type="hidden" id="nav-page"  name="page"  value="">
@@ -366,9 +365,10 @@
   </div>
 </div>
 
+<script src="api.js"></script>
 <script>
-  const token  = '<?= JSON.parse(dados).token || "" ?>';
-  const appUrl = '<?= ScriptApp.getService().getUrl() ?>';
+  const token  = localStorage.getItem('pac_token') || '';
+  const appUrl = APPS_SCRIPT_URL;
   let _saldoOrcamento    = null;
   let _usuario           = null;
   let _demandas          = [];
@@ -406,10 +406,9 @@
 
   // ── Navegação ─────────────────────────────────────────────────────────────
   function navegar(page, tk) {
-    document.getElementById('nav-page').value  = page;
-    document.getElementById('nav-token').value = tk || token;
-    document.getElementById('nav-form').action = appUrl;
-    document.getElementById('nav-form').submit();
+    const t = tk || token;
+    if (t) { try { localStorage.setItem('pac_token', t); } catch(e) {} }
+    window.location.href = page + '.html';
   }
 
   const MENUS = {
@@ -817,6 +816,7 @@
 
   function fazerLogout() {
     google.script.run.chamarAcao(token, 'logout', '{}');
+    try { localStorage.removeItem('pac_token'); } catch(e) {}
     navegar('login', '');
   }
 
