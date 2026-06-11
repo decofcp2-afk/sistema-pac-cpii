@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema PAC — Orçamento</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #F1EFE8; color: #2C2C2A; min-height: 100vh; }
+
+  .topbar { background: #3C3489; height: 56px; display: flex; align-items: center; padding: 0 24px; gap: 16px; position: sticky; top: 0; z-index: 100; }
+  .topbar-logo { font-size: 15px; font-weight: 700; color: #fff; }
+  .topbar-sub { font-size: 12px; color: rgba(255,255,255,0.55); border-left: 1px solid rgba(255,255,255,0.2); padding-left: 14px; }
+  .topbar-spacer { flex: 1; }
+  .topbar-usuario { display: flex; align-items: center; gap: 10px; font-size: 13px; color: rgba(255,255,255,0.85); }
+  .avatar { width: 32px; height: 32px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #fff; }
+  .btn-logout { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 5px 12px; font-size: 12px; color: rgba(255,255,255,0.85); cursor: pointer; }
+
+  .layout { display: flex; min-height: calc(100vh - 56px); }
+  .sidebar { width: 220px; background: #fff; border-right: 1px solid #D3D1C7; padding: 20px 0; flex-shrink: 0; }
+  .nav-titulo { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: #B4B2A9; padding: 0 18px 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 18px; font-size: 13px; color: #5F5E5A; text-decoration: none; border-left: 3px solid transparent; transition: all 0.12s; cursor: pointer; }
+  .nav-item:hover { background: #F1EFE8; color: #2C2C2A; }
+  .nav-item.ativo { background: #EEEDFE; color: #3C3489; border-left-color: #3C3489; font-weight: 500; }
+  .nav-item svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
+
+  .main { flex: 1; padding: 28px 32px; max-width: 1100px; }
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .page-title { font-size: 20px; font-weight: 600; }
+  .page-sub { font-size: 13px; color: #888780; margin-top: 2px; }
+
+  .btn-primario { background: #3C3489; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .btn-primario:hover { background: #534AB7; }
+  .btn-primario svg { width: 16px; height: 16px; stroke: #fff; fill: none; stroke-width: 2.5; }
+  .btn-secundario { background: #fff; color: #444441; border: 1px solid #D3D1C7; border-radius: 8px; padding: 8px 16px; font-size: 13px; cursor: pointer; }
+  .btn-secundario:hover { background: #F1EFE8; }
+  .btn-verde { background: #0F6E56; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-verde:hover { background: #0a5240; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px; }
+  .card { background: #fff; border: 1px solid #D3D1C7; border-radius: 12px; padding: 20px; }
+  .card-label   { font-size: 12px; color: #888780; margin-bottom: 8px; }
+  .card-valor   { font-size: 22px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+  .card-detalhe { font-size: 12px; color: #B4B2A9; }
+  .card.azul    { border-left: 4px solid #3C3489; }
+  .card.verde   { border-left: 4px solid #1D9E75; }
+  .card.amarelo { border-left: 4px solid #BA7517; }
+  .card.vermelho{ border-left: 4px solid #E24B4A; }
+
+  .barra-wrap { background: #F1EFE8; border-radius: 99px; height: 8px; margin-top: 12px; overflow: hidden; }
+  .barra-fill { height: 8px; border-radius: 99px; transition: width 0.4s; }
+  .barra-fill.verde   { background: #1D9E75; }
+  .barra-fill.amarelo { background: #BA7517; }
+  .barra-fill.vermelho{ background: #E24B4A; }
+
+  .secao { background: #fff; border: 1px solid #D3D1C7; border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+  .secao-header { padding: 16px 20px; border-bottom: 1px solid #F1EFE8; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .secao-titulo { font-size: 14px; font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #888780; padding: 10px 16px; text-align: left; background: #FAFAF8; border-bottom: 1px solid #F1EFE8; }
+  td { font-size: 13px; padding: 12px 16px; border-bottom: 1px solid #F8F7F4; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #FAFAF8; }
+  .num { text-align: right; }
+
+  .badge-aberto  { background: #EAF3DE; color: #27500A; display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+  .badge-fechado { background: #F1EFE8; color: #5F5E5A; display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+
+  .acao-btn { background: none; border: none; cursor: pointer; color: #3C3489; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+  .acao-btn:hover { background: #EEEDFE; }
+
+  .vazio     { text-align: center; padding: 40px; color: #B4B2A9; font-size: 13px; }
+  .carregando{ text-align: center; padding: 40px; color: #B4B2A9; font-size: 14px; }
+
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; overflow-y: auto; padding: 24px; }
+  .overlay.aberto { display: flex; align-items: flex-start; justify-content: center; }
+  .modal { background: #fff; border-radius: 16px; width: 100%; max-width: 560px; padding: 32px; margin: auto; }
+  .modal-sm { max-width: 440px; }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .modal-titulo { font-size: 17px; font-weight: 600; }
+  .modal-fechar { background: none; border: none; cursor: pointer; color: #888780; }
+  .modal-fechar svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; padding-top: 20px; border-top: 1px solid #F1EFE8; }
+
+  .campo { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .campo label { font-size: 13px; font-weight: 500; color: #444441; }
+  .campo label .obrig { color: #E24B4A; margin-left: 2px; }
+  .campo input, .campo select, .campo textarea {
+    padding: 9px 12px; border: 1px solid #D3D1C7; border-radius: 8px;
+    font-size: 13px; color: #2C2C2A; font-family: inherit; outline: none;
+  }
+  .campo input:focus, .campo select:focus, .campo textarea:focus {
+    border-color: #534AB7; box-shadow: 0 0 0 3px rgba(83,74,183,0.1);
+  }
+  .campo .hint { font-size: 11px; color: #B4B2A9; }
+
+  .msg-erro { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #791F1F; margin-bottom: 16px; display: none; }
+  .msg-erro.vis { display: block; }
+  .info-box  { background: #EEEDFE; border: 1px solid #AFA9EC; border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #3C3489; margin-bottom: 16px; }
+  .aviso-box { background: #FAEEDA; border: 1px solid #FAC775; border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #633806; margin-bottom: 16px; }
+
+  #nav-form { display: none; }
+  .spinner-inline { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 4px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .campo-form { margin-bottom: 14px; }
+  .campo-form label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 5px; }
+  .campo-form input, .campo-form textarea { width: 100%; padding: 9px 12px; border: 1px solid #D3D1C7; border-radius: 8px; font-size: 13px; outline: none; }
+  .modal-rodape { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #F1EFE8; }
+</style>
+</head>
+<body>
+
+<? var dadosObj = JSON.parse(dados); ?>
+
+<form id="nav-form" method="get" target="_top">
+  <input type="hidden" id="nav-page"  name="page"  value="">
+  <input type="hidden" id="nav-token" name="token" value="">
+</form>
+
+<div class="topbar">
+  <span class="topbar-logo">PAC</span>
+  <span class="topbar-sub">Orçamento e Distribuição</span>
+  <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:4px 10px;">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <select id="sel-exercicio" style="background:transparent;border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;outline:none;padding:0 2px;" onchange="trocarExercicio(this.value)">
+    </select>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-usuario">
+    <div class="avatar" id="av">?</div>
+    <div>
+      <div style="font-weight:500" id="nome-usuario">Carregando...</div>
+      <div style="font-size:11px;opacity:0.7" id="unidade-usuario"></div>
+    </div>
+    <button class="btn-logout" onclick="fazerLogout()">Sair</button>
+  </div>
+</div>
+
+
+<div class="layout">
+  <nav class="sidebar" id="sidebar"></nav>
+
+  <main class="main">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Orçamento</div>
+        <div class="page-sub" id="page-sub">Exercício <span id="exercicio-label">—</span></div>
+      </div>
+      <div style="display:flex;gap:8px" id="acoes-topo"></div>
+    </div>
+
+    <div class="cards" id="cards-resumo">
+      <div class="card"><div class="carregando">Carregando...</div></div>
+    </div>
+
+    <div class="secao">
+      <div class="secao-header">
+        <span class="secao-titulo">Dotações</span>
+        <span id="btn-nova-dotacao"></span>
+      </div>
+      <div id="tabela-dotacoes"><div class="carregando">Carregando...</div></div>
+    </div>
+
+    <div class="secao" id="secao-distribuicoes" style="display:none">
+      <div class="secao-header">
+        <span class="secao-titulo" id="titulo-distribuicoes">Distribuições</span>
+        <button class="btn-verde" id="btn-distribuir" onclick="abrirModalDistribuir()">+ Distribuir</button>
+      </div>
+      <div id="tabela-distribuicoes"><div class="carregando">Carregando...</div></div>
+    </div>
+  </main>
+</div>
+
+<!-- Modal: Nova dotação -->
+<div class="overlay" id="overlay-dotacao">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <span class="modal-titulo">Nova dotação</span>
+      <button class="modal-fechar" onclick="fecharModal('overlay-dotacao')">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="msg-erro vis" id="erro-dotacao" style="display:none"></div>
+    <div class="campo">
+      <label>Unidade beneficiada <span class="obrig">*</span></label>
+      <select id="d-unidade"><option value="">Selecione...</option></select>
+      <span class="hint">Unidade raiz que receberá o valor (campus ou pró-reitoria)</span>
+    </div>
+    <div class="campo">
+      <label>Exercício <span class="obrig">*</span></label>
+      <select id="d-exercicio"></select>
+    </div>
+    <div class="campo">
+      <label>Valor total (R$) <span class="obrig">*</span></label>
+      <input type="number" id="d-valor" placeholder="0,00" min="0" step="0.01">
+    </div>
+    <div class="campo">
+      <label>Observação</label>
+      <textarea id="d-obs" rows="2" placeholder="Origem do recurso, fonte, etc."></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secundario" onclick="fecharModal('overlay-dotacao')">Cancelar</button>
+      <button class="btn-primario" id="btn-salvar-dotacao" onclick="salvarDotacao()">Cadastrar dotação</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Distribuir -->
+<div class="overlay" id="overlay-distribuir">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <span class="modal-titulo">Distribuir orçamento</span>
+      <button class="modal-fechar" onclick="fecharModal('overlay-distribuir')">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="info-box" id="info-saldo">Saldo disponível: —</div>
+    <div class="msg-erro" id="erro-distribuir"></div>
+    <div class="campo">
+      <label>Subunidade destinatária <span class="obrig">*</span></label>
+      <select id="dist-unidade"><option value="">Selecione...</option></select>
+    </div>
+    <div class="campo">
+      <label>Valor a distribuir (R$) <span class="obrig">*</span></label>
+      <input type="number" id="dist-valor" placeholder="0,00" min="0.01" step="0.01">
+    </div>
+    <div class="campo">
+      <label>Observação</label>
+      <input type="text" id="dist-obs" placeholder="Finalidade ou justificativa">
+    </div>
+    <div class="campo">
+      <label>Confirme sua senha <span class="obrig">*</span></label>
+      <input type="password" id="dist-senha" placeholder="Sua senha de acesso">
+      <span class="hint">Equivale a uma assinatura eletrônica</span>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secundario" onclick="fecharModal('overlay-distribuir')">Cancelar</button>
+      <button class="btn-verde" id="btn-confirmar-dist" onclick="confirmarDistribuicao()">Confirmar distribuição</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Editar distribuição -->
+<div class="overlay" id="overlay-ed-dist">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-titulo">Editar distribuição</div>
+    <div style="font-size:13px;color:#888780;margin-bottom:16px">Subunidade: <b id="ed-unidade"></b></div>
+    <div class="campo-form">
+      <label>Novo valor (R$)</label>
+      <input type="number" id="ed-valor" min="0" step="0.01" placeholder="0,00">
+    </div>
+    <div class="campo-form">
+      <label>Observação</label>
+      <input type="text" id="ed-obs" placeholder="Opcional">
+    </div>
+    <div class="campo-form">
+      <label>Sua senha <span style="color:#E24B4A">*</span></label>
+      <input type="password" id="ed-senha" placeholder="Confirmar identidade">
+    </div>
+    <div id="erro-ed-dist" style="display:none;background:#FCEBEB;border:1px solid #F7C1C1;border-radius:7px;padding:8px 12px;font-size:12px;color:#791F1F;margin-top:8px"></div>
+    <div class="modal-rodape">
+      <button class="btn-secundario" onclick="fecharModal('overlay-ed-dist')">Cancelar</button>
+      <button class="btn-verde" id="btn-confirmar-ed-dist" onclick="confirmarEdicaoDist()">Salvar alteração</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Cancelar saldo subordinada -->
+<div class="overlay" id="overlay-cancelar-saldo">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-titulo">⊘ Cancelar saldo de subordinada</div>
+    <div style="font-size:13px;color:#888780;margin-bottom:16px">Unidade: <b id="cs-unidade"></b></div>
+    <div class="campo-form">
+      <label>Valor a cancelar (R$) <span style="color:#E24B4A">*</span></label>
+      <input type="number" id="cs-valor" min="0.01" step="0.01" placeholder="Valor entre 1 e o saldo livre">
+    </div>
+    <div class="campo-form">
+      <label>Justificativa <span style="color:#E24B4A">*</span></label>
+      <textarea id="cs-justificativa" rows="3" placeholder="Motivo do cancelamento..." style="width:100%;padding:8px;border:1px solid #D3D1C7;border-radius:7px;font-size:13px;resize:vertical"></textarea>
+    </div>
+    <div class="campo-form">
+      <label>Sua senha <span style="color:#E24B4A">*</span></label>
+      <input type="password" id="cs-senha" placeholder="Confirmar identidade">
+    </div>
+    <div id="erro-cs" style="display:none;background:#FCEBEB;border:1px solid #F7C1C1;border-radius:7px;padding:8px 12px;font-size:12px;color:#791F1F;margin-top:8px"></div>
+    <div class="modal-rodape">
+      <button class="btn-secundario" onclick="fecharModal('overlay-cancelar-saldo')">Cancelar</button>
+      <button class="btn-verde" id="btn-confirmar-cs" onclick="confirmarCancelarSaldo()" style="background:#BA7517">Confirmar cancelamento</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const token  = '<?= JSON.parse(dados).token || "" ?>';
+  const appUrl = '<?= ScriptApp.getService().getUrl() ?>';
+
+  let _usuario           = null;
+  let _dotacoes          = [];
+  let _unidades          = [];
+  let _distribuicoes     = [];
+  let _dotacaoSelecionada = null;
+  let _exercicioAtual    = new Date().getFullYear();
+  let _distEditandoId    = null;
+  let _cancelarDistId    = null;
+
+  // ── Exercício ─────────────────────────────────────────────────────────────
+  function getExercicio() { return sessionStorage.getItem('pac_exercicio') || ''; }
+  function setExercicio(ano) { sessionStorage.setItem('pac_exercicio', String(ano)); }
+
+  // O exercício selecionado fica apenas no sessionStorage do browser.
+  // Cada chamada ao servidor envia o exercício explicitamente no payload.
+  // O CONFIG da planilha NÃO é alterado — é somente leitura para o ano padrão.
+  function trocarExercicio(ano) {
+    setExercicio(ano);
+    if (typeof recarregarDados === 'function') recarregarDados();
+  }
+
+
+  function popularSeletorExercicios(exercicioAtualCfg) {
+    const sel = document.getElementById('sel-exercicio');
+    if (!sel) return;
+    const anoBase = Number(exercicioAtualCfg) || new Date().getFullYear();
+    const anos = [];
+    for (let a = anoBase - 3; a <= anoBase + 2; a++) anos.push(a);
+    const atual = getExercicio() || exercicioAtualCfg;
+    sel.innerHTML = anos.map(a =>
+      `<option value="${a}" style="background:#3C3489;color:#fff"${String(a)===String(atual)?' selected':''}>${a}</option>`
+    ).join('');
+    if (!getExercicio()) setExercicio(exercicioAtualCfg);
+  }
+
+  // ── Menus ─────────────────────────────────────────────────────────────────
+  const MENUS = {
+    chefia:       [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Minhas demandas', page:'demandas', icon:'list' }, { label:'Aprovar demandas', page:'aprovacoes', icon:'check' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }],
+    ord_despesas: [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Prioridades GUT', page:'prioridades', icon:'star' }, { label:'Homologar plano', page:'homologacao', icon:'shield' }],
+    licitacoes:   [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Usuários', page:'admin', icon:'users' }, { label:'Todas as demandas', page:'demandas', icon:'list' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }],
+  };
+  const ICONS = {
+    home:   '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+    list:   '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>',
+    check:  '<path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+    dollar: '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>',
+    star:   '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    users:  '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',
+  };
+
+  // ── Navegação ─────────────────────────────────────────────────────────────
+  function navegar(page, tk) {
+    document.getElementById('nav-page').value  = page;
+    document.getElementById('nav-token').value = tk || token;
+    document.getElementById('nav-form').action = appUrl;
+    document.getElementById('nav-form').submit();
+  }
+
+  // ── Inicialização ─────────────────────────────────────────────────────────
+  if (!token) { navegar('login'); }
+  else {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) { navegar('login'); return; }
+        _usuario = resp.usuario;
+        document.getElementById('av').textContent = _usuario.nome.charAt(0).toUpperCase();
+        document.getElementById('nome-usuario').textContent = _usuario.nome;
+        document.getElementById('unidade-usuario').textContent = _usuario.sigla || _usuario.unidade;
+
+        const menus = MENUS[_usuario.papel] || MENUS.licitacoes;
+        document.getElementById('sidebar').innerHTML =
+          '<div class="nav-titulo" style="margin-top:8px">Menu</div>' +
+          menus.map(m =>
+            `<a class="nav-item${m.page==='orcamento'?' ativo':''}" href="#" onclick="navegar('${m.page}');return false;">
+              <svg viewBox="0 0 24 24">${ICONS[m.icon]||''}</svg> ${m.label}
+            </a>`
+          ).join('');
+
+        if (_usuario.papel === 'licitacoes') {
+          document.getElementById('btn-nova-dotacao').innerHTML =
+            `<button class="btn-primario" onclick="abrirModalDotacao()">
+              <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Nova dotação
+            </button>`;
+        }
+
+        google.script.run
+          .withSuccessHandler(function(cfg) {
+            _exercicioAtual = Number(cfg.exercicio) || new Date().getFullYear();
+            sessionStorage.setItem('pac_exercicio_atual', _exercicioAtual);
+            popularSeletorExercicios(_exercicioAtual);
+            carregarDados();
+          })
+          .chamarAcao(token, 'get_config_exercicio', '{}');
+      })
+      .withFailureHandler(function() { navegar('login'); })
+      .chamarAcao(token, 'dados_usuario', '{}');
+  }
+
+  function recarregarDados() {
+    _dotacaoSelecionada = null;
+    document.getElementById('secao-distribuicoes').style.display = 'none';
+    carregarDados();
+  }
+
+  function carregarDados() {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) return;
+        _unidades = resp.unidades || [];
+        popularSelectUnidades();
+      })
+      .chamarAcao(token, 'listar_unidades', '{}');
+    carregarDotacoes();
+  }
+
+  function carregarDotacoes() {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) return;
+        _dotacoes = resp.dotacoes || [];
+        const exercicio = resp.exercicio || '—';
+        document.getElementById('exercicio-label').textContent = getExercicio() || exercicio;
+        renderizarCards();
+        renderizarDotacoes();
+      })
+      .withFailureHandler(function(err) {
+        document.getElementById('tabela-dotacoes').innerHTML =
+          '<div class="carregando">Erro: ' + err.message + '</div>';
+      })
+      .chamarAcao(token, 'listar_dotacoes', JSON.stringify({ exercicio: getExercicio() }));
+  }
+
+  function getSubordinadas(idPai) {
+    const filhos = _unidades.filter(u => u.id_unidade_pai === idPai);
+    let result   = [...filhos];
+    filhos.forEach(f => { result = result.concat(getSubordinadas(f.id_unidade)); });
+    return result;
+  }
+
+  function popularSelectUnidades() {
+    const selDot = document.getElementById('d-unidade');
+    selDot.innerHTML = '<option value="">Selecione...</option>';
+    const idUnidadeUsuario = _usuario && _usuario.id_unidade_fk;
+    let lista;
+    if (!idUnidadeUsuario) {
+      lista = _unidades.filter(u => ['campus','pro_reitoria','reitoria'].includes(u.tipo));
+    } else {
+      const propria = _unidades.find(u => u.id_unidade === idUnidadeUsuario);
+      const filhasDiretas = _unidades.filter(u => u.id_unidade_pai === idUnidadeUsuario);
+      lista = propria ? [propria, ...filhasDiretas] : filhasDiretas;
+    }
+    lista.sort((a,b) => a.nome.localeCompare(b.nome)).forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u.id_unidade;
+      opt.textContent = (u.sigla ? '['+u.sigla+'] ' : '') + u.nome;
+      selDot.appendChild(opt);
+    });
+  }
+
+  function popularSelectSubunidades(idUnidadePai) {
+    const sel = document.getElementById('dist-unidade');
+    sel.innerHTML = '<option value="">Selecione...</option>';
+    const idUnidadeUsuario = _usuario && _usuario.id_unidade_fk;
+    let subs = getSubordinadas(idUnidadePai);
+    if (idUnidadeUsuario && idUnidadeUsuario !== idUnidadePai) {
+      const escopoIds = new Set([idUnidadeUsuario, ...getSubordinadas(idUnidadeUsuario).map(u => u.id_unidade)]);
+      subs = subs.filter(u => escopoIds.has(u.id_unidade));
+    }
+    subs.sort((a,b) => a.nome.localeCompare(b.nome)).forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u.id_unidade;
+      opt.textContent = (u.sigla ? '['+u.sigla+'] ' : '') + u.nome;
+      sel.appendChild(opt);
+    });
+  }
+
+  // ── Renderização ──────────────────────────────────────────────────────────
+  function renderizarCards() {
+    const totalRecebido  = _dotacoes.reduce((s,d) => s + Number(d.valor_recebido||0), 0);
+    const totalRepassado = _dotacoes.reduce((s,d) => s + Number(d.valor_distribuido_proprio||0), 0);
+    const totalSaldo     = _dotacoes.reduce((s,d) => s + Number(d.saldo_proprio||0), 0);
+    const totalSolicit   = _dotacoes.reduce((s,d) => s + Number(d.valor_solicitado||0), 0);
+    const pct = totalRecebido > 0 ? Math.round((totalRepassado / totalRecebido) * 100) : 0;
+    const corBarra = pct >= 90 ? 'vermelho' : pct >= 70 ? 'amarelo' : 'verde';
+
+    document.getElementById('cards-resumo').innerHTML = `
+      <div class="card azul">
+        <div class="card-label">Orçamento recebido</div>
+        <div class="card-valor" style="font-size:18px">R$ ${fmtValor(totalRecebido)}</div>
+        <div class="card-detalhe">${_dotacoes.length} dotação(ões)</div>
+      </div>
+      <div class="card verde">
+        <div class="card-label">Distribuído às subunidades</div>
+        <div class="card-valor" style="font-size:18px">R$ ${fmtValor(totalRepassado)}</div>
+        <div class="card-detalhe">${pct}% do recebido</div>
+        <div class="barra-wrap"><div class="barra-fill ${corBarra}" style="width:${Math.min(pct,100)}%"></div></div>
+      </div>
+      <div class="card amarelo">
+        <div class="card-label">Saldo disponível</div>
+        <div class="card-valor" style="font-size:18px">R$ ${fmtValor(totalSaldo)}</div>
+        <div class="card-detalhe">para distribuir às subunidades</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Total solicitado</div>
+        <div class="card-valor" style="font-size:18px">R$ ${fmtValor(totalSolicit)}</div>
+        <div class="card-detalhe">soma das demandas aprovadas</div>
+      </div>`;
+  }
+
+  function renderizarDotacoes() {
+    if (_dotacoes.length === 0) {
+      document.getElementById('tabela-dotacoes').innerHTML =
+        '<div class="vazio">Nenhuma dotação cadastrada para este exercício.</div>';
+      return;
+    }
+    document.getElementById('tabela-dotacoes').innerHTML = `
+      <table>
+        <thead><tr>
+          <th class="num">Recebido</th>
+          <th class="num">Repassado às subunidades</th>
+          <th class="num">Saldo disponível</th>
+          <th class="num">Utilização</th>
+          <th>Status</th>
+          <th></th>
+        </tr></thead>
+        <tbody>
+          ${_dotacoes.map(d => {
+            const recebido  = Number(d.valor_recebido||0);
+            const repassado = Number(d.valor_distribuido_proprio||0);
+            const saldo     = Number(d.saldo_proprio||0);
+            const pct       = recebido > 0 ? Math.round((repassado/recebido)*100) : 0;
+            const cor       = pct >= 90 ? 'vermelho' : pct >= 70 ? 'amarelo' : 'verde';
+            const nomeDot   = nomeUnidade(d.id_unidade_fk);
+            return `<tr>
+              <td class="num" style="font-weight:600;color:#3C3489">R$ ${fmtValor(recebido)}</td>
+              <td class="num">R$ ${fmtValor(repassado)}</td>
+              <td class="num" style="font-weight:600;color:${saldo<=0?'#A32D2D':'#085041'}">R$ ${fmtValor(saldo)}</td>
+              <td class="num">
+                <span style="font-weight:600">${pct}%</span>
+                <div class="barra-wrap" style="width:80px;display:inline-block;margin-left:6px;vertical-align:middle">
+                  <div class="barra-fill ${cor}" style="width:${Math.min(pct,100)}%"></div>
+                </div>
+              </td>
+              <td><span class="badge-${d.status||'aberto'}">${d.status||'aberto'}</span></td>
+              <td>
+                <button class="acao-btn" onclick="verDistribuicoes('${d.id_dotacao}','${nomeDot}')">
+                  Ver distribuições →
+                </button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  function verDistribuicoes(idDotacao, nomeUnid) {
+    _dotacaoSelecionada = _dotacoes.find(d => d.id_dotacao === idDotacao);
+    if (!_dotacaoSelecionada) return;
+
+    const saldo = Number(_dotacaoSelecionada.saldo_proprio||0);
+    document.getElementById('info-saldo').textContent =
+      'Saldo disponível para sua unidade: R$ ' + fmtValor(saldo);
+
+    popularSelectSubunidades(_dotacaoSelecionada.id_unidade_fk);
+
+    document.getElementById('titulo-distribuicoes').textContent = 'Distribuições — ' + nomeUnid;
+    document.getElementById('secao-distribuicoes').style.display = 'block';
+    document.getElementById('secao-distribuicoes').scrollIntoView({ behavior:'smooth', block:'start' });
+
+    document.getElementById('tabela-distribuicoes').innerHTML = '<div class="carregando">Carregando...</div>';
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) return;
+        _distribuicoes = resp.distribuicoes || [];
+        renderizarDistribuicoes();
+      })
+      .chamarAcao(token, 'listar_distribuicoes', JSON.stringify({ id_dotacao: idDotacao }));
+  }
+
+  function renderizarDistribuicoes() {
+    if (_distribuicoes.length === 0) {
+      document.getElementById('tabela-distribuicoes').innerHTML =
+        '<div class="vazio">Nenhuma distribuição realizada ainda.</div>';
+      return;
+    }
+    document.getElementById('tabela-distribuicoes').innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Subunidade</th><th class="num">Valor</th><th>Observação</th><th>Data</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${_distribuicoes.map(d => `<tr>
+            <td>${nomeUnidade(d.id_unidade_destino_fk)}</td>
+            <td class="num">R$ ${fmtValor(Number(d.valor||0))}</td>
+            <td>${d.observacao || '—'}</td>
+            <td>${fmtData(d.data_hora)}</td>
+            <td style="white-space:nowrap">
+              <button class="acao-btn" onclick="abrirEditarDistribuicao('${d.id_distribuicao}')" title="Editar valor">✏️</button>
+              <button class="acao-btn" onclick="excluirDistribuicao('${d.id_distribuicao}','${nomeUnidade(d.id_unidade_destino_fk)}')" title="Remover" style="color:#A32D2D">🗑</button>
+              <button class="acao-btn" onclick="cancelarSaldoSubordinada('${d.id_distribuicao}','${nomeUnidade(d.id_unidade_destino_fk)}')" title="Cancelar saldo" style="color:#BA7517">⊘</button>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  // ── Modal dotação ─────────────────────────────────────────────────────────
+  function abrirModalDotacao() {
+    document.getElementById('d-unidade').value = '';
+    document.getElementById('d-valor').value   = '';
+    document.getElementById('d-obs').value     = '';
+    document.getElementById('erro-dotacao').style.display = 'none';
+    const sel = document.getElementById('d-exercicio');
+    sel.innerHTML = '';
+    for (let a = _exercicioAtual - 1; a <= _exercicioAtual + 2; a++) {
+      const opt = document.createElement('option');
+      opt.value = a; opt.textContent = a;
+      if (a === _exercicioAtual) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    document.getElementById('overlay-dotacao').classList.add('aberto');
+  }
+
+  function salvarDotacao() {
+    const idUnidade = document.getElementById('d-unidade').value;
+    const valor     = document.getElementById('d-valor').value;
+    const obs       = document.getElementById('d-obs').value;
+    const exercicio = document.getElementById('d-exercicio').value || String(_exercicioAtual);
+
+    if (!idUnidade) { mostrarErroDot('Selecione a unidade.'); return; }
+    if (!exercicio) { mostrarErroDot('Selecione o exercício.'); return; }
+    if (!valor || Number(valor) <= 0) { mostrarErroDot('Informe um valor válido.'); return; }
+
+    setBtnLoad('btn-salvar-dotacao', true, 'Cadastrando...');
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        setBtnLoad('btn-salvar-dotacao', false, 'Cadastrar dotação');
+        if (!resp.ok) { mostrarErroDot(resp.erro); return; }
+        fecharModal('overlay-dotacao');
+        carregarDotacoes();
+      })
+      .withFailureHandler(function(err) {
+        setBtnLoad('btn-salvar-dotacao', false, 'Cadastrar dotação');
+        mostrarErroDot('Erro: ' + err.message);
+      })
+      .chamarAcao(token, 'salvar_dotacao', JSON.stringify({
+        dotacao: { exercicio: String(exercicio), id_unidade_fk: idUnidade, valor_total: Number(valor), observacao: obs }
+      }));
+  }
+
+  function mostrarErroDot(msg) {
+    const el = document.getElementById('erro-dotacao');
+    el.textContent = msg; el.style.display = 'block'; el.classList.add('vis');
+  }
+
+  // ── Modal distribuir ──────────────────────────────────────────────────────
+  function abrirModalDistribuir() {
+    if (!_dotacaoSelecionada) { alert('Selecione uma dotação primeiro clicando em "Ver distribuições".'); return; }
+    const saldo = Number(_dotacaoSelecionada.saldo_proprio||0);
+    document.getElementById('info-saldo').textContent = 'Saldo disponível para sua unidade: R$ ' + fmtValor(saldo);
+    document.getElementById('dist-unidade').value = '';
+    document.getElementById('dist-valor').value   = '';
+    document.getElementById('dist-obs').value     = '';
+    document.getElementById('dist-senha').value   = '';
+    document.getElementById('erro-distribuir').classList.remove('vis');
+    document.getElementById('overlay-distribuir').classList.add('aberto');
+  }
+
+  function confirmarDistribuicao() {
+    const idUnidade = document.getElementById('dist-unidade').value;
+    const valor     = document.getElementById('dist-valor').value;
+    const obs       = document.getElementById('dist-obs').value;
+    const senha     = document.getElementById('dist-senha').value;
+    const erEl      = document.getElementById('erro-distribuir');
+
+    if (!idUnidade) { erEl.textContent='Selecione a subunidade.'; erEl.classList.add('vis'); return; }
+    if (!valor || Number(valor) <= 0) { erEl.textContent='Informe um valor válido.'; erEl.classList.add('vis'); return; }
+    if (!senha) { erEl.textContent='Confirme sua senha.'; erEl.classList.add('vis'); return; }
+
+    setBtnLoad('btn-confirmar-dist', true, 'Processando...');
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        setBtnLoad('btn-confirmar-dist', false, 'Confirmar distribuição');
+        if (!resp.ok) { erEl.textContent = resp.erro; erEl.classList.add('vis'); return; }
+        fecharModal('overlay-distribuir');
+        carregarDotacoes();
+        verDistribuicoes(_dotacaoSelecionada.id_dotacao, nomeUnidade(_dotacaoSelecionada.id_unidade_fk));
+      })
+      .withFailureHandler(function(err) {
+        setBtnLoad('btn-confirmar-dist', false, 'Confirmar distribuição');
+        erEl.textContent = 'Erro: ' + err.message; erEl.classList.add('vis');
+      })
+      .chamarAcao(token, 'distribuir_orcamento', JSON.stringify({
+        id_dotacao:         _dotacaoSelecionada.id_dotacao,
+        id_unidade_destino: idUnidade,
+        valor, observacao:  obs, senha
+      }));
+  }
+
+  // ── Editar distribuição ───────────────────────────────────────────────────
+  function abrirEditarDistribuicao(idDist) {
+    const d = _distribuicoes.find(x => x.id_distribuicao === idDist);
+    if (!d) return;
+    _distEditandoId = idDist;
+    document.getElementById('ed-unidade').textContent = nomeUnidade(d.id_unidade_destino_fk);
+    document.getElementById('ed-valor').value  = d.valor || '';
+    document.getElementById('ed-obs').value    = d.observacao || '';
+    document.getElementById('ed-senha').value  = '';
+    document.getElementById('erro-ed-dist').style.display = 'none';
+    document.getElementById('overlay-ed-dist').classList.add('aberto');
+  }
+
+  function confirmarEdicaoDist() {
+    const valor = document.getElementById('ed-valor').value;
+    const obs   = document.getElementById('ed-obs').value;
+    const senha = document.getElementById('ed-senha').value;
+    if (!valor || Number(valor) < 0) { document.getElementById('erro-ed-dist').textContent='Informe um valor válido.'; document.getElementById('erro-ed-dist').style.display='block'; return; }
+    if (!senha) { document.getElementById('erro-ed-dist').textContent='Informe sua senha.'; document.getElementById('erro-ed-dist').style.display='block'; return; }
+    setBtnLoad('btn-confirmar-ed-dist', true, 'Salvando...');
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        setBtnLoad('btn-confirmar-ed-dist', false, 'Salvar alteração');
+        if (!resp.ok) { document.getElementById('erro-ed-dist').textContent=resp.erro||'Erro.'; document.getElementById('erro-ed-dist').style.display='block'; return; }
+        fecharModal('overlay-ed-dist');
+        verDistribuicoes(_dotacaoSelecionada.id_dotacao, nomeUnidade(_dotacaoSelecionada.id_unidade_fk));
+        carregarDotacoes();
+      })
+      .withFailureHandler(function(err) {
+        setBtnLoad('btn-confirmar-ed-dist', false, 'Salvar alteração');
+        document.getElementById('erro-ed-dist').textContent='Erro: '+err.message; document.getElementById('erro-ed-dist').style.display='block';
+      })
+      .chamarAcao(token, 'editar_distribuicao', JSON.stringify({ id_distribuicao: _distEditandoId, valor: Number(valor), observacao: obs, senha }));
+  }
+
+  // ── Cancelar saldo subordinada ────────────────────────────────────────────
+  function cancelarSaldoSubordinada(idDist, nomeUnid) {
+    _cancelarDistId = idDist;
+    document.getElementById('cs-unidade').textContent = nomeUnid;
+    document.getElementById('cs-valor').value         = '';
+    document.getElementById('cs-justificativa').value = '';
+    document.getElementById('cs-senha').value         = '';
+    document.getElementById('erro-cs').style.display  = 'none';
+    document.getElementById('overlay-cancelar-saldo').classList.add('aberto');
+  }
+
+  function confirmarCancelarSaldo() {
+    const valor = Number(document.getElementById('cs-valor').value);
+    const just  = document.getElementById('cs-justificativa').value.trim();
+    const senha = document.getElementById('cs-senha').value;
+    const erroEl = document.getElementById('erro-cs');
+    if (!valor || valor <= 0) { erroEl.textContent='Informe um valor maior que zero.'; erroEl.style.display='block'; return; }
+    if (!just || just.length < 5) { erroEl.textContent='Justificativa obrigatória (mínimo 5 caracteres).'; erroEl.style.display='block'; return; }
+    if (!senha) { erroEl.textContent='Informe sua senha.'; erroEl.style.display='block'; return; }
+    setBtnLoad('btn-confirmar-cs', true, 'Processando...');
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        setBtnLoad('btn-confirmar-cs', false, 'Confirmar cancelamento');
+        if (!resp.ok) { erroEl.textContent=resp.erro||'Erro.'; erroEl.style.display='block'; return; }
+        fecharModal('overlay-cancelar-saldo');
+        alert('R$ ' + resp.valor_devolvido.toLocaleString('pt-BR',{minimumFractionDigits:2}) + ' devolvidos ao seu saldo.');
+        verDistribuicoes(_dotacaoSelecionada.id_dotacao, nomeUnidade(_dotacaoSelecionada.id_unidade_fk));
+        carregarDotacoes();
+      })
+      .withFailureHandler(function(err) {
+        setBtnLoad('btn-confirmar-cs', false, 'Confirmar cancelamento');
+        erroEl.textContent='Erro: '+err.message; erroEl.style.display='block';
+      })
+      .chamarAcao(token, 'cancelar_saldo_subordinada', JSON.stringify({
+        id_distribuicao: _cancelarDistId, valor_cancelar: valor, justificativa: just, senha
+      }));
+  }
+
+  // ── Excluir distribuição ──────────────────────────────────────────────────
+  function excluirDistribuicao(idDist, nomeUnid) {
+    if (!confirm('Remover a distribuição para ' + nomeUnid + '?\nO valor voltará ao saldo disponível.')) return;
+    const senha = prompt('Confirme sua senha para continuar:');
+    if (!senha) return;
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) { alert('Erro: ' + (resp.erro||'Falha.')); return; }
+        verDistribuicoes(_dotacaoSelecionada.id_dotacao, nomeUnidade(_dotacaoSelecionada.id_unidade_fk));
+        carregarDotacoes();
+      })
+      .withFailureHandler(function(err) { alert('Erro: ' + err.message); })
+      .chamarAcao(token, 'excluir_distribuicao', JSON.stringify({ id_distribuicao: idDist, senha }));
+  }
+
+  function fecharModal(id) { document.getElementById(id).classList.remove('aberto'); }
+
+  function fazerLogout() {
+    google.script.run.chamarAcao(token, 'logout', '{}');
+    navegar('login', '');
+  }
+
+  function setBtnLoad(id, on, txt) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.disabled = on;
+    btn.innerHTML = on ? '<span class="spinner-inline"></span> ' + txt : txt;
+  }
+
+  function nomeUnidade(id) {
+    const u = _unidades.find(x => x.id_unidade === id);
+    return u ? (u.sigla ? '['+u.sigla+'] '+u.nome : u.nome) : (id || '—');
+  }
+  function fmtValor(v) { return Number(v||0).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 }); }
+  function fmtData(iso) { if (!iso) return '—'; try { return new Date(iso).toLocaleDateString('pt-BR'); } catch { return '—'; } }
+</script>
+</body>
+</html>

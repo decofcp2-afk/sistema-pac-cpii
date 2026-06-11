@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema PAC — Administração</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #F1EFE8; color: #2C2C2A; min-height: 100vh; }
+  .topbar { background: #3C3489; height: 56px; display: flex; align-items: center; padding: 0 24px; gap: 16px; position: sticky; top: 0; z-index: 100; }
+  .topbar-logo { font-size: 15px; font-weight: 700; color: #fff; }
+  .topbar-sub { font-size: 12px; color: rgba(255,255,255,0.55); border-left: 1px solid rgba(255,255,255,0.2); padding-left: 14px; }
+  .topbar-spacer { flex: 1; }
+  .topbar-usuario { display: flex; align-items: center; gap: 10px; font-size: 13px; color: rgba(255,255,255,0.85); }
+  .avatar { width: 32px; height: 32px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #fff; }
+  .btn-logout { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 5px 12px; font-size: 12px; color: rgba(255,255,255,0.85); cursor: pointer; }
+  .layout { display: flex; min-height: calc(100vh - 56px); }
+  .sidebar { width: 220px; background: #fff; border-right: 1px solid #D3D1C7; padding: 20px 0; flex-shrink: 0; }
+  .nav-titulo { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: #B4B2A9; padding: 0 18px 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 18px; font-size: 13px; color: #5F5E5A; text-decoration: none; border-left: 3px solid transparent; transition: all 0.12s; cursor: pointer; }
+  .nav-item:hover { background: #F1EFE8; color: #2C2C2A; }
+  .nav-item.ativo { background: #EEEDFE; color: #3C3489; border-left-color: #3C3489; font-weight: 500; }
+  .nav-item svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
+  .main { flex: 1; padding: 28px 32px; }
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .page-title { font-size: 20px; font-weight: 600; }
+  .page-sub { font-size: 13px; color: #888780; margin-top: 2px; }
+  .btn-primario { background: #3C3489; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .btn-primario:hover { background: #534AB7; }
+  .btn-secundario { background: #fff; color: #444441; border: 1px solid #D3D1C7; border-radius: 8px; padding: 8px 16px; font-size: 13px; cursor: pointer; }
+  .secao { background: #fff; border: 1px solid #D3D1C7; border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+  .secao-header { padding: 16px 20px; border-bottom: 1px solid #F1EFE8; display: flex; align-items: center; justify-content: space-between; }
+  .secao-titulo { font-size: 14px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #888780; padding: 10px 16px; text-align: left; background: #FAFAF8; border-bottom: 1px solid #F1EFE8; }
+  td { font-size: 13px; padding: 12px 16px; border-bottom: 1px solid #F8F7F4; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #FAFAF8; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+  .badge-ativo   { background: #EAF3DE; color: #27500A; }
+  .badge-inativo { background: #FCEBEB; color: #791F1F; }
+  .acao-btn { background: none; border: none; cursor: pointer; color: #888780; padding: 4px 6px; border-radius: 4px; font-size: 12px; }
+  .acao-btn:hover { background: #F1EFE8; color: #3C3489; }
+  .vazio { text-align: center; padding: 48px 20px; color: #B4B2A9; }
+  .carregando { text-align: center; padding: 40px; color: #B4B2A9; font-size: 14px; }
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; overflow-y: auto; padding: 24px; }
+  .overlay.aberto { display: flex; align-items: flex-start; justify-content: center; }
+  .modal { background: #fff; border-radius: 16px; width: 100%; max-width: 520px; padding: 32px; margin: auto; }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .modal-titulo { font-size: 17px; font-weight: 600; }
+  .modal-fechar { background: none; border: none; cursor: pointer; color: #888780; }
+  .modal-fechar svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .campo { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .campo label { font-size: 13px; font-weight: 500; color: #444441; }
+  .campo input, .campo select { padding: 9px 12px; border: 1px solid #D3D1C7; border-radius: 8px; font-size: 13px; color: #2C2C2A; font-family: inherit; outline: none; }
+  .campo input:focus, .campo select:focus { border-color: #534AB7; box-shadow: 0 0 0 3px rgba(83,74,183,0.1); }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; padding-top: 20px; border-top: 1px solid #F1EFE8; }
+  .msg-erro-modal { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #791F1F; margin-bottom: 16px; display: none; }
+  .msg-erro-modal.vis { display: block; }
+  .msg-ok-modal { background: #E1F5EE; border: 1px solid #9FE1CB; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #085041; margin-bottom: 16px; display: none; }
+  .msg-ok-modal.vis { display: block; }
+  #nav-form { display: none; }
+  .senha-inicial { background: #EEEDFE; border: 1px solid #AFA9EC; border-radius: 8px; padding: 12px 14px; font-size: 14px; font-weight: 600; color: #3C3489; font-family: monospace; letter-spacing: 2px; text-align: center; margin-bottom: 8px; }
+  .senha-aviso { font-size: 12px; color: #888780; text-align: center; }
+</style>
+</head>
+<body>
+
+<? var dadosObj = JSON.parse(dados); ?>
+
+<form id="nav-form" method="get" target="_top">
+  <input type="hidden" id="nav-page"  name="page"  value="">
+  <input type="hidden" id="nav-token" name="token" value="">
+</form>
+
+<div class="topbar">
+  <span class="topbar-logo">PAC</span>
+  <span class="topbar-sub">Administração do Sistema</span>
+  <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:4px 10px;">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <select id="sel-exercicio" style="background:transparent;border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;outline:none;padding:0 2px;" onchange="trocarExercicio(this.value)">
+    </select>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-usuario">
+    <div class="avatar" id="av">A</div>
+    <div>
+      <div style="font-weight:500" id="nome-usuario">Carregando...</div>
+      <div style="font-size:11px;opacity:0.7" id="unidade-usuario"></div>
+    </div>
+    <button class="btn-logout" onclick="fazerLogout()">Sair</button>
+  </div>
+</div>
+
+<div class="layout">
+  <nav class="sidebar">
+    <div class="nav-titulo" style="margin-top:8px">Menu</div>
+    <a class="nav-item" href="#" onclick="navegar('dashboard');return false;">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> Início
+    </a>
+    <a class="nav-item ativo" href="#" onclick="return false;">
+      <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg> Usuários
+    </a>
+    <a class="nav-item" href="#" onclick="navegar('demandas');return false;">
+      <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> Todas as demandas
+    </a>
+    <a class="nav-item" href="#" onclick="navegar('orcamento');return false;">
+      <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> Orçamento
+    </a>
+    <a class="nav-item" href="#" onclick="navegar('aprovacoes');return false;">
+      <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Aprovações
+    </a>
+  </nav>
+
+  <main class="main">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Gestão de usuários</div>
+        <div class="page-sub">Cadastro e gerenciamento de usuários do sistema</div>
+      </div>
+      <button class="btn-primario" onclick="abrirModalNovo()">
+        <svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:#fff;fill:none;stroke-width:2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Novo usuário
+      </button>
+    </div>
+
+    <div class="secao">
+      <div class="secao-header">
+        <span class="secao-titulo">Usuários cadastrados</span>
+      </div>
+      <div id="corpo-usuarios"><div class="carregando">Carregando...</div></div>
+    </div>
+  </main>
+</div>
+
+<!-- Modal novo/editar usuário -->
+<div class="overlay" id="overlay-usuario">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-titulo" id="modal-titulo">Novo usuário</span>
+      <button class="modal-fechar" onclick="fecharModal()">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="msg-erro-modal" id="erro-usuario"></div>
+    <div class="msg-ok-modal"   id="ok-usuario"></div>
+
+    <div class="campo">
+      <label>Nome completo *</label>
+      <input type="text" id="f-nome" placeholder="Nome completo do servidor">
+    </div>
+    <div class="campo">
+      <label>E-mail institucional *</label>
+      <input type="email" id="f-email" placeholder="servidor@cp2.g12.br">
+    </div>
+    <div class="campo">
+      <label>Matrícula SIAPE</label>
+      <input type="text" id="f-siape" placeholder="Ex: 1234567" maxlength="10">
+      <span style="font-size:11px;color:#B4B2A9">Necessária para assinaturas eletrônicas nos relatórios</span>
+    </div>
+    <div class="campo">
+      <label>Papel *</label>
+      <select id="f-papel">
+        <option value="">Selecione...</option>
+        <option value="licitacoes">Seção de Licitações</option>
+        <option value="ord_despesas">Ordenador de Despesas</option>
+        <option value="chefia">Chefia Intermediária</option>
+        <option value="chefe_secao">Chefe de Seção</option>
+      </select>
+    </div>
+    <div class="campo">
+      <label>Unidade</label>
+      <select id="f-unidade">
+        <option value="">Sem unidade (admin global)</option>
+      </select>
+    </div>
+
+    <div id="area-senha-inicial" style="display:none">
+      <div class="senha-inicial" id="senha-gerada">—</div>
+      <div class="senha-aviso">Anote esta senha — ela não será exibida novamente. O usuário deverá trocá-la no primeiro acesso.</div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-secundario" onclick="fecharModal()">Cancelar</button>
+      <button class="btn-primario" id="btn-salvar-usuario" onclick="salvarUsuario()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const token  = '<?= JSON.parse(dados).token || "" ?>';
+  const appUrl = '<?= ScriptApp.getService().getUrl() ?>';
+
+  // ── Exercício ─────────────────────────────────────────────────────────────
+  function getExercicio() { return sessionStorage.getItem('pac_exercicio') || ''; }
+  function setExercicio(ano) { sessionStorage.setItem('pac_exercicio', String(ano)); }
+
+  // O exercício selecionado fica apenas no sessionStorage do browser.
+  // O CONFIG da planilha NÃO é alterado — é somente leitura para o ano padrão.
+  function trocarExercicio(ano) {
+    setExercicio(ano);
+  }
+
+  function popularSeletorExercicios(exercicioAtual) {
+    const sel = document.getElementById('sel-exercicio');
+    if (!sel) return;
+    const anoBase = Number(exercicioAtual) || new Date().getFullYear();
+    const anos = [];
+    for (let a = anoBase - 3; a <= anoBase + 2; a++) anos.push(a);
+    const atual = getExercicio() || exercicioAtual;
+    sel.innerHTML = anos.map(a =>
+      `<option value="${a}" style="background:#3C3489;color:#fff"${String(a)===String(atual)?' selected':''}>${a}</option>`
+    ).join('');
+    if (!getExercicio()) setExercicio(exercicioAtual);
+  }
+
+  let _usuarios = [];
+  let _unidades = [];
+  let _editandoId = null;
+  let _meuPapel   = '';
+  let _minhaUnidadeId  = '';
+  let _minhasSubordinadas = [];
+
+  // ── Navegação ─────────────────────────────────────────────────────────────
+  function navegar(page, tk) {
+    document.getElementById('nav-page').value  = page;
+    document.getElementById('nav-token').value = tk || token;
+    document.getElementById('nav-form').action = appUrl;
+    document.getElementById('nav-form').submit();
+  }
+
+  // ── Inicialização ─────────────────────────────────────────────────────────
+  if (!token) { navegar('login'); }
+  else {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) { navegar('login'); return; }
+        const u = resp.usuario;
+        document.getElementById('av').textContent = u.nome.charAt(0).toUpperCase();
+        document.getElementById('nome-usuario').textContent = u.nome;
+        document.getElementById('unidade-usuario').textContent = u.sigla || u.unidade;
+
+        google.script.run
+          .withSuccessHandler(function(cfg) {
+            sessionStorage.setItem('pac_exercicio_atual', cfg.exercicio || new Date().getFullYear());
+            popularSeletorExercicios(cfg.exercicio || new Date().getFullYear());
+          })
+          .chamarAcao(token, 'get_config_exercicio', '{}');
+
+        carregarDados();
+      })
+      .withFailureHandler(function(err) { navegar('login'); })
+      .chamarAcao(token, 'dados_usuario', '{}');
+  }
+
+  function carregarDados() {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) return;
+        _meuPapel        = resp.usuario.papel;
+        _minhaUnidadeId  = resp.usuario.id_unidade_fk || '';
+        carregarUnidades();
+        carregarUsuarios();
+      })
+      .chamarAcao(token, 'dados_usuario', '{}');
+  }
+
+  function carregarUnidades() {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) return;
+        _unidades = resp.unidades || [];
+        const sel = document.getElementById('f-unidade');
+        while (sel.options.length > 1) sel.remove(1);
+
+        const ehSetorial = _meuPapel === 'licitacoes' && _minhaUnidadeId;
+        if (ehSetorial) {
+          sel.options[0].style.display = 'none';
+          sel.options[0].disabled      = true;
+          _minhasSubordinadas = _unidades
+            .filter(u => _pertenceHierarquia(u.id_unidade, _minhaUnidadeId, _unidades))
+            .map(u => u.id_unidade);
+          _unidades
+            .filter(u => _minhasSubordinadas.includes(u.id_unidade))
+            .forEach(u => {
+              const opt = document.createElement('option');
+              opt.value = u.id_unidade;
+              opt.textContent = (u.sigla ? '['+u.sigla+'] ' : '') + u.nome;
+              sel.appendChild(opt);
+            });
+        } else {
+          _unidades.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.id_unidade;
+            opt.textContent = (u.sigla ? '['+u.sigla+'] ' : '') + u.nome;
+            sel.appendChild(opt);
+          });
+        }
+      })
+      .chamarAcao(token, 'listar_unidades', '{}');
+  }
+
+  function _pertenceHierarquia(idUnidade, idRaiz, todasUnidades) {
+    if (idUnidade === idRaiz) return true;
+    const u = todasUnidades.find(x => x.id_unidade === idUnidade);
+    if (!u || !u.id_unidade_pai) return false;
+    return _pertenceHierarquia(u.id_unidade_pai, idRaiz, todasUnidades);
+  }
+
+  function carregarUsuarios() {
+    document.getElementById('corpo-usuarios').innerHTML = '<div class="carregando">Carregando...</div>';
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) return;
+        _usuarios = resp.usuarios || [];
+        renderizarUsuarios();
+      })
+      .withFailureHandler(function(err) {
+        document.getElementById('corpo-usuarios').innerHTML =
+          '<div class="carregando">Erro: ' + err.message + '</div>';
+      })
+      .chamarAcao(token, 'listar_usuarios', '{}');
+  }
+
+  function renderizarUsuarios() {
+    if (_usuarios.length === 0) {
+      document.getElementById('corpo-usuarios').innerHTML =
+        '<div class="vazio"><p>Nenhum usuário cadastrado</p></div>';
+      return;
+    }
+    document.getElementById('corpo-usuarios').innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Nome</th><th>E-mail</th><th>Papel</th><th>Unidade</th><th>Status</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${_usuarios.map(u => `
+            <tr>
+              <td>${u.nome}</td>
+              <td>${u.email}</td>
+              <td>${rotularPapel(u.papel)}</td>
+              <td>${nomeUnidade(u.id_unidade_fk) || '—'}</td>
+              <td><span class="badge ${String(u.ativo).toUpperCase()==='TRUE' ? 'badge-ativo' : 'badge-inativo'}">
+                ${String(u.ativo).toUpperCase()==='TRUE' ? 'Ativo' : 'Inativo'}
+              </span></td>
+              <td style="white-space:nowrap">
+                <button class="acao-btn" onclick="editarUsuario('${u.id_usuario}')" title="Editar">✏️</button>
+                <button class="acao-btn" onclick="resetarSenha('${u.id_usuario}','${u.nome}')" title="Resetar senha" style="color:#BA7517">🔑</button>
+                ${String(u.ativo).toUpperCase()==='TRUE'
+                  ? `<button class="acao-btn" onclick="desativarUsuario('${u.id_usuario}')" title="Desativar" style="color:#A32D2D">✕</button>`
+                  : `<button class="acao-btn" onclick="ativarUsuario('${u.id_usuario}')" title="Ativar" style="color:#0F6E56">✓</button>`
+                }
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  function resetarSenha(id, nome) {
+    if (!confirm('Resetar a senha de ' + nome + '?\nUma nova senha temporária será gerada e o usuário deverá trocá-la no próximo login.')) return;
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) { alert('Erro: ' + (resp.erro||'Falha ao resetar.')); return; }
+        document.getElementById('reset-nome').textContent  = nome;
+        document.getElementById('reset-senha').textContent = resp.senha_inicial;
+        document.getElementById('overlay-reset').classList.add('aberto');
+      })
+      .withFailureHandler(function(err) { alert('Erro: ' + err.message); })
+      .chamarAcao(token, 'resetar_senha', JSON.stringify({ id_usuario: id }));
+  }
+
+  function abrirModalNovo() {
+    _editandoId = null;
+    document.getElementById('modal-titulo').textContent = 'Novo usuário';
+    document.getElementById('f-nome').value  = '';
+    document.getElementById('f-email').value = '';
+    if (document.getElementById('f-siape')) document.getElementById('f-siape').value = '';
+    document.getElementById('f-papel').value   = '';
+    document.getElementById('f-unidade').value = '';
+    document.getElementById('area-senha-inicial').style.display = 'none';
+    document.getElementById('btn-salvar-usuario').textContent   = 'Criar usuário';
+    document.getElementById('erro-usuario').classList.remove('vis');
+    document.getElementById('ok-usuario').classList.remove('vis');
+    const optLic = document.querySelector('#f-papel option[value="licitacoes"]');
+    if (optLic) optLic.disabled = (_meuPapel === 'licitacoes' && !!_minhaUnidadeId);
+    document.getElementById('overlay-usuario').classList.add('aberto');
+  }
+
+  function editarUsuario(id) {
+    const u = _usuarios.find(x => x.id_usuario === id);
+    if (!u) return;
+    _editandoId = id;
+    document.getElementById('modal-titulo').textContent = 'Editar usuário';
+    document.getElementById('f-nome').value  = u.nome;
+    document.getElementById('f-email').value = u.email;
+    if (document.getElementById('f-siape')) document.getElementById('f-siape').value = u.matricula_siape || '';
+    document.getElementById('f-papel').value   = u.papel;
+    document.getElementById('f-unidade').value = u.id_unidade_fk || '';
+    document.getElementById('area-senha-inicial').style.display = 'none';
+    document.getElementById('btn-salvar-usuario').textContent   = 'Salvar alterações';
+    document.getElementById('erro-usuario').classList.remove('vis');
+    document.getElementById('ok-usuario').classList.remove('vis');
+    document.getElementById('overlay-usuario').classList.add('aberto');
+  }
+
+  function fecharModal() { document.getElementById('overlay-usuario').classList.remove('aberto'); }
+
+  function salvarUsuario() {
+    const nome    = document.getElementById('f-nome').value.trim();
+    const email   = document.getElementById('f-email').value.trim();
+    const siape   = document.getElementById('f-siape').value.trim();
+    const papel   = document.getElementById('f-papel').value;
+    const unidade = document.getElementById('f-unidade').value;
+
+    if (!nome)  { mostrarErro('Informe o nome completo.'); return; }
+    if (!email) { mostrarErro('Informe o e-mail.'); return; }
+    if (!papel) { mostrarErro('Selecione o papel.'); return; }
+
+    const usuario = { nome, email, papel, id_unidade_fk: unidade, matricula_siape: siape };
+    if (_editandoId) usuario.id_usuario = _editandoId;
+
+    document.getElementById('btn-salvar-usuario').disabled    = true;
+    document.getElementById('btn-salvar-usuario').textContent = 'Salvando...';
+
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        document.getElementById('btn-salvar-usuario').disabled = false;
+        document.getElementById('btn-salvar-usuario').textContent = _editandoId ? 'Salvar alterações' : 'Criar usuário';
+        if (!resp.ok) { mostrarErro(resp.erro); return; }
+        if (!_editandoId && resp.senha_inicial) {
+          document.getElementById('senha-gerada').textContent          = resp.senha_inicial;
+          document.getElementById('area-senha-inicial').style.display  = 'block';
+          mostrarOk('Usuário criado com sucesso! Senha inicial gerada abaixo.');
+        } else {
+          fecharModal();
+        }
+        carregarUsuarios();
+      })
+      .withFailureHandler(function(err) {
+        document.getElementById('btn-salvar-usuario').disabled = false;
+        mostrarErro('Erro: ' + err.message);
+      })
+      .chamarAcao(token, 'salvar_usuario', JSON.stringify({ usuario }));
+  }
+
+  function desativarUsuario(id) {
+    if (!confirm('Desativar este usuário?')) return;
+    google.script.run
+      .withSuccessHandler(function(resp) { if (resp.ok) carregarUsuarios(); })
+      .chamarAcao(token, 'salvar_usuario', JSON.stringify({ usuario: { id_usuario: id, ativo: 'FALSE' } }));
+  }
+
+  function ativarUsuario(id) {
+    google.script.run
+      .withSuccessHandler(function(resp) { if (resp.ok) carregarUsuarios(); })
+      .chamarAcao(token, 'salvar_usuario', JSON.stringify({ usuario: { id_usuario: id, ativo: 'TRUE' } }));
+  }
+
+  function fazerLogout() {
+    google.script.run.chamarAcao(token, 'logout', '{}');
+    navegar('login', '');
+  }
+
+  function mostrarErro(msg) { const el = document.getElementById('erro-usuario'); el.textContent = msg; el.classList.add('vis'); }
+  function mostrarOk(msg)   { const el = document.getElementById('ok-usuario');   el.textContent = msg; el.classList.add('vis'); }
+  function rotularPapel(p) {
+    return { ord_despesas:'Ordenador de Despesas', chefia:'Chefia Intermediária', chefe_secao:'Chefe de Seção', licitacoes:'Seção de Licitações' }[p] || p;
+  }
+  function nomeUnidade(id) {
+    const u = _unidades.find(x => x.id_unidade === id);
+    return u ? (u.sigla || u.nome) : '';
+  }
+</script>
+</body>
+</html>

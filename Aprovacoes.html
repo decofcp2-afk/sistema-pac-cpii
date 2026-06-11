@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema PAC — Aprovações</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #F1EFE8; color: #2C2C2A; min-height: 100vh; }
+  .topbar { background: #3C3489; height: 56px; display: flex; align-items: center; padding: 0 24px; gap: 16px; position: sticky; top: 0; z-index: 100; }
+  .topbar-logo { font-size: 15px; font-weight: 700; color: #fff; }
+  .topbar-sub { font-size: 12px; color: rgba(255,255,255,0.55); border-left: 1px solid rgba(255,255,255,0.2); padding-left: 14px; }
+  .topbar-spacer { flex: 1; }
+  .topbar-usuario { display: flex; align-items: center; gap: 10px; font-size: 13px; color: rgba(255,255,255,0.85); }
+  .avatar { width: 32px; height: 32px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #fff; }
+  .btn-logout { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 5px 12px; font-size: 12px; color: rgba(255,255,255,0.85); cursor: pointer; }
+  .layout { display: flex; min-height: calc(100vh - 56px); }
+  .sidebar { width: 220px; background: #fff; border-right: 1px solid #D3D1C7; padding: 20px 0; flex-shrink: 0; }
+  .nav-titulo { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: #B4B2A9; padding: 0 18px 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 18px; font-size: 13px; color: #5F5E5A; text-decoration: none; border-left: 3px solid transparent; transition: all 0.12s; cursor: pointer; }
+  .nav-item:hover { background: #F1EFE8; color: #2C2C2A; }
+  .nav-item.ativo { background: #EEEDFE; color: #3C3489; border-left-color: #3C3489; font-weight: 500; }
+  .nav-item svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
+  .main { flex: 1; padding: 28px 32px; max-width: 1100px; }
+  .page-header { margin-bottom: 24px; }
+  .page-title { font-size: 20px; font-weight: 600; }
+  .page-sub { font-size: 13px; color: #888780; margin-top: 2px; }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 24px; }
+  .card { background: #fff; border: 1px solid #D3D1C7; border-radius: 10px; padding: 16px 20px; }
+  .card-label { font-size: 11px; color: #888780; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .card-valor { font-size: 26px; font-weight: 700; }
+  .card-hint  { font-size: 11px; color: #B4B2A9; margin-top: 2px; }
+  .card.pendente  { border-left: 4px solid #BA7517; }
+  .card.acordo    { border-left: 4px solid #1D9E75; }
+  .card.reprovada { border-left: 4px solid #E24B4A; }
+
+  .secao { background: #fff; border: 1px solid #D3D1C7; border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+  .secao-header { padding: 16px 20px; border-bottom: 1px solid #F1EFE8; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .secao-titulo { font-size: 14px; font-weight: 600; }
+  .filtros { display: flex; gap: 6px; flex-wrap: wrap; }
+  .filtro-btn { padding: 4px 12px; border-radius: 99px; font-size: 12px; border: 1px solid #D3D1C7; background: #fff; cursor: pointer; color: #5F5E5A; }
+  .filtro-btn.ativo { background: #EEEDFE; border-color: #534AB7; color: #3C3489; font-weight: 500; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #888780; padding: 10px 16px; text-align: left; background: #FAFAF8; border-bottom: 1px solid #F1EFE8; }
+  td { font-size: 13px; padding: 12px 16px; border-bottom: 1px solid #F8F7F4; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #FAFAF8; }
+  .num { text-align: right; }
+
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+  .badge-submetida  { background: #E6F1FB; color: #0C447C; }
+  .badge-de_acordo  { background: #EAF3DE; color: #27500A; }
+  .badge-reprovada  { background: #FCEBEB; color: #791F1F; }
+  .badge-homologada { background: #E1F5EE; color: #085041; }
+  .badge-rascunho   { background: #F1EFE8; color: #5F5E5A; }
+  .badge-priorizada { background: #FAEEDA; color: #633806; }
+
+  .btn-acordo   { background: #0F6E56; color: #fff; border: none; border-radius: 6px; padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer; margin-right: 4px; }
+  .btn-acordo:hover { background: #0a5240; }
+  .btn-reprovar { background: #fff; color: #A32D2D; border: 1px solid #F7C1C1; border-radius: 6px; padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .btn-reprovar:hover { background: #FCEBEB; }
+  .btn-detalhe  { background: none; border: none; color: #3C3489; font-size: 12px; cursor: pointer; padding: 5px 8px; border-radius: 4px; }
+  .btn-detalhe:hover { background: #EEEDFE; }
+  .acao-btn { background: none; border: none; cursor: pointer; color: #888780; padding: 4px 6px; border-radius: 4px; font-size: 12px; }
+  .acao-btn:hover { background: #F1EFE8; color: #3C3489; }
+
+  .vazio { text-align: center; padding: 48px 20px; color: #B4B2A9; }
+  .carregando { text-align: center; padding: 40px; color: #B4B2A9; font-size: 14px; }
+
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; overflow-y: auto; padding: 24px; }
+  .overlay.aberto { display: flex; align-items: flex-start; justify-content: center; }
+  .modal { background: #fff; border-radius: 16px; width: 100%; max-width: 640px; padding: 32px; margin: auto; }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .modal-titulo { font-size: 17px; font-weight: 600; }
+  .modal-fechar { background: none; border: none; cursor: pointer; color: #888780; }
+  .modal-fechar svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .detalhe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+  .detalhe-item { background: #FAFAF8; border-radius: 8px; padding: 12px 14px; }
+  .detalhe-label { font-size: 11px; color: #888780; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+  .detalhe-valor { font-size: 13px; font-weight: 500; }
+  .detalhe-full { grid-column: span 2; }
+  .campo { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .campo label { font-size: 13px; font-weight: 500; color: #444441; }
+  .campo label .obrig { color: #E24B4A; margin-left: 2px; }
+  .campo input, .campo textarea { padding: 9px 12px; border: 1px solid #D3D1C7; border-radius: 8px; font-size: 13px; color: #2C2C2A; font-family: inherit; outline: none; }
+  .campo input:focus, .campo textarea:focus { border-color: #534AB7; box-shadow: 0 0 0 3px rgba(83,74,183,0.1); }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #F1EFE8; }
+  .btn-primario { background: #3C3489; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-verde-lg { background: #0F6E56; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-vermelho { background: #A32D2D; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-secundario { background: #fff; color: #444441; border: 1px solid #D3D1C7; border-radius: 8px; padding: 8px 16px; font-size: 13px; cursor: pointer; }
+  .msg-erro { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #791F1F; margin-bottom: 16px; display: none; }
+  .msg-erro.vis { display: block; }
+  .aviso-reprovacao { background: #FAEEDA; border: 1px solid #FAC775; border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #633806; margin-bottom: 16px; display: none; }
+
+  .spinner-inline { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 4px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #nav-form { display: none; }
+</style>
+</head>
+<body>
+
+<? var dadosObj = JSON.parse(dados); ?>
+
+<form id="nav-form" method="get" target="_top">
+  <input type="hidden" id="nav-page"  name="page"  value="">
+  <input type="hidden" id="nav-token" name="token" value="">
+</form>
+
+<div class="topbar">
+  <span class="topbar-logo">PAC</span>
+  <span class="topbar-sub">Aprovações</span>
+  <!-- Seletor de exercício -->
+  <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:4px 10px;">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <select id="sel-exercicio" style="background:transparent;border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;outline:none;padding:0 2px;" onchange="trocarExercicio(this.value)">
+    </select>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-usuario">
+    <div class="avatar" id="av">?</div>
+    <div>
+      <div style="font-weight:500" id="nome-usuario">Carregando...</div>
+      <div style="font-size:11px;opacity:0.7" id="unidade-usuario"></div>
+    </div>
+    <button class="btn-logout" onclick="fazerLogout()">Sair</button>
+  </div>
+</div>
+
+<div class="layout">
+  <nav class="sidebar" id="sidebar"></nav>
+  <main class="main">
+    <div class="page-header">
+      <div class="page-title">Aprovações</div>
+      <div class="page-sub" id="page-sub">Demandas submetidas da sua área de competência</div>
+    </div>
+
+    <div class="cards" id="cards-resumo" style="display:none">
+      <div class="card pendente">
+        <div class="card-label">Aguardando de acordo</div>
+        <div class="card-valor" id="cnt-pendente">0</div>
+        <div class="card-hint">demandas submetidas</div>
+      </div>
+      <div class="card acordo">
+        <div class="card-label">Com de acordo</div>
+        <div class="card-valor" id="cnt-acordo">0</div>
+        <div class="card-hint">aguardando homologação</div>
+      </div>
+      <div class="card reprovada">
+        <div class="card-label">Reprovadas</div>
+        <div class="card-valor" id="cnt-reprovada">0</div>
+        <div class="card-hint">necessitam revisão</div>
+      </div>
+    </div>
+
+    <div class="secao">
+      <div class="secao-header">
+        <span class="secao-titulo" id="titulo-tabela">Demandas</span>
+        <div class="filtros">
+          <button class="filtro-btn ativo" onclick="filtrar('submetida',this)">Aguardando de acordo</button>
+          <button class="filtro-btn" onclick="filtrar('de_acordo',this)">Com de acordo</button>
+          <button class="filtro-btn" onclick="filtrar('reprovada',this)">Reprovadas</button>
+          <button class="filtro-btn" onclick="filtrar('todos',this)">Todas</button>
+        </div>
+      </div>
+      <div id="corpo-tabela"><div class="carregando">Carregando...</div></div>
+    </div>
+  </main>
+</div>
+
+<!-- Modal detalhe + ação -->
+<div class="overlay" id="overlay-detalhe">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-titulo">Detalhes da demanda</span>
+      <button class="modal-fechar" onclick="fecharModal()">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="msg-erro" id="erro-acao"></div>
+    <div class="detalhe-grid" id="detalhe-conteudo"></div>
+
+    <div id="area-acao" style="display:none">
+      <div class="aviso-reprovacao" id="aviso-reprovacao">
+        Ao reprovar, informe uma justificativa clara para que o solicitante possa revisar a demanda.
+      </div>
+      <div class="campo" id="campo-justificativa" style="display:none">
+        <label>Justificativa da reprovação <span class="obrig">*</span></label>
+        <textarea id="f-justificativa" rows="3" placeholder="Informe o motivo da reprovação..."></textarea>
+      </div>
+      <div class="campo">
+        <label>Confirme sua senha para assinar <span class="obrig">*</span></label>
+        <input type="password" id="f-senha" placeholder="Sua senha de acesso">
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secundario" onclick="fecharModal()">Cancelar</button>
+        <button class="btn-vermelho" id="btn-reprovar" onclick="prepararReprovacao()">✕ Reprovar</button>
+        <button class="btn-verde-lg" id="btn-acordo" onclick="darAcordo()">✓ De acordo</button>
+      </div>
+    </div>
+
+    <div id="rodape-simples" style="display:none">
+      <div class="modal-footer">
+        <button class="btn-secundario" onclick="fecharModal()">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const token  = '<?= JSON.parse(dados).token || "" ?>';
+  const appUrl = '<?= ScriptApp.getService().getUrl() ?>';
+
+  let _usuario     = null;
+  let _demandas    = [];
+  let _filtroAtual = 'submetida';
+  let _demandaAtual    = null;
+  let _modoReprovacao  = false;
+
+  // ── Exercício ─────────────────────────────────────────────────────────────
+  // Nunca retorna vazio — garante que o servidor sempre recebe um ano válido
+  function getExercicio() {
+    return sessionStorage.getItem('pac_exercicio') || String(new Date().getFullYear());
+  }
+  function setExercicio(ano) { sessionStorage.setItem('pac_exercicio', String(ano)); }
+
+  // O exercício fica apenas no sessionStorage — enviado explicitamente em cada chamada.
+  // O CONFIG da planilha NÃO é alterado.
+  function trocarExercicio(ano) {
+    setExercicio(ano);
+    carregarDemandas();
+  }
+
+  function popularSeletorExercicios(exercicioAtual) {
+    const sel = document.getElementById('sel-exercicio');
+    if (!sel) return;
+    const anoBase = Number(exercicioAtual) || new Date().getFullYear();
+    const anos = [];
+    for (let a = anoBase - 3; a <= anoBase + 2; a++) anos.push(a);
+    const atual = getExercicio();
+    sel.innerHTML = anos.map(a =>
+      `<option value="${a}" style="background:#3C3489;color:#fff"${String(a)===String(atual)?' selected':''}>${a}</option>`
+    ).join('');
+  }
+
+  // ── Menus ─────────────────────────────────────────────────────────────────
+  const MENUS = {
+    chefia:       [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Minhas demandas', page:'demandas', icon:'list' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }],
+    ord_despesas: [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }, { label:'Prioridades GUT', page:'prioridades', icon:'star' }, { label:'Homologar plano', page:'homologacao', icon:'shield' }],
+    licitacoes:   [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Usuários', page:'admin', icon:'users' }, { label:'Todas as demandas', page:'demandas', icon:'list' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Prioridades GUT', page:'prioridades', icon:'star' }, { label:'Homologar plano', page:'homologacao', icon:'shield' }],
+  };
+  const ICONS = {
+    home:   '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+    list:   '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+    check:  '<path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+    dollar: '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>',
+    star:   '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    users:  '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',
+  };
+
+  // ── Navegação ─────────────────────────────────────────────────────────────
+  function navegar(page, tk) {
+    document.getElementById('nav-page').value  = page;
+    document.getElementById('nav-token').value = tk || token;
+    document.getElementById('nav-form').action = appUrl;
+    document.getElementById('nav-form').submit();
+  }
+
+  // ── Inicialização ─────────────────────────────────────────────────────────
+  if (!token) { navegar('login'); }
+  else {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) { navegar('login'); return; }
+        _usuario = resp.usuario;
+
+        document.getElementById('av').textContent = _usuario.nome.charAt(0).toUpperCase();
+        document.getElementById('nome-usuario').textContent = _usuario.nome;
+        document.getElementById('unidade-usuario').textContent = _usuario.sigla || _usuario.unidade;
+
+        const isPapelOrdenador = _usuario.papel === 'ord_despesas';
+        document.getElementById('page-sub').textContent = isPapelOrdenador
+          ? 'Demandas com "De acordo" — aguardando homologação do plano'
+          : 'Demandas submetidas da sua área de competência';
+
+        // Ordenador vê "de_acordo" por padrão
+        if (isPapelOrdenador) {
+          _filtroAtual = 'de_acordo';
+          document.querySelectorAll('.filtro-btn').forEach(b => b.classList.remove('ativo'));
+          document.querySelectorAll('.filtro-btn')[1].classList.add('ativo');
+        }
+
+        const menus = MENUS[_usuario.papel] || MENUS.licitacoes;
+        document.getElementById('sidebar').innerHTML =
+          '<div class="nav-titulo" style="margin-top:8px">Menu</div>' +
+          menus.map(m =>
+            `<a class="nav-item${m.page==='aprovacoes'?' ativo':''}" href="#" onclick="navegar('${m.page}');return false;">
+              <svg viewBox="0 0 24 24">${ICONS[m.icon]||''}</svg> ${m.label}
+            </a>`
+          ).join('');
+
+        // Carregar exercício padrão do CONFIG, popular seletor, depois carregar demandas
+        google.script.run
+          .withSuccessHandler(function(cfg) {
+            const exAtual = cfg.exercicio || String(new Date().getFullYear());
+            // Só define no sessionStorage se ainda não tiver sido definido
+            if (!sessionStorage.getItem('pac_exercicio')) setExercicio(exAtual);
+            popularSeletorExercicios(exAtual);
+            carregarDemandas();
+          })
+          .withFailureHandler(function() {
+            popularSeletorExercicios(new Date().getFullYear());
+            carregarDemandas();
+          })
+          .chamarAcao(token, 'get_config_exercicio', '{}');
+      })
+      .withFailureHandler(function() { navegar('login'); })
+      .chamarAcao(token, 'dados_usuario', '{}');
+  }
+
+  // ── Carregar demandas ─────────────────────────────────────────────────────
+  function carregarDemandas() {
+    document.getElementById('corpo-tabela').innerHTML = '<div class="carregando">Carregando...</div>';
+
+    // Exercício sempre enviado explicitamente — nunca vazio
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) {
+          document.getElementById('corpo-tabela').innerHTML =
+            '<div class="carregando">Erro ao carregar: ' + (resp.erro || 'falha') + '</div>';
+          return;
+        }
+        _demandas = resp.demandas || [];
+        atualizarCards();
+        renderizarTabela();
+      })
+      .withFailureHandler(function(err) {
+        document.getElementById('corpo-tabela').innerHTML =
+          '<div class="carregando">Erro: ' + err.message + '</div>';
+      })
+      .chamarAcao(token, 'listar_demandas', JSON.stringify({
+        exercicio:      getExercicio(),
+        para_aprovacao: true,
+      }));
+  }
+
+  function atualizarCards() {
+    const pendente  = _demandas.filter(d => d.status === 'submetida').length;
+    const acordo    = _demandas.filter(d => d.status === 'de_acordo').length;
+    const reprovada = _demandas.filter(d => d.status === 'reprovada').length;
+    document.getElementById('cnt-pendente').textContent  = pendente;
+    document.getElementById('cnt-acordo').textContent    = acordo;
+    document.getElementById('cnt-reprovada').textContent = reprovada;
+    document.getElementById('cards-resumo').style.display = 'grid';
+  }
+
+  // ── Renderização ──────────────────────────────────────────────────────────
+  function renderizarTabela() {
+    let lista = _filtroAtual === 'todos'
+      ? _demandas.filter(d => ['submetida','de_acordo','reprovada'].includes(d.status))
+      : _demandas.filter(d => d.status === _filtroAtual);
+
+    if (lista.length === 0) {
+      document.getElementById('corpo-tabela').innerHTML =
+        '<div class="vazio"><p>Nenhuma demanda encontrada neste filtro.</p></div>';
+      return;
+    }
+
+    const podeAcao = _usuario && (
+      _usuario.papel === 'chefia' ||
+      _usuario.papel === 'licitacoes' ||
+      _usuario.papel === 'ord_despesas'
+    );
+
+    document.getElementById('corpo-tabela').innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Objeto</th>
+          <th>Unidade</th>
+          <th class="num">Valor estimado</th>
+          <th>Status</th>
+          <th>Atualizado</th>
+          <th></th>
+        </tr></thead>
+        <tbody>
+          ${lista.map(d => `<tr>
+            <td title="${d.descricao_objeto||''}">${truncar(d.descricao_objeto, 45)}</td>
+            <td>${d.nome_unidade||'—'}</td>
+            <td class="num">R$ ${fmtValor(Number(d.valor_estimado||0))}</td>
+            <td><span class="badge badge-${d.status}">${rotularStatus(d.status)}</span></td>
+            <td>${fmtData(d.data_ultima_atualizacao)}</td>
+            <td style="white-space:nowrap">
+              <button class="btn-detalhe" onclick="abrirDetalhe('${d.id_demanda}')">Ver detalhes</button>
+              ${podeAcao && d.status === 'submetida' ? `
+                <button class="btn-acordo"   onclick="abrirDetalheAcao('${d.id_demanda}','acordo')">✓ De acordo</button>
+                <button class="btn-reprovar" onclick="abrirDetalheAcao('${d.id_demanda}','reprovar')">✕</button>` : ''}
+              ${podeAcao && d.status === 'de_acordo' ? `
+                <button class="btn-reprovar" onclick="cancelarAcordo('${d.id_demanda}')" style="font-size:11px">↩ Cancelar acordo</button>` : ''}
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  function cancelarAcordo(idDemanda) {
+    if (!confirm('Cancelar o "De acordo" desta demanda? Ela voltará para "Submetida".')) return;
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) { alert('Erro: ' + (resp.erro||'Falha.')); return; }
+        carregarDemandas();
+      })
+      .withFailureHandler(function(err) { alert('Erro: ' + err.message); })
+      .chamarAcao(token, 'reverter_status', JSON.stringify({
+        id_demanda:  idDemanda,
+        novo_status: 'submetida',
+      }));
+  }
+
+  function filtrar(status, btn) {
+    _filtroAtual = status;
+    document.querySelectorAll('.filtro-btn').forEach(b => b.classList.remove('ativo'));
+    btn.classList.add('ativo');
+    renderizarTabela();
+  }
+
+  // ── Modal detalhe ─────────────────────────────────────────────────────────
+  function abrirDetalhe(id) {
+    _demandaAtual    = _demandas.find(d => d.id_demanda === id);
+    if (!_demandaAtual) return;
+    _modoReprovacao  = false;
+    renderizarDetalhe(false);
+    document.getElementById('overlay-detalhe').classList.add('aberto');
+  }
+
+  function abrirDetalheAcao(id, modo) {
+    _demandaAtual   = _demandas.find(d => d.id_demanda === id);
+    if (!_demandaAtual) return;
+    _modoReprovacao = modo === 'reprovar';
+    renderizarDetalhe(true);
+    if (_modoReprovacao) prepararReprovacao();
+    document.getElementById('overlay-detalhe').classList.add('aberto');
+  }
+
+  function renderizarDetalhe(comAcao) {
+    const d = _demandaAtual;
+    const podeAgir = comAcao && d.status === 'submetida' && _usuario && (
+      _usuario.papel === 'chefia' ||
+      _usuario.papel === 'licitacoes' ||
+      _usuario.papel === 'ord_despesas'
+    );
+
+    document.getElementById('detalhe-conteudo').innerHTML = `
+      <div class="detalhe-item detalhe-full">
+        <div class="detalhe-label">Descrição do objeto</div>
+        <div class="detalhe-valor">${d.descricao_objeto||'—'}</div>
+      </div>
+      <div class="detalhe-item detalhe-full">
+        <div class="detalhe-label">Justificativa da necessidade</div>
+        <div class="detalhe-valor" style="font-weight:400;line-height:1.5">${d.justificativa||'—'}</div>
+      </div>
+      <div class="detalhe-item">
+        <div class="detalhe-label">Unidade solicitante</div>
+        <div class="detalhe-valor">${d.nome_unidade||'—'}</div>
+      </div>
+      <div class="detalhe-item">
+        <div class="detalhe-label">Status</div>
+        <div class="detalhe-valor"><span class="badge badge-${d.status}">${rotularStatus(d.status)}</span></div>
+      </div>
+      <div class="detalhe-item">
+        <div class="detalhe-label">Quantidade estimada</div>
+        <div class="detalhe-valor">${d.quantidade||'—'} ${d.unidade_medida||''}</div>
+      </div>
+      <div class="detalhe-item">
+        <div class="detalhe-label">Valor estimado</div>
+        <div class="detalhe-valor" style="color:#3C3489;font-size:16px">R$ ${fmtValor(Number(d.valor_estimado||0))}</div>
+      </div>
+      <div class="detalhe-item">
+        <div class="detalhe-label">Contrato vigente?</div>
+        <div class="detalhe-valor">${String(d.tem_contrato_vigente).toUpperCase()==='TRUE'?'Sim':'Não'}</div>
+      </div>
+      <div class="detalhe-item">
+        <div class="detalhe-label">Enviado em</div>
+        <div class="detalhe-valor">${fmtData(d.data_envio)||'—'}</div>
+      </div>`;
+
+    document.getElementById('f-senha').value       = '';
+    document.getElementById('f-justificativa').value = '';
+    document.getElementById('erro-acao').classList.remove('vis');
+    document.getElementById('campo-justificativa').style.display = 'none';
+    document.getElementById('aviso-reprovacao').style.display    = 'none';
+
+    if (podeAgir) {
+      document.getElementById('area-acao').style.display    = 'block';
+      document.getElementById('rodape-simples').style.display = 'none';
+    } else {
+      document.getElementById('area-acao').style.display    = 'none';
+      document.getElementById('rodape-simples').style.display = 'block';
+    }
+  }
+
+  function prepararReprovacao() {
+    _modoReprovacao = true;
+    document.getElementById('campo-justificativa').style.display = 'flex';
+    document.getElementById('aviso-reprovacao').style.display    = 'block';
+    document.getElementById('btn-acordo').style.display          = 'none';
+    document.getElementById('btn-reprovar').textContent          = 'Confirmar reprovação';
+    document.getElementById('btn-reprovar').onclick              = executarReprovacao;
+  }
+
+  function darAcordo() {
+    const senha = document.getElementById('f-senha').value;
+    if (!senha) { mostrarErro('Confirme sua senha para assinar.'); return; }
+    setBtnLoad('btn-acordo', true, 'Processando...');
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        setBtnLoad('btn-acordo', false, '✓ De acordo');
+        if (!resp.ok) { mostrarErro(resp.erro); return; }
+        fecharModal();
+        carregarDemandas();
+      })
+      .withFailureHandler(function(err) {
+        setBtnLoad('btn-acordo', false, '✓ De acordo');
+        mostrarErro('Erro: ' + err.message);
+      })
+      .chamarAcao(token, 'aprovar_demanda', JSON.stringify({
+        id_demanda:    _demandaAtual.id_demanda,
+        senha,
+        justificativa: 'De acordo.',
+      }));
+  }
+
+  function executarReprovacao() {
+    const senha  = document.getElementById('f-senha').value;
+    const justif = document.getElementById('f-justificativa').value.trim();
+    if (!justif || justif.length < 10) { mostrarErro('Informe uma justificativa com ao menos 10 caracteres.'); return; }
+    if (!senha) { mostrarErro('Confirme sua senha.'); return; }
+    setBtnLoad('btn-reprovar', true, 'Processando...');
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        setBtnLoad('btn-reprovar', false, 'Confirmar reprovação');
+        if (!resp.ok) { mostrarErro(resp.erro); return; }
+        fecharModal();
+        carregarDemandas();
+      })
+      .withFailureHandler(function(err) {
+        setBtnLoad('btn-reprovar', false, 'Confirmar reprovação');
+        mostrarErro('Erro: ' + err.message);
+      })
+      .chamarAcao(token, 'reprovar_demanda', JSON.stringify({
+        id_demanda:    _demandaAtual.id_demanda,
+        senha,
+        justificativa: justif,
+      }));
+  }
+
+  function fecharModal() {
+    document.getElementById('overlay-detalhe').classList.remove('aberto');
+    _modoReprovacao = false;
+    document.getElementById('btn-reprovar').textContent = '✕ Reprovar';
+    document.getElementById('btn-reprovar').onclick     = prepararReprovacao;
+    document.getElementById('btn-acordo').style.display = '';
+  }
+
+  function fazerLogout() {
+    google.script.run.chamarAcao(token, 'logout', '{}');
+    navegar('login', '');
+  }
+
+  function mostrarErro(msg) {
+    const el = document.getElementById('erro-acao');
+    el.textContent = msg; el.classList.add('vis');
+  }
+
+  function setBtnLoad(id, on, txt) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.disabled = on;
+    btn.innerHTML = on ? '<span class="spinner-inline"></span>' + txt : txt;
+  }
+
+  function fmtValor(v) { return Number(v||0).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 }); }
+  function fmtData(iso) { if (!iso) return '—'; try { return new Date(iso).toLocaleDateString('pt-BR'); } catch { return '—'; } }
+  function truncar(str, n) { if (!str) return '—'; return str.length > n ? str.slice(0, n) + '…' : str; }
+  function rotularStatus(s) {
+    return {
+      rascunho:'Rascunho', submetida:'Submetida', de_acordo:'De acordo',
+      reprovada:'Reprovada', priorizada:'Priorizada', homologada:'Homologada',
+    }[s] || s;
+  }
+</script>
+</body>
+</html>

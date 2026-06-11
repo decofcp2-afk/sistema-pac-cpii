@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema PAC — Homologação</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #F1EFE8; color: #2C2C2A; min-height: 100vh; }
+  .topbar { background: #3C3489; height: 56px; display: flex; align-items: center; padding: 0 24px; gap: 16px; position: sticky; top: 0; z-index: 100; }
+  .topbar-logo { font-size: 15px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .topbar-sub  { font-size: 12px; color: rgba(255,255,255,0.55); border-left: 1px solid rgba(255,255,255,0.2); padding-left: 14px; }
+  .topbar-spacer { flex: 1; }
+  .topbar-usuario { display: flex; align-items: center; gap: 10px; font-size: 13px; color: rgba(255,255,255,0.85); }
+  .avatar { width: 32px; height: 32px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #fff; flex-shrink: 0; }
+  .btn-logout { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 5px 12px; font-size: 12px; color: rgba(255,255,255,0.85); cursor: pointer; }
+  .layout { display: flex; min-height: calc(100vh - 56px); }
+  .sidebar { width: 220px; background: #fff; border-right: 1px solid #D3D1C7; padding: 20px 0; flex-shrink: 0; }
+  .nav-titulo { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: #B4B2A9; padding: 0 18px 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 18px; font-size: 13px; color: #5F5E5A; text-decoration: none; border-left: 3px solid transparent; cursor: pointer; transition: all 0.12s; }
+  .nav-item:hover { background: #F1EFE8; color: #2C2C2A; }
+  .nav-item.ativo { background: #EEEDFE; color: #3C3489; border-left-color: #3C3489; font-weight: 500; }
+  .nav-item svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
+  .main { flex: 1; padding: 28px 32px; max-width: 1000px; }
+  .page-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .page-sub { font-size: 13px; color: #888780; margin-bottom: 20px; }
+
+  .barra-acao { background: #fff; border: 1px solid #D3D1C7; border-radius: 10px; padding: 14px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .barra-acao-info { font-size: 13px; color: #5F5E5A; flex: 1; }
+  .barra-acao-info strong { color: #3C3489; }
+  .campo-senha { display: flex; align-items: center; gap: 8px; }
+  .campo-senha input { padding: 7px 12px; border: 1px solid #D3D1C7; border-radius: 7px; font-size: 13px; outline: none; width: 200px; }
+  .campo-senha input:focus { border-color: #534AB7; box-shadow: 0 0 0 3px rgba(83,74,183,0.1); }
+  .btn-homologar-sel { background: #085041; color: #fff; border: none; border-radius: 7px; padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .btn-homologar-sel:hover { background: #0F6E56; }
+  .btn-homologar-sel:disabled { background: #B4B2A9; cursor: not-allowed; }
+  .msg-erro { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 8px; padding: 8px 14px; font-size: 13px; color: #791F1F; display: none; width: 100%; }
+  .msg-erro.vis { display: block; }
+  .msg-ok { background: #EAF3DE; border: 1px solid #A8D580; border-radius: 8px; padding: 8px 14px; font-size: 13px; color: #27500A; display: none; width: 100%; }
+  .msg-ok.vis { display: block; }
+
+  .secao { background: #fff; border: 1px solid #D3D1C7; border-radius: 12px; overflow: hidden; }
+  .secao-header { padding: 14px 20px; border-bottom: 1px solid #F1EFE8; display: flex; align-items: center; gap: 12px; }
+  .secao-titulo { font-size: 14px; font-weight: 600; flex: 1; }
+  .btn-sel-todos { background: none; border: 1px solid #D3D1C7; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: #5F5E5A; }
+  .btn-sel-todos:hover { background: #F1EFE8; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #888780; padding: 10px 14px; text-align: left; background: #FAFAF8; border-bottom: 1px solid #F1EFE8; }
+  th.num { text-align: right; }
+  td { font-size: 13px; padding: 10px 14px; border-bottom: 1px solid #F8F7F4; vertical-align: middle; }
+  td.num { text-align: right; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #FAFAF8; }
+  tr.selecionada td { background: #F0F9F5; }
+  tr.homologada-row td { background: #FAFFF8; opacity: 0.7; }
+
+  input[type=checkbox] { width: 16px; height: 16px; accent-color: #3C3489; cursor: pointer; }
+  .rank-badge { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; font-size: 11px; font-weight: 700; background: #3C3489; color: #fff; }
+  .gut-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+  .gut-alto  { background: #FCEBEB; color: #A32D2D; }
+  .gut-medio { background: #FAEEDA; color: #7A4A00; }
+  .gut-baixo { background: #EAF3DE; color: #27500A; }
+  .badge-priorizada { background: #FAEEDA; color: #633806; display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+  .badge-homologada { background: #E1F5EE; color: #085041; display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+
+  .carregando { text-align: center; padding: 40px; color: #B4B2A9; }
+  .vazio { text-align: center; padding: 40px; color: #B4B2A9; }
+  .spinner-inline { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 4px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #nav-form { display: none; }
+</style>
+</head>
+<body>
+
+<? var dadosObj = JSON.parse(dados); ?>
+<form id="nav-form" method="get" target="_top">
+  <input type="hidden" id="nav-page"  name="page"  value="">
+  <input type="hidden" id="nav-token" name="token" value="">
+</form>
+
+<div class="topbar">
+  <span class="topbar-logo">PAC</span>
+  <span class="topbar-sub">Homologação do Plano</span>
+  <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:4px 10px;">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <select id="sel-exercicio" style="background:transparent;border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;outline:none;padding:0 2px;" onchange="trocarExercicio(this.value)">
+    </select>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-usuario">
+    <div class="avatar" id="av">?</div>
+    <div>
+      <div style="font-weight:500" id="nome-usuario">Carregando...</div>
+      <div style="font-size:11px;opacity:0.7" id="unidade-usuario"></div>
+    </div>
+    <button class="btn-logout" onclick="fazerLogout()">Sair</button>
+  </div>
+</div>
+
+<div class="layout">
+  <nav class="sidebar" id="sidebar"></nav>
+  <main class="main">
+    <div class="page-title">Homologação do Plano</div>
+    <div class="page-sub">Exercício <span id="exercicio-label">...</span> — selecione as demandas e confirme com sua senha</div>
+
+    <div class="barra-acao" id="barra-acao" style="display:none">
+      <div class="barra-acao-info">
+        <strong id="cnt-selecionadas">0</strong> demanda(s) selecionada(s) ·
+        Valor total: <strong id="val-selecionadas">R$ 0,00</strong>
+      </div>
+      <div class="campo-senha">
+        <input type="password" id="f-senha" placeholder="Confirme sua senha">
+      </div>
+      <button class="btn-homologar-sel" id="btn-homologar-sel" onclick="homologarSelecionadas()">
+        ✓ Homologar selecionadas
+      </button>
+      <div class="msg-erro" id="msg-erro"></div>
+      <div class="msg-ok"   id="msg-ok"></div>
+    </div>
+
+    <div class="secao">
+      <div class="secao-header">
+        <span class="secao-titulo">Demandas priorizadas — ordem GUT</span>
+        <button class="btn-sel-todos" id="btn-sel-todos" onclick="toggleSelecionarTodos()">Selecionar todas</button>
+      </div>
+      <div id="corpo-tabela"><div class="carregando">Carregando...</div></div>
+    </div>
+  </main>
+</div>
+
+<script>
+  const token  = '<?= JSON.parse(dados).token || "" ?>';
+  const appUrl = '<?= ScriptApp.getService().getUrl() ?>';
+  let _usuario  = null;
+  let _demandas = [];
+  let _todosSelecionados = false;
+
+  // ── Exercício ─────────────────────────────────────────────────────────────
+  function getExercicio() { return sessionStorage.getItem('pac_exercicio') || ''; }
+  function setExercicio(ano) { sessionStorage.setItem('pac_exercicio', String(ano)); }
+
+  // O exercício fica apenas no sessionStorage — enviado explicitamente em cada chamada.
+  // O CONFIG da planilha NÃO é alterado — é somente leitura para o ano padrão.
+  function trocarExercicio(ano) {
+    setExercicio(ano);
+    const ex = document.getElementById('exercicio-label');
+    if (ex) ex.textContent = ano;
+    carregarDemandas(ano);
+  }
+
+  function popularSeletorExercicios(exercicioAtual) {
+    const sel = document.getElementById('sel-exercicio');
+    if (!sel) return;
+    const anoBase = Number(exercicioAtual) || new Date().getFullYear();
+    const anos = [];
+    for (let a = anoBase - 3; a <= anoBase + 2; a++) anos.push(a);
+    const atual = getExercicio() || exercicioAtual;
+    sel.innerHTML = anos.map(a =>
+      `<option value="${a}" style="background:#3C3489;color:#fff"${String(a)===String(atual)?' selected':''}>${a}</option>`
+    ).join('');
+    if (!getExercicio()) setExercicio(exercicioAtual);
+  }
+
+  const MENUS = {
+    ord_despesas: [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Prioridades GUT', page:'prioridades', icon:'star' }, { label:'Homologar plano', page:'homologacao', icon:'shield' }],
+    licitacoes:   [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Usuários', page:'admin', icon:'users' }, { label:'Todas as demandas', page:'demandas', icon:'list' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Prioridades GUT', page:'prioridades', icon:'star' } ],
+  };
+  const ICONS = {
+    home:   '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+    list:   '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>',
+    check:  '<path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+    dollar: '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>',
+    star:   '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    users:  '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',
+  };
+
+  // ── Navegação ─────────────────────────────────────────────────────────────
+  function navegar(page, tk) {
+    document.getElementById('nav-page').value  = page;
+    document.getElementById('nav-token').value = tk || token;
+    document.getElementById('nav-form').action = appUrl;
+    document.getElementById('nav-form').submit();
+  }
+
+  // ── Inicialização ─────────────────────────────────────────────────────────
+  if (!token) { navegar('login'); }
+  else {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) { navegar('login'); return; }
+        _usuario = resp.usuario;
+        document.getElementById('av').textContent = _usuario.nome.charAt(0).toUpperCase();
+        document.getElementById('nome-usuario').textContent = _usuario.nome;
+        document.getElementById('unidade-usuario').textContent = _usuario.unidade || '';
+
+        if (_usuario.papel !== 'ord_despesas' && _usuario.papel !== 'licitacoes') {
+          navegar('dashboard'); return;
+        }
+
+        const menus = MENUS[_usuario.papel] || MENUS.licitacoes;
+        document.getElementById('sidebar').innerHTML =
+          '<div class="nav-titulo" style="margin-top:8px">Menu</div>' +
+          menus.map(m =>
+            `<a class="nav-item${m.page==='homologacao'?' ativo':''}" href="#" onclick="navegar('${m.page}');return false;">
+              <svg viewBox="0 0 24 24">${ICONS[m.icon]||''}</svg> ${m.label}
+            </a>`
+          ).join('');
+
+        // Ocultar barra de ação para licitacoes (só visualiza)
+        if (_usuario.papel !== 'ord_despesas') {
+          document.getElementById('barra-acao').style.display  = 'none';
+          document.getElementById('btn-sel-todos').style.display = 'none';
+        }
+
+        google.script.run
+          .withSuccessHandler(function(cfg) {
+            const ex = sessionStorage.getItem('pac_exercicio') || cfg.exercicio || new Date().getFullYear();
+            sessionStorage.setItem('pac_exercicio', String(ex));
+            popularSeletorExercicios(cfg.exercicio || new Date().getFullYear());
+            document.getElementById('exercicio-label').textContent = ex;
+            carregarDemandas(ex);
+          })
+          .chamarAcao(token, 'get_config_exercicio', '{}');
+      })
+      .withFailureHandler(function() { navegar('login'); })
+      .chamarAcao(token, 'dados_usuario', '{}');
+  }
+
+  function carregarDemandas(exercicio) {
+    const ex = exercicio || getExercicio();
+    document.getElementById('corpo-tabela').innerHTML = '<div class="carregando">Carregando...</div>';
+    document.getElementById('exercicio-label').textContent = ex;
+
+    // resumo_plano recebe exercício explicitamente
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) return;
+        _demandas = resp.demandas || [];
+        renderizarTabela();
+        if (_usuario.papel === 'ord_despesas' && _demandas.some(d => d.status === 'priorizada')) {
+          document.getElementById('barra-acao').style.display = 'flex';
+          document.getElementById('barra-acao').style.flexWrap = 'wrap';
+        }
+      })
+      .chamarAcao(token, 'resumo_plano', JSON.stringify({ exercicio: String(ex) }));
+  }
+
+  function renderizarTabela() {
+    if (_demandas.length === 0) {
+      document.getElementById('corpo-tabela').innerHTML =
+        '<div class="vazio">Nenhuma demanda priorizada para homologar neste exercício.</div>';
+      return;
+    }
+
+    const podeChekar = _usuario.papel === 'ord_despesas';
+
+    document.getElementById('corpo-tabela').innerHTML = `
+      <table>
+        <thead><tr>
+          ${podeChekar ? '<th style="width:36px"></th>' : ''}
+          <th style="width:32px">#</th>
+          <th>Objeto</th>
+          <th>Unidade</th>
+          <th class="num">Valor estimado</th>
+          <th class="num">G</th>
+          <th class="num">U</th>
+          <th class="num">T</th>
+          <th class="num">GUT</th>
+          <th>Status</th>
+        </tr></thead>
+        <tbody>
+          ${_demandas.map((d, i) => {
+            const gut    = Number(d.gut_total || 0);
+            const corGut = gut >= 64 ? 'gut-alto' : gut >= 27 ? 'gut-medio' : 'gut-baixo';
+            const isHomol = d.status === 'homologada';
+            return `<tr class="${isHomol ? 'homologada-row' : ''}" id="row-${d.id_demanda}">
+              ${podeChekar ? `<td><input type="checkbox" id="chk-${d.id_demanda}" ${isHomol ? 'disabled' : ''} onchange="atualizarContador()"></td>` : ''}
+              <td><span class="rank-badge">${i+1}</span></td>
+              <td title="${d.descricao_objeto||''}">${truncar(d.descricao_objeto, 50)}</td>
+              <td style="font-size:12px;color:#888780">${d.sigla_unidade||d.nome_unidade||'—'}</td>
+              <td class="num">R$ ${fmtValor(Number(d.valor_estimado||0))}</td>
+              <td class="num"><span style="font-weight:600;color:#A32D2D">${d.gut_g||'—'}</span></td>
+              <td class="num"><span style="font-weight:600;color:#7A4A00">${d.gut_u||'—'}</span></td>
+              <td class="num"><span style="font-weight:600;color:#0C447C">${d.gut_t||'—'}</span></td>
+              <td class="num"><span class="gut-badge ${corGut}">${gut||'—'}</span></td>
+              <td>
+                <span class="badge-${d.status}">${d.status === 'homologada' ? 'Homologada' : 'Priorizada'}</span>
+                ${isHomol ? `<button style="margin-left:6px;background:none;border:1px solid #B4B2A9;border-radius:5px;padding:2px 7px;font-size:11px;cursor:pointer;color:#888780" onclick="cancelarHomologacao('${d.id_demanda}')" title="Cancelar homologação">↩ Cancelar</button>` : ''}
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+
+    atualizarContador();
+  }
+
+  function toggleSelecionarTodos() {
+    _todosSelecionados = !_todosSelecionados;
+    document.querySelectorAll('input[type=checkbox]:not(:disabled)').forEach(chk => {
+      chk.checked = _todosSelecionados;
+      const row = document.getElementById('row-' + chk.id.replace('chk-', ''));
+      if (row) row.classList.toggle('selecionada', _todosSelecionados);
+    });
+    document.getElementById('btn-sel-todos').textContent =
+      _todosSelecionados ? 'Desmarcar todas' : 'Selecionar todas';
+    atualizarContador();
+  }
+
+  function atualizarContador() {
+    const selecionadas = getSelecionadas();
+    const valor = selecionadas.reduce((s, id) => {
+      const d = _demandas.find(d => d.id_demanda === id);
+      return s + Number(d ? d.valor_estimado || 0 : 0);
+    }, 0);
+    document.getElementById('cnt-selecionadas').textContent = selecionadas.length;
+    document.getElementById('val-selecionadas').textContent = 'R$ ' + fmtValor(valor);
+
+    _demandas.forEach(d => {
+      const chk = document.getElementById('chk-' + d.id_demanda);
+      const row = document.getElementById('row-' + d.id_demanda);
+      if (chk && row) row.classList.toggle('selecionada', chk.checked);
+    });
+  }
+
+  function getSelecionadas() {
+    return _demandas
+      .filter(d => d.status === 'priorizada')
+      .map(d => d.id_demanda)
+      .filter(id => {
+        const chk = document.getElementById('chk-' + id);
+        return chk && chk.checked;
+      });
+  }
+
+  function cancelarHomologacao(idDemanda) {
+    if (!confirm('Cancelar a homologação? A demanda voltará para "Priorizada".')) return;
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) { alert('Erro: ' + (resp.erro||'Falha.')); return; }
+        carregarDemandas(getExercicio());
+      })
+      .withFailureHandler(function(err) { alert('Erro: ' + err.message); })
+      .chamarAcao(token, 'reverter_status', JSON.stringify({ id_demanda: idDemanda, novo_status: 'priorizada' }));
+  }
+
+  function homologarSelecionadas() {
+    const ids  = getSelecionadas();
+    const senha = document.getElementById('f-senha').value;
+    if (ids.length === 0) { mostrarErro('Selecione ao menos uma demanda.'); return; }
+    if (!senha)           { mostrarErro('Confirme sua senha para assinar.'); return; }
+
+    const btn = document.getElementById('btn-homologar-sel');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-inline"></span>Homologando...';
+    document.getElementById('msg-erro').classList.remove('vis');
+    document.getElementById('msg-ok').classList.remove('vis');
+
+    // homologar_demandas opera por IDs específicos — não precisa de exercício
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        btn.disabled = false;
+        btn.textContent = '✓ Homologar selecionadas';
+        if (!resp.ok) { mostrarErro(resp.erro); return; }
+        document.getElementById('f-senha').value = '';
+        mostrarOk('✓ ' + resp.homologadas + ' demanda(s) homologada(s) com sucesso!');
+        carregarDemandas(getExercicio());
+      })
+      .withFailureHandler(function(err) {
+        btn.disabled = false;
+        btn.textContent = '✓ Homologar selecionadas';
+        mostrarErro('Erro: ' + err.message);
+      })
+      .chamarAcao(token, 'homologar_demandas', JSON.stringify({ ids_demandas: ids, senha }));
+  }
+
+  function mostrarErro(msg) {
+    const el = document.getElementById('msg-erro');
+    el.textContent = msg; el.classList.add('vis');
+    document.getElementById('msg-ok').classList.remove('vis');
+  }
+  function mostrarOk(msg) {
+    const el = document.getElementById('msg-ok');
+    el.textContent = msg; el.classList.add('vis');
+    document.getElementById('msg-erro').classList.remove('vis');
+  }
+
+  function fazerLogout() {
+    google.script.run.chamarAcao(token, 'logout', '{}');
+    navegar('login', '');
+  }
+
+  function fmtValor(v) { return Number(v||0).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 }); }
+  function truncar(str, n) { if (!str) return '—'; return str.length > n ? str.slice(0, n) + '…' : str; }
+</script>
+</body>
+</html>

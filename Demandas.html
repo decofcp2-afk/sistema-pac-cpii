@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema PAC — Demandas</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #F1EFE8; color: #2C2C2A; min-height: 100vh; }
+
+  .topbar { background: #3C3489; height: 56px; display: flex; align-items: center; padding: 0 24px; gap: 16px; position: sticky; top: 0; z-index: 100; }
+  .topbar-logo { font-size: 15px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .topbar-sub { font-size: 12px; color: rgba(255,255,255,0.55); border-left: 1px solid rgba(255,255,255,0.2); padding-left: 14px; }
+  .topbar-spacer { flex: 1; }
+  .topbar-usuario { display: flex; align-items: center; gap: 10px; font-size: 13px; color: rgba(255,255,255,0.85); }
+  .avatar { width: 32px; height: 32px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #fff; flex-shrink: 0; }
+  .btn-logout { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 5px 12px; font-size: 12px; color: rgba(255,255,255,0.85); cursor: pointer; }
+
+  .layout { display: flex; min-height: calc(100vh - 56px); }
+  .sidebar { width: 220px; background: #fff; border-right: 1px solid #D3D1C7; padding: 20px 0; flex-shrink: 0; }
+  .nav-titulo { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: #B4B2A9; padding: 0 18px 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 18px; font-size: 13px; color: #5F5E5A; text-decoration: none; border-left: 3px solid transparent; transition: all 0.12s; cursor: pointer; }
+  .nav-item:hover { background: #F1EFE8; color: #2C2C2A; }
+  .nav-item.ativo { background: #EEEDFE; color: #3C3489; border-left-color: #3C3489; font-weight: 500; }
+  .nav-item svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
+
+  .main { flex: 1; padding: 28px 32px; max-width: 1100px; }
+  .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .page-title { font-size: 20px; font-weight: 600; }
+  .page-sub { font-size: 13px; color: #888780; margin-top: 2px; }
+
+  .btn-primario { background: #3C3489; color: #fff; border: none; border-radius: 8px; padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .btn-primario:hover { background: #534AB7; }
+  .btn-primario svg { width: 16px; height: 16px; stroke: #fff; fill: none; stroke-width: 2.5; }
+  .btn-secundario { background: #fff; color: #444441; border: 1px solid #D3D1C7; border-radius: 8px; padding: 8px 16px; font-size: 13px; cursor: pointer; }
+  .btn-secundario:hover { background: #F1EFE8; }
+
+  .secao { background: #fff; border: 1px solid #D3D1C7; border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+  .secao-header { padding: 16px 20px; border-bottom: 1px solid #F1EFE8; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .secao-titulo { font-size: 14px; font-weight: 600; }
+  .filtros { display: flex; gap: 8px; }
+  .filtro-btn { padding: 4px 12px; border-radius: 99px; font-size: 12px; border: 1px solid #D3D1C7; background: #fff; cursor: pointer; color: #5F5E5A; }
+  .filtro-btn.ativo { background: #EEEDFE; border-color: #534AB7; color: #3C3489; font-weight: 500; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #888780; padding: 10px 16px; text-align: left; background: #FAFAF8; border-bottom: 1px solid #F1EFE8; }
+  td { font-size: 13px; padding: 12px 16px; border-bottom: 1px solid #F8F7F4; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #FAFAF8; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+  .badge-rascunho   { background: #F1EFE8; color: #5F5E5A; }
+  .badge-submetida  { background: #E6F1FB; color: #0C447C; }
+  .badge-aprovada   { background: #EAF3DE; color: #27500A; }
+  .badge-reprovada  { background: #FCEBEB; color: #791F1F; }
+  .badge-de_acordo  { background: #EAF3DE; color: #27500A; }
+  .badge-priorizada { background: #FAEEDA; color: #633806; }
+  .badge-homologada { background: #E1F5EE; color: #085041; }
+
+  .overlay-justif { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 300; align-items: center; justify-content: center; }
+  .overlay-justif.aberto { display: flex; }
+  .modal-justif { background: #fff; border-radius: 14px; width: 100%; max-width: 460px; padding: 28px; margin: 24px; }
+  .modal-justif-titulo { font-size: 15px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+  .justif-box { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 8px; padding: 14px; font-size: 13px; color: #2C2C2A; line-height: 1.6; }
+  .justif-meta { font-size: 11px; color: #888780; margin-top: 10px; }
+  .btn-fechar-justif { background: #fff; border: 1px solid #D3D1C7; border-radius: 8px; padding: 8px 18px; font-size: 13px; cursor: pointer; margin-top: 16px; width: 100%; }
+
+  .acao-btn { background: none; border: none; cursor: pointer; color: #888780; padding: 4px 6px; border-radius: 4px; font-size: 12px; }
+  .acao-btn:hover { background: #F1EFE8; color: #3C3489; }
+
+  .vazio { text-align: center; padding: 48px 20px; color: #B4B2A9; }
+  .vazio svg { width: 40px; height: 40px; stroke: #D3D1C7; fill: none; stroke-width: 1.5; margin-bottom: 12px; }
+  .carregando { text-align: center; padding: 40px; color: #B4B2A9; font-size: 14px; }
+
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; overflow-y: auto; padding: 24px; }
+  .overlay.aberto { display: flex; align-items: flex-start; justify-content: center; }
+  .modal { background: #fff; border-radius: 16px; width: 100%; max-width: 720px; padding: 32px; margin: auto; }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .modal-titulo { font-size: 17px; font-weight: 600; }
+  .modal-fechar { background: none; border: none; cursor: pointer; color: #888780; padding: 4px; }
+  .modal-fechar svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-grid .span2 { grid-column: span 2; }
+  .campo { display: flex; flex-direction: column; gap: 6px; }
+  .campo label { font-size: 13px; font-weight: 500; color: #444441; }
+  .campo label .obrig { color: #E24B4A; margin-left: 2px; }
+  .campo input, .campo select, .campo textarea {
+    padding: 9px 12px; border: 1px solid #D3D1C7; border-radius: 8px;
+    font-size: 13px; color: #2C2C2A; font-family: inherit; outline: none;
+    transition: border-color 0.15s; background: #fff;
+  }
+  .campo input:focus, .campo select:focus, .campo textarea:focus {
+    border-color: #534AB7; box-shadow: 0 0 0 3px rgba(83,74,183,0.1);
+  }
+  .campo textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+  .campo .hint { font-size: 11px; color: #B4B2A9; }
+
+  .secao-form { border: 1px solid #F1EFE8; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .secao-form-titulo { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #B4B2A9; margin-bottom: 14px; }
+
+  .radio-group { display: flex; gap: 16px; }
+  .radio-item { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+  .radio-item input { width: 16px; height: 16px; cursor: pointer; accent-color: #3C3489; }
+
+  .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; padding-top: 20px; border-top: 1px solid #F1EFE8; }
+
+  .msg-erro-modal { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #791F1F; margin-bottom: 16px; display: none; }
+  .msg-erro-modal.vis { display: block; }
+
+  .modal-confirm { max-width: 440px; }
+  .confirm-aviso { background: #FAEEDA; border: 1px solid #FAC775; border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #633806; margin-bottom: 16px; }
+
+  #nav-form { display: none; }
+
+  .spinner-inline { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 4px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .orcamento-painel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .orcamento-card { background: #fff; border: 1px solid #D3D1C7; border-radius: 10px; padding: 14px 16px; }
+  .orcamento-card.azul    { border-left: 3px solid #3C3489; }
+  .orcamento-card.verde   { border-left: 3px solid #1D9E75; }
+  .orcamento-card.amarelo { border-left: 3px solid #BA7517; }
+  .orcamento-card.cinza   { border-left: 3px solid #B4B2A9; }
+  .orcamento-label { font-size: 11px; color: #888780; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .orcamento-valor { font-size: 16px; font-weight: 700; color: #2C2C2A; }
+  .orcamento-hint  { font-size: 11px; color: #B4B2A9; margin-top: 2px; }
+  .orcamento-sem-dados { background: #FAFAF8; border: 1px dashed #D3D1C7; border-radius: 10px; padding: 12px 16px; font-size: 13px; color: #B4B2A9; text-align: center; margin-bottom: 20px; display: none; }
+</style>
+</head>
+<body>
+
+<? var dadosObj = JSON.parse(dados); ?>
+
+<form id="nav-form" method="get" target="_top">
+  <input type="hidden" id="nav-page"  name="page"  value="">
+  <input type="hidden" id="nav-token" name="token" value="">
+</form>
+
+<div class="topbar">
+  <span class="topbar-logo">PAC</span>
+  <span class="topbar-sub">Planejamento Anual de Contratações</span>
+  <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:4px 10px;">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <select id="sel-exercicio" style="background:transparent;border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;outline:none;padding:0 2px;" onchange="trocarExercicio(this.value)">
+    </select>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-usuario">
+    <div class="avatar" id="av">?</div>
+    <div>
+      <div style="font-weight:500" id="nome-usuario">Carregando...</div>
+      <div style="font-size:11px;opacity:0.7" id="unidade-usuario"></div>
+    </div>
+    <button class="btn-logout" onclick="fazerLogout()">Sair</button>
+  </div>
+</div>
+
+
+<div class="layout">
+  <nav class="sidebar" id="sidebar"></nav>
+  <main class="main">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Demandas</div>
+        <div class="page-sub" id="page-sub">Carregando...</div>
+      </div>
+      <button class="btn-primario" id="btn-nova" onclick="abrirModalNova()" style="display:none">
+        <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nova demanda
+      </button>
+    </div>
+
+    <div class="orcamento-painel" id="orcamento-painel" style="display:none">
+      <div class="orcamento-card azul">
+        <div class="orcamento-label">Orçamento recebido</div>
+        <div class="orcamento-valor" id="orc-recebido">—</div>
+        <div class="orcamento-hint">dotação do exercício</div>
+      </div>
+      <div class="orcamento-card verde">
+        <div class="orcamento-label">Já solicitado</div>
+        <div class="orcamento-valor" id="orc-solicitado">—</div>
+        <div class="orcamento-hint">soma das demandas</div>
+      </div>
+      <div class="orcamento-card amarelo">
+        <div class="orcamento-label">Saldo disponível</div>
+        <div class="orcamento-valor" id="orc-saldo">—</div>
+        <div class="orcamento-hint">para novas demandas</div>
+      </div>
+      <div class="orcamento-card cinza">
+        <div class="orcamento-label">Utilização</div>
+        <div class="orcamento-valor" id="orc-pct">—</div>
+        <div class="orcamento-hint">do orçamento recebido</div>
+      </div>
+    </div>
+    <div class="orcamento-sem-dados" id="orcamento-sem-dados">
+      Nenhuma dotação orçamentária cadastrada para sua unidade neste exercício.
+    </div>
+
+    <div class="secao">
+      <div class="secao-header">
+        <span class="secao-titulo" id="titulo-tabela">Todas as demandas</span>
+        <div class="filtros" id="filtros">
+          <button class="filtro-btn ativo" onclick="filtrar('todos',this)">Todas</button>
+          <button class="filtro-btn" onclick="filtrar('rascunho',this)">Rascunho</button>
+          <button class="filtro-btn" onclick="filtrar('submetida',this)">Submetidas</button>
+          <button class="filtro-btn" onclick="filtrar('aprovada',this)">Aprovadas</button>
+          <button class="filtro-btn" onclick="filtrar('reprovada',this)">Reprovadas</button>
+        </div>
+      </div>
+      <div id="corpo-tabela"><div class="carregando">Carregando demandas...</div></div>
+    </div>
+  </main>
+</div>
+
+<!-- Modal: Nova / Editar demanda -->
+<div class="overlay" id="overlay-demanda">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-titulo" id="modal-titulo">Nova demanda</span>
+      <button class="modal-fechar" onclick="fecharModal('overlay-demanda')">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="msg-erro-modal" id="erro-demanda"></div>
+    <div class="secao-form">
+      <div class="secao-form-titulo">Identificação do objeto</div>
+      <div class="form-grid">
+        <div class="campo span2">
+          <label>Descrição do objeto <span class="obrig">*</span></label>
+          <input type="text" id="f-descricao" placeholder="Descrição sucinta do bem ou serviço" maxlength="300">
+          <span class="hint">Art. 8.3.2.1 — descrição sucinta e precisa</span>
+        </div>
+        <div class="campo span2">
+          <label>Justificativa da necessidade <span class="obrig">*</span></label>
+          <textarea id="f-justificativa" rows="4" placeholder="Descreva por que esta contratação é necessária..."></textarea>
+          <span class="hint">Art. 8.3.2.2 — motivação da contratação</span>
+        </div>
+        <div class="campo">
+          <label>Quantidade estimada <span class="obrig">*</span></label>
+          <input type="number" id="f-quantidade" placeholder="Ex: 12" min="0" step="any">
+          <span class="hint">Expectativa de consumo anual (8.3.2.3)</span>
+        </div>
+        <div class="campo">
+          <label>Unidade de medida <span class="obrig">*</span></label>
+          <select id="f-unidade-medida">
+            <option value="">Selecione...</option>
+            <option value="unidade">Unidade</option>
+            <option value="serviço">Serviço (contrato)</option>
+            <option value="m²">m²</option>
+            <option value="m³">m³</option>
+            <option value="metro linear">Metro linear</option>
+            <option value="hora">Hora</option>
+            <option value="mês">Mês</option>
+            <option value="ano">Ano</option>
+            <option value="kg">Kg</option>
+            <option value="litro">Litro</option>
+            <option value="resma">Resma</option>
+            <option value="caixa">Caixa</option>
+            <option value="outro">Outro</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label>Valor estimado (R$) <span class="obrig">*</span></label>
+          <input type="number" id="f-valor" placeholder="0,00" min="0" step="0.01">
+          <span class="hint">Estimativa preliminar (8.3.2.4)</span>
+        </div>
+      </div>
+    </div>
+    <div class="secao-form">
+      <div class="secao-form-titulo">Situação contratual</div>
+      <div class="form-grid">
+        <div class="campo">
+          <label>Possui contrato vigente? <span class="obrig">*</span></label>
+          <div class="radio-group">
+            <label class="radio-item"><input type="radio" name="contrato" value="TRUE"> Sim</label>
+            <label class="radio-item"><input type="radio" name="contrato" value="FALSE" checked> Não</label>
+          </div>
+          <span class="hint">Art. 8.3.2.6</span>
+        </div>
+        <div class="campo" id="campo-risco" style="display:none">
+          <label>Risco de não prorrogação?</label>
+          <div class="radio-group">
+            <label class="radio-item"><input type="radio" name="risco" value="TRUE"> Sim</label>
+            <label class="radio-item"><input type="radio" name="risco" value="FALSE" checked> Não</label>
+          </div>
+        </div>
+        <div class="campo span2">
+          <label>Demanda exclusiva deste setor? <span class="obrig">*</span></label>
+          <div class="radio-group">
+            <label class="radio-item"><input type="radio" name="exclusiva" value="TRUE" checked> Sim</label>
+            <label class="radio-item"><input type="radio" name="exclusiva" value="FALSE"> Não</label>
+          </div>
+          <span class="hint">Art. 8.3.2.7</span>
+        </div>
+      </div>
+    </div>
+    <div class="secao-form">
+      <div class="secao-form-titulo">Responsáveis técnicos (art. 8.3.2.5)</div>
+      <div class="form-grid">
+        <div class="campo">
+          <label>Gestor titular <span class="obrig">*</span></label>
+          <input type="text" id="f-gestor-tit" placeholder="Nome completo">
+        </div>
+        <div class="campo">
+          <label>Gestor substituto <span class="obrig">*</span></label>
+          <input type="text" id="f-gestor-sub" placeholder="Nome completo">
+        </div>
+        <div class="campo">
+          <label>Fiscal titular <span class="obrig">*</span></label>
+          <input type="text" id="f-fiscal-tit" placeholder="Nome completo">
+        </div>
+        <div class="campo">
+          <label>Fiscal substituto <span class="obrig">*</span></label>
+          <input type="text" id="f-fiscal-sub" placeholder="Nome completo">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secundario" onclick="fecharModal('overlay-demanda')">Cancelar</button>
+      <button class="btn-primario" id="btn-salvar-rascunho" onclick="salvarDemanda('rascunho')">Salvar rascunho</button>
+      <button class="btn-primario" id="btn-salvar-enviar" onclick="confirmarEnvio()" style="background:#0F6E56">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        Salvar e enviar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Confirmar envio -->
+<div class="overlay" id="overlay-confirmar">
+  <div class="modal modal-confirm">
+    <div class="modal-header">
+      <span class="modal-titulo">Confirmar envio</span>
+      <button class="modal-fechar" onclick="fecharModal('overlay-confirmar')">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="confirm-aviso">
+      Ao confirmar, a demanda será enviada para aprovação e não poderá mais ser editada. Esta ação equivale a uma assinatura eletrônica.
+    </div>
+    <div class="msg-erro-modal" id="erro-confirmar"></div>
+    <div class="campo">
+      <label>Confirme sua senha para assinar <span class="obrig">*</span></label>
+      <input type="password" id="f-senha-confirm" placeholder="Sua senha de acesso">
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secundario" onclick="fecharModal('overlay-confirmar')">Cancelar</button>
+      <button class="btn-primario" id="btn-confirmar-envio" onclick="executarEnvio()" style="background:#0F6E56">
+        Confirmar e enviar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal justificativa de reprovação -->
+<div class="overlay-justif" id="overlay-justif">
+  <div class="modal-justif">
+    <div class="modal-justif-titulo">
+      <span>Motivo da reprovação</span>
+      <button onclick="fecharJustif()" style="background:none;border:none;cursor:pointer;color:#888780;font-size:18px">×</button>
+    </div>
+    <div class="justif-box" id="justif-texto">—</div>
+    <div class="justif-meta" id="justif-meta"></div>
+    <button class="btn-fechar-justif" onclick="fecharJustif()">Fechar</button>
+  </div>
+</div>
+
+<script>
+  const token  = '<?= JSON.parse(dados).token || "" ?>';
+  const appUrl = '<?= ScriptApp.getService().getUrl() ?>';
+  let _saldoOrcamento    = null;
+  let _usuario           = null;
+  let _demandas          = [];
+  let _filtroAtual       = 'todos';
+  let _demandaEditando   = null;
+  let _demandaParaEnviar = null;
+
+  // ── Exercício ─────────────────────────────────────────────────────────────
+  function getExercicio() {
+    return sessionStorage.getItem('pac_exercicio') || String(new Date().getFullYear());
+  }
+  function setExercicio(ano) { sessionStorage.setItem('pac_exercicio', String(ano)); }
+
+  // O exercício selecionado fica apenas no sessionStorage do browser.
+  // Cada chamada ao servidor envia o exercício explicitamente no payload.
+  // O CONFIG da planilha NÃO é alterado — é somente leitura para o ano padrão.
+  function trocarExercicio(ano) {
+    setExercicio(ano);
+    if (typeof recarregarDados === 'function') recarregarDados();
+  }
+
+
+  function popularSeletorExercicios(exercicioAtual) {
+    const sel = document.getElementById('sel-exercicio');
+    if (!sel) return;
+    const anoBase = Number(exercicioAtual) || new Date().getFullYear();
+    const anos = [];
+    for (let a = anoBase - 3; a <= anoBase + 2; a++) anos.push(a);
+    const atual = getExercicio() || exercicioAtual;
+    sel.innerHTML = anos.map(a =>
+      `<option value="${a}" style="background:#3C3489;color:#fff"${String(a)===String(atual)?' selected':''}>${a}</option>`
+    ).join('');
+    if (!getExercicio()) setExercicio(exercicioAtual);
+  }
+
+  // ── Navegação ─────────────────────────────────────────────────────────────
+  function navegar(page, tk) {
+    document.getElementById('nav-page').value  = page;
+    document.getElementById('nav-token').value = tk || token;
+    document.getElementById('nav-form').action = appUrl;
+    document.getElementById('nav-form').submit();
+  }
+
+  const MENUS = {
+    chefe_secao:  [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Minhas demandas', page:'demandas', icon:'list' }],
+    chefia:       [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Minhas demandas', page:'demandas', icon:'list' }, { label:'Aprovar demandas', page:'aprovacoes', icon:'check' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }],
+    ord_despesas: [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Prioridades GUT', page:'prioridades', icon:'star' }, { label:'Homologar plano', page:'homologacao', icon:'shield' }],
+    licitacoes:   [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Usuários', page:'admin', icon:'users' }, { label:'Todas as demandas', page:'demandas', icon:'list' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }],
+  };
+  const ICONS = {
+    home:   '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+    list:   '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+    check:  '<path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+    dollar: '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>',
+    star:   '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    users:  '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',
+  };
+
+  // ── Inicialização ─────────────────────────────────────────────────────────
+  if (!token) {
+    navegar('login', '');
+  } else {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) { navegar('login', ''); return; }
+        _usuario = resp.usuario;
+
+        document.getElementById('av').textContent = _usuario.nome.charAt(0).toUpperCase();
+        document.getElementById('nome-usuario').textContent = _usuario.nome;
+        document.getElementById('unidade-usuario').textContent = _usuario.sigla || _usuario.unidade;
+
+        const isPapelSecao = _usuario.papel === 'chefe_secao';
+        document.getElementById('page-sub').textContent = isPapelSecao
+          ? 'Minhas demandas — ' + (_usuario.sigla || _usuario.unidade)
+          : 'Todas as demandas do sistema';
+        document.getElementById('titulo-tabela').textContent = isPapelSecao
+          ? 'Minhas demandas' : 'Todas as demandas';
+
+        if (isPapelSecao || _usuario.papel === 'chefia' || _usuario.papel === 'licitacoes') {
+          document.getElementById('btn-nova').style.display = 'flex';
+        }
+
+        const menus = MENUS[_usuario.papel] || [];
+        document.getElementById('sidebar').innerHTML =
+          '<div class="nav-titulo" style="margin-top:8px">Menu</div>' +
+          menus.map(m =>
+            `<a class="nav-item${m.page==='demandas'?' ativo':''}" href="#" onclick="navegar('${m.page}');return false;">
+              <svg viewBox="0 0 24 24">${ICONS[m.icon]||''}</svg> ${m.label}
+            </a>`
+          ).join('');
+
+        google.script.run
+          .withSuccessHandler(function(cfg) {
+            sessionStorage.setItem('pac_exercicio_atual', cfg.exercicio || new Date().getFullYear());
+            popularSeletorExercicios(cfg.exercicio || new Date().getFullYear());
+            recarregarDados();
+          })
+          .chamarAcao(token, 'get_config_exercicio', '{}');
+      })
+      .withFailureHandler(function(err) {
+        document.getElementById('page-sub').textContent = 'Erro: ' + err.message;
+      })
+      .chamarAcao(token, 'dados_usuario', '{}');
+  }
+
+  function recarregarDados() {
+    carregarDemandas();
+    carregarSaldoOrcamento();
+  }
+
+  let _recebidoOrcamento = null;
+
+  function carregarSaldoOrcamento() {
+    if (!_usuario || !_usuario.id_unidade_fk) return;
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok || !resp.dotacoes || resp.dotacoes.length === 0) {
+          _recebidoOrcamento = 0;
+          document.getElementById('orcamento-painel').style.display = 'none';
+          document.getElementById('orcamento-sem-dados').style.display = 'block';
+          return;
+        }
+        _recebidoOrcamento = resp.dotacoes.reduce((s,d) => s + Number(d.valor_recebido||0), 0);
+        _renderizarPainel();
+      })
+      .chamarAcao(token, 'listar_dotacoes', JSON.stringify({ exercicio: getExercicio() }));
+  }
+
+  function atualizarPainelSaldo() {
+    if (_recebidoOrcamento === null) {
+      carregarSaldoOrcamento();
+    } else {
+      _renderizarPainel();
+    }
+  }
+
+  function _renderizarPainel() {
+    if (!_usuario || !_usuario.id_unidade_fk) return;
+    if (_recebidoOrcamento === null) return;
+
+    const recebido = _recebidoOrcamento;
+    const totalSolicitado = _demandas
+      .filter(d => ['submetida','de_acordo','homologada'].includes(d.status))
+      .reduce((s,d) => s + Number(d.valor_estimado||0), 0);
+
+    const saldoReal = recebido - totalSolicitado;
+    const pct       = recebido > 0 ? Math.round((totalSolicitado / recebido) * 100) : 0;
+
+    document.getElementById('orc-recebido').textContent   = 'R$ ' + fmtValor(recebido);
+    document.getElementById('orc-solicitado').textContent = 'R$ ' + fmtValor(totalSolicitado);
+    document.getElementById('orc-saldo').textContent      = 'R$ ' + fmtValor(saldoReal);
+    document.getElementById('orc-saldo').style.color      = saldoReal < 0 ? '#A32D2D' : '#085041';
+    document.getElementById('orc-pct').textContent        = pct + '%';
+    document.getElementById('orc-pct').style.color        = pct >= 90 ? '#A32D2D' : pct >= 70 ? '#BA7517' : '#085041';
+
+    document.getElementById('orcamento-painel').style.display    = recebido > 0 ? 'grid' : 'none';
+    document.getElementById('orcamento-sem-dados').style.display = recebido > 0 ? 'none' : 'block';
+  }
+
+  function carregarDemandas() {
+    document.getElementById('corpo-tabela').innerHTML = '<div class="carregando">Carregando...</div>';
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) return;
+        _demandas = resp.demandas || [];
+        renderizarTabela();
+        atualizarPainelSaldo();
+      })
+      .withFailureHandler(function(err) {
+        document.getElementById('corpo-tabela').innerHTML =
+          '<div class="carregando">Erro: ' + err.message + '</div>';
+      })
+      .chamarAcao(token, 'listar_demandas', JSON.stringify({ exercicio: getExercicio() }));
+  }
+
+  // ── Tabela ────────────────────────────────────────────────────────────────
+  function renderizarTabela() {
+    let lista = _demandas;
+    if (_filtroAtual !== 'todos') lista = lista.filter(d => d.status === _filtroAtual);
+
+    if (lista.length === 0) {
+      document.getElementById('corpo-tabela').innerHTML = `
+        <div class="vazio">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <p>Nenhuma demanda encontrada</p>
+        </div>`;
+      return;
+    }
+
+    document.getElementById('corpo-tabela').innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Objeto</th><th>Unidade</th><th>Valor estimado</th><th>Status</th><th>Atualizado em</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${lista.map(d => `
+            <tr>
+              <td title="${d.descricao_objeto||''}">${truncar(d.descricao_objeto, 50)}</td>
+              <td>${d.nome_unidade||'—'}</td>
+              <td>R$ ${fmtValor(Number(d.valor_estimado||0))}</td>
+              <td><span class="badge badge-${d.status}">${rotularStatus(d.status)}</span></td>
+              <td>${fmtData(d.data_ultima_atualizacao)}</td>
+              <td style="white-space:nowrap">
+                ${d.status === 'rascunho' ? `
+                  <button class="acao-btn" onclick="editarDemanda('${d.id_demanda}')" title="Editar">✏️</button>
+                  <button class="acao-btn" onclick="prepararEnvio('${d.id_demanda}')" title="Enviar" style="color:#0F6E56">↑ Enviar</button>
+                  <button class="acao-btn" onclick="excluirDemanda('${d.id_demanda}','${(d.descricao_objeto||'').replace(/'/g,'')}')" title="Excluir" style="color:#A32D2D">🗑</button>
+                ` : ''}
+                ${d.status === 'submetida' ? `
+                  <span style="font-size:11px;color:#0C447C;font-weight:500">↑ Aguardando aprovação</span>
+                  <button class="acao-btn" onclick="reverterStatus('${d.id_demanda}','submetida','rascunho')" title="Cancelar envio" style="color:#888780">↩ Cancelar envio</button>
+                ` : ''}
+                ${d.status === 'de_acordo' ? `
+                  <span style="font-size:11px;color:#27500A;font-weight:500">✓ Aguardando priorização</span>
+                  ${_usuario.papel === 'licitacoes' ? `<button class="acao-btn" onclick="reverterStatus('${d.id_demanda}','de_acordo','submetida')" title="Reverter" style="color:#888780">↩</button>` : ''}
+                ` : ''}
+                ${d.status === 'priorizada' ? `
+                  <span style="font-size:11px;color:#633806;font-weight:500">★ Aguardando homologação</span>
+                  ${_usuario.papel === 'licitacoes' ? `<button class="acao-btn" onclick="reverterStatus('${d.id_demanda}','priorizada','de_acordo')" title="Reverter" style="color:#888780">↩</button>` : ''}
+                ` : ''}
+                ${d.status === 'homologada' ? `
+                  <span style="font-size:11px;color:#085041;font-weight:500">✔ Homologada</span>
+                  ${_usuario.papel === 'licitacoes' ? `<button class="acao-btn" onclick="reverterStatus('${d.id_demanda}','homologada','priorizada')" title="Reverter" style="color:#888780">↩</button>` : ''}
+                ` : ''}
+                ${d.status === 'reprovada' ? `
+                  <button class="acao-btn" onclick="verJustificativa('${d.id_demanda}')" title="Ver motivo" style="color:#A32D2D">⚠ Ver motivo</button>
+                  <button class="acao-btn" onclick="editarDemanda('${d.id_demanda}')" title="Revisar">↩ Revisar</button>
+                  ${_usuario.papel === 'licitacoes' ? `<button class="acao-btn" onclick="excluirDemanda('${d.id_demanda}','${(d.descricao_objeto||'').replace(/'/g,'')}')" title="Excluir" style="color:#A32D2D">🗑</button>` : ''}
+                ` : ''}
+                ${_usuario.papel === 'licitacoes' && !['rascunho','reprovada'].includes(d.status) ? `
+                  <button class="acao-btn" onclick="excluirDemanda('${d.id_demanda}','${(d.descricao_objeto||'').replace(/'/g,'')}')" title="Excluir" style="color:#A32D2D">🗑</button>
+                ` : ''}
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  function excluirDemanda(id, objeto) {
+    if (!confirm('Excluir a demanda "' + (objeto||id) + '"?\nEsta ação não pode ser desfeita.')) return;
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) { alert('Erro: ' + (resp.erro||'Falha ao excluir.')); return; }
+        carregarDemandas();
+      })
+      .withFailureHandler(function(err) { alert('Erro: ' + err.message); })
+      .chamarAcao(token, 'excluir_demanda', JSON.stringify({ id_demanda: id }));
+  }
+
+  function reverterStatus(id, statusAtual, novoStatus) {
+    const rotulos = { rascunho:'Rascunho', submetida:'Submetida', de_acordo:'De acordo', priorizada:'Priorizada', homologada:'Homologada' };
+    if (!confirm('Reverter status de "' + rotulos[statusAtual] + '" para "' + rotulos[novoStatus] + '"?\n\nAtenção: esta ação desfaz a etapa anterior do fluxo.')) return;
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) { alert('Erro: ' + (resp.erro||'Falha ao reverter.')); return; }
+        carregarDemandas();
+      })
+      .withFailureHandler(function(err) { alert('Erro: ' + err.message); })
+      .chamarAcao(token, 'reverter_status', JSON.stringify({ id_demanda: id, novo_status: novoStatus }));
+  }
+
+  function filtrar(status, btn) {
+    _filtroAtual = status;
+    document.querySelectorAll('.filtro-btn').forEach(b => b.classList.remove('ativo'));
+    btn.classList.add('ativo');
+    renderizarTabela();
+  }
+
+  // ── Modal nova/editar demanda ─────────────────────────────────────────────
+  function abrirModalNova() {
+    _demandaEditando = null;
+    document.getElementById('modal-titulo').textContent = 'Nova demanda';
+    limparFormulario();
+    document.getElementById('overlay-demanda').classList.add('aberto');
+  }
+
+  function editarDemanda(id) {
+    const d = _demandas.find(x => x.id_demanda === id);
+    if (!d) return;
+    _demandaEditando = id;
+    document.getElementById('modal-titulo').textContent = 'Editar demanda';
+    preencherFormulario(d);
+    document.getElementById('overlay-demanda').classList.add('aberto');
+  }
+
+  function fecharModal(id) { document.getElementById(id).classList.remove('aberto'); }
+
+  function limparFormulario() {
+    ['f-descricao','f-justificativa','f-quantidade','f-valor','f-gestor-tit','f-gestor-sub','f-fiscal-tit','f-fiscal-sub'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('f-unidade-medida').value = '';
+    document.querySelector('input[name="contrato"][value="FALSE"]').checked = true;
+    document.querySelector('input[name="exclusiva"][value="TRUE"]').checked = true;
+    document.getElementById('campo-risco').style.display = 'none';
+    document.getElementById('erro-demanda').classList.remove('vis');
+  }
+
+  function preencherFormulario(d) {
+    document.getElementById('f-descricao').value      = d.descricao_objeto || '';
+    document.getElementById('f-justificativa').value  = d.justificativa || '';
+    document.getElementById('f-quantidade').value     = d.quantidade || '';
+    document.getElementById('f-unidade-medida').value = d.unidade_medida || '';
+    document.getElementById('f-valor').value          = d.valor_estimado || '';
+    document.getElementById('f-gestor-tit').value     = d._gestor_tit || '';
+    document.getElementById('f-gestor-sub').value     = d._gestor_sub || '';
+    document.getElementById('f-fiscal-tit').value     = d._fiscal_tit || '';
+    document.getElementById('f-fiscal-sub').value     = d._fiscal_sub || '';
+    const contrato = String(d.tem_contrato_vigente).toUpperCase() === 'TRUE' ? 'TRUE' : 'FALSE';
+    document.querySelector(`input[name="contrato"][value="${contrato}"]`).checked = true;
+    document.getElementById('campo-risco').style.display = contrato === 'TRUE' ? 'flex' : 'none';
+    const exclusiva = String(d.exclusiva_unidade).toUpperCase() === 'TRUE' ? 'TRUE' : 'FALSE';
+    document.querySelector(`input[name="exclusiva"][value="${exclusiva}"]`).checked = true;
+    document.getElementById('erro-demanda').classList.remove('vis');
+  }
+
+  document.querySelectorAll('input[name="contrato"]').forEach(r => {
+    r.addEventListener('change', function() {
+      document.getElementById('campo-risco').style.display = this.value === 'TRUE' ? 'flex' : 'none';
+    });
+  });
+
+  function coletarFormulario() {
+    return {
+      exercicio:             getExercicio(),   // sempre enviado explicitamente
+      descricao_objeto:      document.getElementById('f-descricao').value.trim(),
+      justificativa:         document.getElementById('f-justificativa').value.trim(),
+      quantidade:            document.getElementById('f-quantidade').value,
+      unidade_medida:        document.getElementById('f-unidade-medida').value,
+      valor_estimado:        document.getElementById('f-valor').value,
+      tem_contrato_vigente:  document.querySelector('input[name="contrato"]:checked').value,
+      risco_nao_prorrogacao: document.querySelector('input[name="risco"]:checked')?.value || 'FALSE',
+      exclusiva_unidade:     document.querySelector('input[name="exclusiva"]:checked').value,
+      _gestor_tit:           document.getElementById('f-gestor-tit').value.trim(),
+      _gestor_sub:           document.getElementById('f-gestor-sub').value.trim(),
+      _fiscal_tit:           document.getElementById('f-fiscal-tit').value.trim(),
+      _fiscal_sub:           document.getElementById('f-fiscal-sub').value.trim(),
+    };
+  }
+
+  function validarFormulario(dados) {
+    if (!dados.descricao_objeto)  return 'Informe a descrição do objeto.';
+    if (!dados.justificativa)     return 'Informe a justificativa da necessidade.';
+    if (!dados.quantidade || isNaN(dados.quantidade) || Number(dados.quantidade) <= 0) return 'Informe uma quantidade válida.';
+    if (!dados.unidade_medida)    return 'Selecione a unidade de medida.';
+    if (!dados.valor_estimado || isNaN(dados.valor_estimado) || Number(dados.valor_estimado) <= 0) return 'Informe um valor estimado válido.';
+    if (dados.exclusiva_unidade === 'FALSE') return 'Demandas não exclusivas do setor não podem ser cadastradas aqui.';
+    if (!dados._gestor_tit) return 'Informe o nome do gestor titular.';
+    if (!dados._gestor_sub) return 'Informe o nome do gestor substituto.';
+    if (!dados._fiscal_tit) return 'Informe o nome do fiscal titular.';
+    if (!dados._fiscal_sub) return 'Informe o nome do fiscal substituto.';
+    return null;
+  }
+
+  function salvarDemanda(acao) {
+    const form = coletarFormulario();
+    const erro = validarFormulario(form);
+    if (erro) { const el = document.getElementById('erro-demanda'); el.textContent = erro; el.classList.add('vis'); return; }
+
+    const demanda = { ...form };
+    if (_demandaEditando) demanda.id_demanda = _demandaEditando;
+
+    setBtnCarregando('btn-salvar-rascunho', true);
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        setBtnCarregando('btn-salvar-rascunho', false);
+        if (!resp.ok) { const el = document.getElementById('erro-demanda'); el.textContent = resp.erro; el.classList.add('vis'); return; }
+        fecharModal('overlay-demanda');
+        carregarDemandas();
+      })
+      .withFailureHandler(function(err) {
+        setBtnCarregando('btn-salvar-rascunho', false);
+        const el = document.getElementById('erro-demanda'); el.textContent = 'Erro: ' + err.message; el.classList.add('vis');
+      })
+      .chamarAcao(token, 'salvar_demanda', JSON.stringify({ demanda }));
+  }
+
+  function confirmarEnvio() {
+    const form = coletarFormulario();
+    const erro = validarFormulario(form);
+    if (erro) { const el = document.getElementById('erro-demanda'); el.textContent = erro; el.classList.add('vis'); return; }
+
+    const demanda = { ...form };
+    if (_demandaEditando) demanda.id_demanda = _demandaEditando;
+
+    setBtnCarregando('btn-salvar-enviar', true);
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        setBtnCarregando('btn-salvar-enviar', false);
+        if (!resp.ok) { const el = document.getElementById('erro-demanda'); el.textContent = resp.erro; el.classList.add('vis'); return; }
+        _demandaParaEnviar = resp.id_demanda;
+        fecharModal('overlay-demanda');
+        document.getElementById('f-senha-confirm').value = '';
+        document.getElementById('erro-confirmar').classList.remove('vis');
+        document.getElementById('overlay-confirmar').classList.add('aberto');
+      })
+      .withFailureHandler(function(err) {
+        setBtnCarregando('btn-salvar-enviar', false);
+        const el = document.getElementById('erro-demanda'); el.textContent = 'Erro: ' + err.message; el.classList.add('vis');
+      })
+      .chamarAcao(token, 'salvar_demanda', JSON.stringify({ demanda }));
+  }
+
+  function prepararEnvio(id) {
+    _demandaParaEnviar = id;
+    document.getElementById('f-senha-confirm').value = '';
+    document.getElementById('erro-confirmar').classList.remove('vis');
+    document.getElementById('overlay-confirmar').classList.add('aberto');
+  }
+
+  function executarEnvio() {
+    const senha = document.getElementById('f-senha-confirm').value;
+    if (!senha) { const el = document.getElementById('erro-confirmar'); el.textContent = 'Informe sua senha para confirmar.'; el.classList.add('vis'); return; }
+
+    setBtnCarregando('btn-confirmar-envio', true);
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        setBtnCarregando('btn-confirmar-envio', false);
+        if (!resp.ok) { const el = document.getElementById('erro-confirmar'); el.textContent = resp.erro; el.classList.add('vis'); return; }
+        fecharModal('overlay-confirmar');
+        carregarDemandas();
+      })
+      .withFailureHandler(function(err) {
+        setBtnCarregando('btn-confirmar-envio', false);
+        const el = document.getElementById('erro-confirmar'); el.textContent = 'Erro: ' + err.message; el.classList.add('vis');
+      })
+      .chamarAcao(token, 'enviar_demanda', JSON.stringify({ id_demanda: _demandaParaEnviar, senha }));
+  }
+
+  function verJustificativa(idDemanda) {
+    document.getElementById('justif-texto').textContent = 'Carregando...';
+    document.getElementById('justif-meta').textContent  = '';
+    document.getElementById('overlay-justif').classList.add('aberto');
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) { document.getElementById('justif-texto').textContent = 'Justificativa não encontrada.'; return; }
+        document.getElementById('justif-texto').textContent = resp.justificativa;
+        document.getElementById('justif-meta').textContent  = 'Reprovado por ' + resp.autor + ' em ' + fmtData(resp.data_hora);
+      })
+      .withFailureHandler(function(err) { document.getElementById('justif-texto').textContent = 'Erro: ' + err.message; })
+      .chamarAcao(token, 'get_justificativa_reprovacao', JSON.stringify({ id_demanda: idDemanda }));
+  }
+
+  function fecharJustif() { document.getElementById('overlay-justif').classList.remove('aberto'); }
+
+  function fazerLogout() {
+    google.script.run.chamarAcao(token, 'logout', '{}');
+    navegar('login', '');
+  }
+
+  function setBtnCarregando(id, on) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.disabled = on;
+    if (on) btn.innerHTML = '<span class="spinner-inline"></span> Aguarde...';
+  }
+
+  function fmtValor(v) { return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function fmtData(iso) { if (!iso) return '—'; try { return new Date(iso).toLocaleDateString('pt-BR'); } catch { return '—'; } }
+  function truncar(str, n) { if (!str) return '—'; return str.length > n ? str.slice(0, n) + '…' : str; }
+  function rotularStatus(s) {
+    return { rascunho:'Rascunho', submetida:'Submetida', de_acordo:'De acordo', aprovada:'Aprovada', reprovada:'Reprovada', priorizada:'Priorizada', homologada:'Homologada' }[s] || s;
+  }
+</script>
+</body>
+</html>
