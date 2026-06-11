@@ -265,7 +265,7 @@
   function navegar(page, tk) {
     const t = tk || token;
     if (t) { try { localStorage.setItem('pac_token', t); } catch(e) {} }
-    window.location.href = page + '.html';
+    window.location.href = _pacUrlPagina(page);
   }
 
   // ── Inicialização ─────────────────────────────────────────────────────────
@@ -592,4 +592,4 @@
   }
 </script>
 </body>
-</html>
+</

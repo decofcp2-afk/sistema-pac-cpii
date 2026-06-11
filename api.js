@@ -85,6 +85,5 @@ function _criarRunner(onSuccess, onFailure) {
   });
 }
 
-window.google = window.google || {};
-window.google.script = window.google.script || {};
-window.google.script.run = _criarRunner(null, null);
+// Mapa de identificadores de página (minúsculas) -> nome real do arquivo no
+// repositório (GitHub Pages é case-sensitive, mas os arquiv

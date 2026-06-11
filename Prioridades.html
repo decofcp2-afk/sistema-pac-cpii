@@ -316,7 +316,7 @@
   function navegar(page, tk) {
     const t = tk || token;
     if (t) { try { localStorage.setItem('pac_token', t); } catch(e) {} }
-    window.location.href = page + '.html';
+    window.location.href = _pacUrlPagina(page);
   }
 
   // ── Inicialização ─────────────────────────────────────────────────────────
@@ -568,4 +568,4 @@
   function truncar(str, n) { if (!str) return '—'; return str.length > n ? str.slice(0, n) + '…' : str; }
 </script>
 </body>
-</html>
+</

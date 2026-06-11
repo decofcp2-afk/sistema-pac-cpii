@@ -193,7 +193,7 @@
   // ── Redirecionamento seguro via form (escapa do sandbox do Apps Script) ────
   function navegarParaDashboard(token) {
     try { localStorage.setItem('pac_token', token); } catch(e) {}
-    window.location.href = 'dashboard.html';
+    window.location.href = _pacUrlPagina('dashboard');
   }
 
   // ── Login ──────────────────────────────────────────────────────────────────
@@ -292,5 +292,4 @@
     btn.style.color = inp.type === 'text' ? '#3C3489' : '#888780';
   }
 </script>
-</body>
-</html>
+</bod

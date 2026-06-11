@@ -428,7 +428,7 @@
 
   function navegar(page, token) {
     if (token) { try { localStorage.setItem('pac_token', token); } catch(e) {} }
-    window.location.href = page + '.html';
+    window.location.href = _pacUrlPagina(page);
   }
 
   // ── Filtros públicos ──────────────────────────────────────────────────────
@@ -877,4 +877,4 @@
   </div>
 </div>
 </body>
-</html>
+</
