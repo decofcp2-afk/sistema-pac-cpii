@@ -390,11 +390,20 @@ const ACOES = {
   },
 
   // ─── Administração de usuários ─────────────────────────────────────────────
+  // O embed precisa nomear a FK: existem DUAS relacoes entre perfis e unidades
+  // (perfis.id_unidade_fk -> unidades, e unidades.id_ordenador_fk -> perfis).
+  // Sem qualificar, o PostgREST recusa com "more than one relationship was found".
   async listar_usuarios() {
     const c = await sb();
     const { data, error } = await c.from('perfis')
-      .select('*, unidades(nome,sigla)').order('nome');
-    return error ? { ok: false, erro: _erro(error) } : { ok: true, usuarios: data };
+      .select('*, unidades!perfis_id_unidade_fk_fkey(nome,sigla)').order('nome');
+    if (error) return { ok: false, erro: _erro(error) };
+    const usuarios = (data || []).map(u => ({
+      ...u,
+      nome_unidade: u.unidades ? u.unidades.nome : '',
+      sigla_unidade: u.unidades ? u.unidades.sigla : '',
+    }));
+    return { ok: true, usuarios };
   },
 
   async salvar_usuario({ usuario }) {
