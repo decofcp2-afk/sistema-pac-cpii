@@ -25,6 +25,18 @@
 const SUPABASE_URL  = 'https://moitotympuemxudzdeit.supabase.co';
 const SUPABASE_KEY  = 'sb_publishable_36ZcT_xq_sljUuJJ0zodvw_Z4lbQdbB';
 
+// ─── Compatibilidade: APPS_SCRIPT_URL ────────────────────────────────────────
+// As 8 paginas HTML abrem seu script inline com `const appUrl = APPS_SCRIPT_URL;`
+// — resquicio de uma versao anterior que fazia fetch direto. A variavel NAO e
+// usada em lugar nenhum (zero chamadas a fetch() nas paginas), mas a simples
+// referencia a um global inexistente lanca ReferenceError e aborta TODO o
+// script da pagina. Era por isso que nada carregava.
+//
+// Aponta para o Supabase, e nao para o Apps Script: se algum codigo futuro
+// tentar usa-la, deve falhar de forma visivel em vez de voltar silenciosamente
+// para o backend antigo, que sera desativado.
+const APPS_SCRIPT_URL = SUPABASE_URL;
+
 // ─── Carregamento do supabase-js ─────────────────────────────────────────────
 let _sb = null;
 const _prontoSupabase = (async () => {
@@ -285,7 +297,13 @@ const ACOES = {
         acao: 'homologacao', nivel: 'ordenador',
       });
     }
-    return { ok: true, total: (ids || []).length };
+    // Homologacao.html le `resp.homologadas`, nao `resp.total`.
+    return {
+      ok: true,
+      homologadas: (ids || []).length,
+      exercicio: await _exercicioAtual(),
+      data_hora: new Date().toISOString(),
+    };
   },
 
   async get_justificativa_reprovacao({ id_demanda }) {
@@ -305,11 +323,25 @@ const ACOES = {
   // Saldos vêm da view v_saldos, que aplica a cascata hierárquica: o alocado de
   // uma unidade é o que ela recebeu do pai, e o distribuído é só o que desceu um
   // nível. Somar a subárvore inteira contaria o mesmo dinheiro várias vezes.
+  // As telas leem `resp.dotacoes` (era o nome no Apps Script), nao `resp.saldos`.
+  // Devolvo os dois: `dotacoes` no formato que Orcamento.html e Demandas.html
+  // esperam, e `saldos` cru da view para quem quiser a cascata completa.
   async listar_dotacoes({ exercicio }) {
     const c = await sb();
     const ex = Number(exercicio || await _exercicioAtual());
     const { data, error } = await c.from('v_saldos').select('*').eq('exercicio', ex);
-    return error ? { ok: false, erro: _erro(error) } : { ok: true, saldos: data, exercicio: ex };
+    if (error) return { ok: false, erro: _erro(error) };
+
+    const dotacoes = (data || []).map(s => ({
+      id_unidade_fk:     s.id_unidade,
+      nome_unidade:      s.nome,
+      sigla:             s.sigla,
+      exercicio:         s.exercicio,
+      valor_total:       Number(s.alocado || 0),
+      valor_distribuido: Number(s.distribuido || 0),
+      saldo:             Number(s.saldo || 0),
+    }));
+    return { ok: true, dotacoes, saldos: data, exercicio: ex };
   },
 
   async listar_distribuicoes({ exercicio }) {
@@ -393,8 +425,15 @@ const ACOES = {
     const { error } = await c.auth.resetPasswordForEmail(data.email, {
       redirectTo: window.location.origin + '/sistema-pac-cpii/Login.html',
     });
-    return error ? { ok: false, erro: _erro(error) }
-                 : { ok: true, mensagem: 'Link de redefinição enviado para ' + data.email };
+    if (error) return { ok: false, erro: _erro(error) };
+    // Admin.html exibe `resp.senha_inicial` numa janela. Nao existe mais senha
+    // inicial: quem define e o proprio usuario, pelo link. Preencho o campo com
+    // a explicacao para a tela nao mostrar "undefined".
+    return {
+      ok: true,
+      senha_inicial: 'Link de redefinicao enviado para ' + data.email
+                   + ' — o proprio usuario define a senha.',
+    };
   },
 
   // ─── Configuração e consulta pública ───────────────────────────────────────
@@ -402,15 +441,126 @@ const ACOES = {
     return { ok: true, exercicio: await _exercicioAtual() };
   },
 
-  async dados_publicos_pac({ exercicio } = {}) {
+  // Publico.html consome OITO campos desta resposta, nao so `demandas`. Faltando
+  // qualquer um deles a tela fica em branco sem erro visivel.
+  //
+  // Diferenca deliberada em relacao ao Apps Script: aquele expunha publicamente
+  // demandas em qualquer status (menos rascunho) E o nome + SIAPE de cada
+  // servidor que assinou cada etapa. Aqui a view `pac_publico` limita a consulta
+  // anonima as demandas HOMOLOGADAS e nao devolve dado pessoal algum. As
+  // assinaturas vem vazias — ver nota no final da conversa.
+  async dados_publicos_pac({ exercicio, id_unidade, id_setor, status, busca } = {}) {
     const c = await sb();
-    let q = c.from('pac_publico').select('*');
-    if (exercicio) q = q.eq('exercicio', Number(exercicio));
-    const { data, error } = await q.order('gut_pontuacao', { ascending: false, nullsFirst: false });
-    return error ? { ok: false, erro: _erro(error) } : { ok: true, demandas: data || [] };
+    const exAtual = await _exercicioAtual();
+    const ex = String(exercicio || exAtual);
+
+    const { data: unidades, error: eU } = await c.from('unidades_publicas')
+      .select('id_unidade,nome,sigla,tipo,id_unidade_pai');
+    if (eU) return { ok: false, erro: _erro(eU) };
+
+    // Reconstroi a subarvore no cliente (a funcao subordinadas() do banco nao
+    // esta exposta ao papel anon).
+    const filhos = {};
+    (unidades || []).forEach(u => {
+      (filhos[u.id_unidade_pai] = filhos[u.id_unidade_pai] || []).push(u.id_unidade);
+    });
+    const subarvore = (raiz) => {
+      const out = [], fila = [raiz];
+      while (fila.length) {
+        const id = fila.shift();
+        if (out.includes(id)) continue;
+        out.push(id);
+        (filhos[id] || []).forEach(f => fila.push(f));
+      }
+      return out;
+    };
+
+    let escopo = id_unidade ? subarvore(id_unidade) : (unidades || []).map(u => u.id_unidade);
+    if (id_setor) {
+      const s = subarvore(id_setor);
+      escopo = escopo.filter(id => s.includes(id));
+    }
+
+    let q = c.from('pac_publico').select('*').eq('exercicio', Number(ex));
+    const { data: pub, error: eD } = await q;
+    if (eD) return { ok: false, erro: _erro(eD) };
+
+    const porId = Object.fromEntries((unidades || []).map(u => [u.id_unidade, u]));
+    let demandas = (pub || []).filter(d => {
+      const un = (unidades || []).find(u => u.nome === d.unidade);
+      return !un || escopo.includes(un.id_unidade);
+    });
+    if (status) demandas = demandas.filter(d => d.status === status || status === 'homologada');
+    if (busca) {
+      const b = String(busca).toLowerCase();
+      demandas = demandas.filter(d => String(d.descricao_objeto || '').toLowerCase().includes(b));
+    }
+
+    demandas = demandas.map(d => ({
+      ...d,
+      status:        'homologada',
+      nome_unidade:  d.unidade,
+      sigla_unidade: d.unidade_sigla,
+      gut_total:     d.gut_pontuacao,
+      // Assinaturas omitidas: identificam servidores nominalmente.
+      ass_envio: null, ass_de_acordo: null, ass_priorizacao: null,
+      ass_homologacao: null, ass_reprovacao: null,
+      justificativa_reprovacao: '',
+    }));
+
+    // Grafico: soma por filha direta da unidade selecionada.
+    const dadosGrafico = {};
+    if (id_unidade) {
+      (filhos[id_unidade] || []).forEach(idFilha => {
+        const ids = subarvore(idFilha);
+        const total = demandas
+          .filter(d => {
+            const un = (unidades || []).find(u => u.nome === d.nome_unidade);
+            return un && ids.includes(un.id_unidade);
+          })
+          .reduce((s, d) => s + Number(d.valor_estimado || 0), 0);
+        if (total > 0) {
+          const u = porId[idFilha];
+          dadosGrafico[(u && (u.sigla || u.nome)) || idFilha] = total;
+        }
+      });
+    }
+
+    const ordenadoras = (unidades || [])
+      .filter(u => ['reitoria', 'pro_reitoria', 'campus'].includes(u.tipo))
+      .sort((a, b) => a.nome.localeCompare(b.nome))
+      .map(u => ({ id: u.id_unidade, nome: u.nome, sigla: u.sigla, tipo: u.tipo }));
+
+    const chefias = id_unidade
+      ? (unidades || [])
+          .filter(u => escopo.includes(u.id_unidade) && u.id_unidade !== id_unidade)
+          .sort((a, b) => a.nome.localeCompare(b.nome))
+          .map(u => ({ id: u.id_unidade, nome: u.nome, sigla: u.sigla }))
+      : [];
+
+    const base = Number(exAtual) || new Date().getFullYear();
+    const anos = [];
+    for (let a = base - 3; a <= base + 1; a++) anos.push(a);
+
+    return {
+      ok: true,
+      demandas,
+      dadosGrafico,
+      ordenadoras,
+      chefias,
+      anos,
+      exercicio: ex,
+      arvoreOrcamento: [],   // valores de dotacao nao sao expostos publicamente
+      total_valor: demandas.reduce((s, d) => s + Number(d.valor_estimado || 0), 0),
+    };
   },
 
-  async listar_unidades_publico() { return ACOES.listar_unidades(); },
+  async listar_unidades_publico() {
+    const c = await sb();
+    const { data, error } = await c.from('unidades_publicas')
+      .select('id_unidade,nome,sigla,tipo,id_unidade_pai').order('nome');
+    return error ? { ok: false, erro: _erro(error) } : { ok: true, unidades: data };
+  },
 
   async resumo_plano({ exercicio }) {
     const r = await ACOES.listar_demandas({ exercicio });
