@@ -1,27 +1,21 @@
 /*
- * api.js — Ponte google.script.run → Supabase
+ * api.js — Ponte google.script.run -> Supabase   [encapsulado em IIFE]
  * ============================================================================
- * SISTEMA PAC · Colégio Pedro II
+ * TUDO abaixo roda dentro de uma funcao anonima. Isso e deliberado: na versao
+ * anterior este arquivo declarava 16 identificadores no escopo global
+ * (_erro, _meuPerfil, _exercicioAtual, ACOES, sb...). Como as paginas HTML
+ * tambem declaram seus proprios globais, bastou uma coincidencia de nome
+ * — Orcamento.html ja tinha `_exercicioAtual` — para o navegador lancar
+ * "Identifier has already been declared" e abortar a pagina inteira.
  *
- * Substitui o api.js anterior, que encaminhava tudo para um Web App do Apps
- * Script. As 6 páginas HTML continuam chamando `google.script.run.chamarAcao(...)`
- * exatamente como antes — este arquivo é o único que sabe que o backend mudou.
- *
- * DIFERENÇA DE FUNDO EM RELAÇÃO À VERSÃO ANTERIOR
- * -----------------------------------------------
- * No Apps Script, a autorização era feita em código: o roteador conferia papel
- * e escopo antes de cada operação. Um bug ali expunha tudo.
- *
- * Aqui a autorização é do BANCO. Cada consulta abaixo é executada com o JWT do
- * usuário, e as policies de RLS decidem quais linhas ele alcança. Este arquivo
- * não tem poder de contornar nada: se ele pedir uma demanda de outra unidade,
- * o Postgres devolve vazio. A segurança não depende deste código estar correto.
- *
- * A chave `publishable` abaixo é pública por desenho — ela apenas identifica o
- * projeto. Quem autoriza é o JWT do login somado às policies.
+ * Encapsulando, o arquivo exporta APENAS os tres nomes que as paginas usam:
+ *   window.google.script.run   — o shim de chamadas
+ *   window._pacUrlPagina       — resolucao de nome de pagina
+ *   window.APPS_SCRIPT_URL     — compatibilidade (ver nota abaixo)
+ * Qualquer outro nome interno deixa de existir para fora deste arquivo.
  * ============================================================================
  */
-
+(function () {
 const SUPABASE_URL  = 'https://moitotympuemxudzdeit.supabase.co';
 const SUPABASE_KEY  = 'sb_publishable_36ZcT_xq_sljUuJJ0zodvw_Z4lbQdbB';
 
@@ -35,7 +29,7 @@ const SUPABASE_KEY  = 'sb_publishable_36ZcT_xq_sljUuJJ0zodvw_Z4lbQdbB';
 // Aponta para o Supabase, e nao para o Apps Script: se algum codigo futuro
 // tentar usa-la, deve falhar de forma visivel em vez de voltar silenciosamente
 // para o backend antigo, que sera desativado.
-const APPS_SCRIPT_URL = SUPABASE_URL;
+window.APPS_SCRIPT_URL = SUPABASE_URL;
 
 // ─── Carregamento do supabase-js ─────────────────────────────────────────────
 let _sb = null;
@@ -681,6 +675,8 @@ function _pacUrlPagina(page) {
   return PAGE_FILE_MAP[limpo] || (page + '.html');
 }
 
+window._pacUrlPagina = _pacUrlPagina;
+
 window.google = window.google || {};
 window.google.script = window.google.script || {};
 window.google.script.run = _criarRunner(null, null);
@@ -694,4 +690,6 @@ window.google.script.run = _criarRunner(null, null);
   if (publicas.includes(pagina)) return;
   const { data: { session } } = await c.auth.getSession();
   if (!session) location.href = _pacUrlPagina('login');
+})();
+
 })();
