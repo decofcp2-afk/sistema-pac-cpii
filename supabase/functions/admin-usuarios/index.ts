@@ -41,12 +41,29 @@ function senhaTemporaria(): string {
   return chars.join('');
 }
 
+// Chave de serviço: nos projetos com as novas chaves de API (sb_secret_...) o
+// valor vem em SUPABASE_SECRET_KEYS; a SUPABASE_SERVICE_ROLE_KEY (legado) pode
+// estar desativada. Usa a nova quando existir.
+function chaveServico(): string {
+  const novas = Deno.env.get('SUPABASE_SECRET_KEYS');
+  if (novas) {
+    try {
+      const o = JSON.parse(novas);
+      const v = typeof o === 'string' ? o : (o.default || Object.values(o)[0]);
+      if (v) return String(v);
+    } catch {
+      if (novas.startsWith('sb_secret_')) return novas;
+    }
+  }
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return resposta({ ok: false, erro: 'Método não permitido.' }, 405);
 
   try {
-    const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
+    const admin = createClient(Deno.env.get('SUPABASE_URL')!, chaveServico(), {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
@@ -55,8 +72,9 @@ Deno.serve(async (req) => {
     const { data: { user }, error: eUser } = await admin.auth.getUser(jwt);
     if (eUser || !user) return resposta({ ok: false, erro: 'Sessão expirada. Entre novamente.' });
 
-    const { data: eu } = await admin.from('perfis')
+    const { data: eu, error: ePerfil0 } = await admin.from('perfis')
       .select('papel, id_unidade_fk, ativo').eq('id_usuario', user.id).single();
+    if (ePerfil0) return resposta({ ok: false, erro: 'Falha ao ler seu perfil: ' + ePerfil0.message });
     if (!eu || !eu.ativo || eu.papel !== 'licitacoes')
       return resposta({ ok: false, erro: 'Você não tem permissão para cadastrar usuários.' });
     const adminGlobal = !eu.id_unidade_fk;
