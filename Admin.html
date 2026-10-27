@@ -187,7 +187,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202610271600"></script>
+<script src="api.js?v=202610271700"></script>
 <script>
   const token  = localStorage.getItem('pac_token') || '';
   const appUrl = APPS_SCRIPT_URL;
@@ -219,6 +219,7 @@
   let _unidades = [];
   let _editandoId = null;
   let _meuPapel   = '';
+  let _meuId      = '';
   let _minhaUnidadeId  = '';
   let _minhasSubordinadas = [];
 
@@ -258,6 +259,7 @@
       .withSuccessHandler(function(resp) {
         if (!resp.ok) return;
         _meuPapel        = resp.usuario.papel;
+        _meuId           = resp.usuario.id;
         _minhaUnidadeId  = resp.usuario.id_unidade_fk || '';
         carregarUnidades();
         carregarUsuarios();
@@ -270,6 +272,7 @@
       .withSuccessHandler(function(resp) {
         if (!resp.ok) return;
         _unidades = resp.unidades || [];
+        if (_usuarios.length) renderizarUsuarios();   // a lista pode ter chegado antes das unidades
         const sel = document.getElementById('f-unidade');
         while (sel.options.length > 1) sel.remove(1);
 
@@ -339,7 +342,7 @@
               <td>${u.nome}</td>
               <td>${u.email}</td>
               <td>${rotularPapel(u.papel)}</td>
-              <td>${nomeUnidade(u.id_unidade_fk) || '—'}</td>
+              <td>${nomeUnidade(u.id_unidade_fk) || u.sigla_unidade || '—'}</td>
               <td><span class="badge ${String(u.ativo).toUpperCase()==='TRUE' ? 'badge-ativo' : 'badge-inativo'}">
                 ${String(u.ativo).toUpperCase()==='TRUE' ? 'Ativo' : 'Inativo'}
               </span></td>
@@ -350,6 +353,9 @@
                   ? `<button class="acao-btn" onclick="desativarUsuario('${u.id_usuario}')" title="Desativar" style="color:#A32D2D">✕</button>`
                   : `<button class="acao-btn" onclick="ativarUsuario('${u.id_usuario}')" title="Ativar" style="color:#0F6E56">✓</button>`
                 }
+                ${u.id_usuario !== _meuId
+                  ? `<button class="acao-btn" onclick="excluirUsuario('${u.id_usuario}')" title="Excluir" style="color:#A32D2D">🗑</button>`
+                  : ''}
               </td>
             </tr>`).join('')}
         </tbody>
@@ -441,6 +447,21 @@
         mostrarErro('Erro: ' + err.message);
       })
       .chamarAcao(token, 'salvar_usuario', JSON.stringify({ usuario }));
+  }
+
+  function excluirUsuario(id) {
+    const u = _usuarios.find(x => x.id_usuario === id);
+    if (!u) return;
+    if (!confirm('Excluir definitivamente ' + u.nome + ' (' + u.email + ')?\n\n'
+      + 'A conta e o perfil serão apagados e não poderão ser recuperados. '
+      + 'Só é possível excluir quem não tem registros no PAC; nos demais casos, desative.')) return;
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp.ok) { alert(resp.erro || 'Falha ao excluir.'); return; }
+        carregarUsuarios();
+      })
+      .withFailureHandler(function(err) { alert('Erro: ' + err.message); })
+      .chamarAcao(token, 'excluir_usuario', JSON.stringify({ id_usuario: id }));
   }
 
   function desativarUsuario(id) {

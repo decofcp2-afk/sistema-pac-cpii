@@ -430,6 +430,11 @@ const ACOES = {
     return _adminUsuarios({ acao: 'editar', usuario: { id_usuario, ativo: false } });
   },
 
+  // Exclusão definitiva: só para quem não tem registros no PAC.
+  async excluir_usuario({ id_usuario }) {
+    return _adminUsuarios({ acao: 'excluir', id_usuario });
+  },
+
   // Gera nova senha temporária, exibida ao administrador; o usuário troca no
   // próximo acesso. (O reset por e-mail não funciona sem SMTP próprio.)
   async resetar_senha({ id_usuario }) {

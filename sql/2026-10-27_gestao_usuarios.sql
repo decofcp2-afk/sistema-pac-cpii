@@ -8,3 +8,6 @@
 -- se quem chama é administrador.
 grant select, insert, update on public.perfis to service_role;
 grant select on public.unidades to service_role;
+
+-- Exclusão de usuário: a função verifica se há histórico no PAC antes de apagar.
+grant select on public.demandas, public.aprovacoes, public.dotacoes, public.distribuicoes to service_role;

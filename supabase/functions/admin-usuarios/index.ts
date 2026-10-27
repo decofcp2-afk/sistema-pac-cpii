@@ -8,6 +8,7 @@
 // Ações (POST JSON):
 //   { acao: 'criar',   usuario: { nome, email, papel, id_unidade_fk, matricula_siape } }
 //   { acao: 'resetar', id_usuario }
+//   { acao: 'excluir', id_usuario }   (só sem histórico no PAC)
 //   { acao: 'editar',  usuario: { id_usuario, nome?, papel?, id_unidade_fk?, matricula_siape?, ativo? } }
 //
 // Quem pode chamar:
@@ -189,6 +190,41 @@ Deno.serve(async (req) => {
         return resposta({ ok: false, erro: 'Você não pode desativar nem alterar o papel ou a unidade do seu próprio usuário.' });
 
       const { error } = await admin.from('perfis').update(novo).eq('id_usuario', id);
+      if (error) return resposta({ ok: false, erro: error.message });
+      return resposta({ ok: true });
+    }
+
+    // ── Excluir ────────────────────────────────────────────────────────────
+    // Só para usuários sem nenhum registro no PAC. Quem já enviou demanda,
+    // manifestou-se numa etapa ou lançou orçamento faz parte da trilha de
+    // auditoria: as chaves estrangeiras apagariam a autoria (SET NULL), então
+    // nesses casos o caminho é desativar.
+    if (corpo.acao === 'excluir') {
+      const id = String(corpo.id_usuario || '');
+      if (id === user.id) return resposta({ ok: false, erro: 'Você não pode excluir o seu próprio usuário.' });
+      const { data: alvo } = await admin.from('perfis')
+        .select('nome, papel, id_unidade_fk').eq('id_usuario', id).single();
+      if (!alvo) return resposta({ ok: false, erro: 'Usuário não encontrado.' });
+      if (!podeGerir(alvo.papel, alvo.id_unidade_fk))
+        return resposta({ ok: false, erro: 'Você não tem permissão para excluir este usuário.' });
+
+      const conta = async (tabela: string, coluna: string) => {
+        const { count, error } = await admin.from(tabela).select('*', { count: 'exact', head: true }).eq(coluna, id);
+        if (error) throw new Error('verificação de histórico (' + tabela + '): ' + error.message);
+        return count || 0;
+      };
+      const usos = [
+        ['demandas', await conta('demandas', 'id_usuario_criou_fk')],
+        ['manifestações', await conta('aprovacoes', 'id_usuario_fk')],
+        ['dotações', await conta('dotacoes', 'id_usuario_criou_fk')],
+        ['distribuições', await conta('distribuicoes', 'id_usuario_fk')],
+      ].filter(([, n]) => (n as number) > 0);
+      if (usos.length)
+        return resposta({ ok: false, erro: alvo.nome + ' já tem registros no PAC (' +
+          usos.map(([t, n]) => n + ' ' + t).join(', ') +
+          '). Para preservar o histórico, desative o usuário em vez de excluí-lo.' });
+
+      const { error } = await admin.auth.admin.deleteUser(id);   // o perfil cai junto (ON DELETE CASCADE)
       if (error) return resposta({ ok: false, erro: error.message });
       return resposta({ ok: true });
     }
