@@ -203,7 +203,7 @@
           <button class="filtro-btn ativo" onclick="filtrar('todos',this)">Todas</button>
           <button class="filtro-btn" onclick="filtrar('rascunho',this)">Rascunho</button>
           <button class="filtro-btn" onclick="filtrar('submetida',this)">Submetidas</button>
-          <button class="filtro-btn" onclick="filtrar('aprovada',this)">Aprovadas</button>
+          <button class="filtro-btn" onclick="filtrar('de_acordo',this)">De acordo</button>
           <button class="filtro-btn" onclick="filtrar('reprovada',this)">Reprovadas</button>
         </div>
       </div>
@@ -365,7 +365,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202610271700"></script>
+<script src="api.js?v=202610271800"></script>
 <script>
   const token  = localStorage.getItem('pac_token') || '';
   const appUrl = APPS_SCRIPT_URL;
@@ -511,7 +511,7 @@
 
     const recebido = _recebidoOrcamento;
     const totalSolicitado = _demandas
-      .filter(d => ['submetida','de_acordo','homologada'].includes(d.status))
+      .filter(d => ['submetida','de_acordo','priorizada','homologada'].includes(d.status))
       .reduce((s,d) => s + Number(d.valor_estimado||0), 0);
 
     const saldoReal = recebido - totalSolicitado;
@@ -835,4 +835,4 @@
   }
 </script>
 </body>
-</
+</html>

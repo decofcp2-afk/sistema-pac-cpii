@@ -86,6 +86,34 @@ async function _adminUsuarios(corpo) {
   return data || { ok: false, erro: 'Resposta vazia do servidor.' };
 }
 
+// No banco, o "de acordo" da chefia grava status 'aprovada'; as telas usam
+// 'de_acordo' (vocabulário do sistema antigo). A tradução fica toda aqui.
+const _statusTela  = s => (s === 'aprovada' ? 'de_acordo' : s);
+const _statusBanco = s => (s === 'de_acordo' ? 'aprovada' : s);
+
+// Ações que as telas "assinam" com a senha: confere a senha antes de gravar.
+// Sem senha informada, segue (a tela é que decide se pede).
+async function _confirmarSenha(senha) {
+  if (!senha) return null;
+  const p = await _meuPerfil();
+  if (!p) return 'Sessão expirada.';
+  const c = await sb();
+  const { error } = await c.auth.signInWithPassword({ email: p.email, password: senha });
+  return error ? 'Senha incorreta.' : null;
+}
+
+// Unidades e subárvores (para somas por estrutura).
+async function _arvore() {
+  const c = await sb();
+  const { data } = await c.from('unidades').select('id_unidade,nome,sigla,tipo,id_unidade_pai');
+  const lista = data || [];
+  const filhos = {};
+  lista.forEach(u => (filhos[u.id_unidade_pai] = filhos[u.id_unidade_pai] || []).push(u.id_unidade));
+  const sub = (raiz) => { const out = [], fila = [raiz]; while (fila.length) { const id = fila.shift(); if (out.includes(id)) continue; out.push(id); (filhos[id] || []).forEach(f => fila.push(f)); } return out; };
+  const pai = Object.fromEntries(lista.map(u => [u.id_unidade, u.id_unidade_pai]));
+  return { lista, filhos, sub, pai, porId: Object.fromEntries(lista.map(u => [u.id_unidade, u])) };
+}
+
 // Converte erro do PostgREST em mensagem legível. Violação de policy volta como
 // zero linhas ou 42501; violação de trigger traz a mensagem que escrevemos.
 function _erro(e) {
@@ -149,7 +177,11 @@ const ACOES = {
     };
   },
 
-  async trocar_senha({ senha_nova, senha_confirmacao }) {
+  async trocar_senha({ senha_atual, senha_nova, senha_confirmacao }) {
+    if (senha_atual) {
+      const e = await _confirmarSenha(senha_atual);
+      if (e) return { ok: false, erro: 'Senha atual incorreta.' };
+    }
     if (senha_nova !== senha_confirmacao)
       return { ok: false, erro: 'A confirmação não confere.' };
     if (String(senha_nova).length < 8)
@@ -175,7 +207,7 @@ const ACOES = {
     const ex = exercicio || await _exercicioAtual();
 
     let q = c.from('demandas')
-      .select('*, unidades!inner(nome,sigla)')
+      .select('*, unidades!inner(nome,sigla), responsaveis_tecnicos(papel,nome_responsavel)')
       .eq('exercicio', Number(ex))
       .neq('status', 'excluida');
 
@@ -191,17 +223,30 @@ const ACOES = {
         q = q.in('id_unidade_fk', ids);
       }
     }
-    if (status) q = q.eq('status', status);
+    if (status) {
+      const lista = (Array.isArray(status) ? status : [status]).map(_statusBanco);
+      q = lista.length > 1 ? q.in('status', lista) : q.eq('status', lista[0]);
+    }
 
     const { data, error } = await q.order('data_criacao', { ascending: false });
     if (error) return { ok: false, erro: _erro(error) };
 
-    const demandas = (data || []).map(d => ({
-      ...d,
-      nome_unidade: d.unidades ? d.unidades.nome : d.id_unidade_fk,
-      gut_g: d.gut_gravidade, gut_u: d.gut_urgencia,
-      gut_t: d.gut_tendencia, gut_total: d.gut_pontuacao,
-    }));
+    const RESP = { gestor_titular: '_gestor_tit', gestor_substituto: '_gestor_sub',
+                   fiscal_titular: '_fiscal_tit', fiscal_substituto: '_fiscal_sub' };
+    const demandas = (data || []).map(d => {
+      const out = {
+        ...d,
+        status: _statusTela(d.status),
+        nome_unidade: d.unidades ? d.unidades.nome : d.id_unidade_fk,
+        sigla_unidade: d.unidades ? d.unidades.sigla : '',
+        gut_g: d.gut_gravidade, gut_u: d.gut_urgencia,
+        gut_t: d.gut_tendencia, gut_total: d.gut_pontuacao,
+        data_ultima_atualizacao: d.data_ultima_atualizacao || d.data_envio || d.data_criacao,
+      };
+      (d.responsaveis_tecnicos || []).forEach(r => { if (RESP[r.papel]) out[RESP[r.papel]] = r.nome_responsavel; });
+      delete out.responsaveis_tecnicos;
+      return out;
+    });
     return { ok: true, demandas, exercicio: ex, exercicio_atual: await _exercicioAtual() };
   },
 
@@ -224,9 +269,14 @@ const ACOES = {
     if ('gut_u' in d) { d.gut_urgencia  = d.gut_u || null; delete d.gut_u; }
     if ('gut_t' in d) { d.gut_tendencia = d.gut_t || null; delete d.gut_t; }
     delete d.gut_total; delete d.gut_pontuacao; delete d.nome_unidade; delete d.unidades;
+    delete d.sigla_unidade; delete d.tramitacao; delete d.responsaveis_tecnicos;
+    if (d.status) d.status = _statusBanco(d.status);
 
     let id = d.id_demanda;
     if (id) {
+      // "Revisar" uma demanda reprovada: ela volta a rascunho com as correções.
+      const { data: atual } = await c.from('demandas').select('status').eq('id_demanda', id).single();
+      if (atual && atual.status === 'reprovada') d.status = 'rascunho';
       const { error } = await c.from('demandas').update(d).eq('id_demanda', id);
       if (error) return { ok: false, erro: _erro(error) };
     } else {
@@ -276,49 +326,94 @@ const ACOES = {
 
   // ─── Julgamento ────────────────────────────────────────────────────────────
   // O trigger validar_transicao_demanda barra autoaprovação e transições
-  // inválidas. Aqui só registramos a intenção e a trilha.
-  async aprovar_demanda({ id_demanda }) { return _decidir(id_demanda, 'aprovada',  'aprovacao',  null); },
+  // inválidas. Aqui conferimos a senha (assinatura do ato), gravamos o novo
+  // status e a trilha em `aprovacoes`.
+  async aprovar_demanda({ id_demanda, senha, justificativa }) {
+    const e = await _confirmarSenha(senha); if (e) return { ok: false, erro: e };
+    return _decidir(id_demanda, 'aprovada', 'de_acordo', justificativa || 'De acordo.');
+  },
 
-  async reprovar_demanda({ id_demanda, justificativa }) {
+  async reprovar_demanda({ id_demanda, justificativa, senha }) {
     if (!justificativa || !String(justificativa).trim())
       return { ok: false, erro: 'Justificativa é obrigatória para reprovar.' };
+    const e = await _confirmarSenha(senha); if (e) return { ok: false, erro: e };
     return _decidir(id_demanda, 'reprovada', 'reprovacao', justificativa);
   },
 
-  async salvar_gut({ id_demanda, gut_g, gut_u, gut_t }) {
+  // Priorização: grava as notas G, U e T e leva a demanda de "de acordo" para
+  // "priorizada"; uma demanda já priorizada pode ter as notas revistas.
+  async salvar_gut({ id_demanda, gut_g, gut_u, gut_t, senha }) {
+    const g = Number(gut_g), u = Number(gut_u), t = Number(gut_t);
+    if (![g, u, t].every(n => n >= 1 && n <= 5))
+      return { ok: false, erro: 'Informe notas de 1 a 5 para Gravidade, Urgência e Tendência.' };
+    const e = await _confirmarSenha(senha); if (e) return { ok: false, erro: e };
     const c = await sb();
+    const p = await _meuPerfil();
+    const { data: d } = await c.from('demandas').select('status').eq('id_demanda', id_demanda).single();
+    if (!d) return { ok: false, erro: 'Demanda não encontrada.' };
+    if (!['aprovada', 'priorizada'].includes(d.status))
+      return { ok: false, erro: 'Só demandas com "de acordo" da chefia podem ser priorizadas.' };
     const { error } = await c.from('demandas').update({
-      gut_gravidade: gut_g, gut_urgencia: gut_u, gut_tendencia: gut_t,
+      gut_gravidade: g, gut_urgencia: u, gut_tendencia: t, status: 'priorizada',
     }).eq('id_demanda', id_demanda);
-    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+    if (error) return { ok: false, erro: _erro(error) };
+    await c.from('aprovacoes').insert({
+      id_demanda_fk: id_demanda, id_usuario_fk: p.id_usuario, acao: 'priorizacao',
+      nivel: p.papel === 'ord_despesas' ? 'ordenador' : 'chefia',
+      justificativa: `GUT: G ${g} U ${u} T ${t} → ${g * u * t}`,
+    });
+    return { ok: true, gut_total: g * u * t };
   },
 
+  // Lista da tela de prioridades: as que aguardam nota e as já priorizadas.
   async listar_demandas_gut({ exercicio }) {
-    const r = await ACOES.listar_demandas({ exercicio, status: 'aprovada' });
+    const r = await ACOES.listar_demandas({ exercicio, status: ['aprovada', 'priorizada'] });
     if (!r.ok) return r;
-    r.demandas.sort((a, b) => (b.gut_pontuacao || 0) - (a.gut_pontuacao || 0));
+    r.demandas.sort((a, b) =>
+      (a.status === b.status ? 0 : a.status === 'priorizada' ? -1 : 1)
+      || (b.gut_total || 0) - (a.gut_total || 0));
     return r;
   },
 
-  async homologar_demandas({ ids }) {
+  async homologar_demandas({ ids_demandas, ids, senha }) {
+    const e = await _confirmarSenha(senha); if (e) return { ok: false, erro: e };
+    const lista = ids_demandas || ids || [];
+    if (!lista.length) return { ok: false, erro: 'Selecione ao menos uma demanda.' };
     const c = await sb();
     const p = await _meuPerfil();
-    for (const id of (ids || [])) {
-      const { error } = await c.from('demandas')
-        .update({ status: 'homologada' }).eq('id_demanda', id);
-      if (error) return { ok: false, erro: _erro(error) };
+    let feitas = 0; const falhas = [];
+    for (const id of lista) {
+      const { data: d } = await c.from('demandas').select('status,descricao_objeto').eq('id_demanda', id).single();
+      if (!d || d.status !== 'priorizada') continue;
+      const { error } = await c.from('demandas').update({ status: 'homologada' }).eq('id_demanda', id);
+      if (error) { falhas.push((d.descricao_objeto || id) + ': ' + _erro(error)); continue; }
       await c.from('aprovacoes').insert({
-        id_demanda_fk: id, id_usuario_fk: p.id_usuario,
-        acao: 'homologacao', nivel: 'ordenador',
+        id_demanda_fk: id, id_usuario_fk: p.id_usuario, acao: 'homologacao',
+        nivel: 'ordenador', justificativa: 'Homologado pelo Ordenador de Despesas.',
       });
+      feitas++;
     }
+    if (!feitas && falhas.length) return { ok: false, erro: falhas.join(' | ') };
     // Homologacao.html le `resp.homologadas`, nao `resp.total`.
     return {
-      ok: true,
-      homologadas: (ids || []).length,
-      exercicio: await _exercicioAtual(),
-      data_hora: new Date().toISOString(),
+      ok: true, homologadas: feitas, falhas,
+      exercicio: await _exercicioAtual(), data_hora: new Date().toISOString(),
     };
+  },
+
+  // Volta uma etapa (correção de engano). O banco decide quem pode.
+  async reverter_status({ id_demanda, novo_status }) {
+    const c = await sb();
+    const destino = _statusBanco(novo_status);
+    const { data: d } = await c.from('demandas').select('status').eq('id_demanda', id_demanda).single();
+    if (!d) return { ok: false, erro: 'Demanda não encontrada.' };
+    const permitido = { submetida: 'rascunho', aprovada: 'submetida', priorizada: 'aprovada', homologada: 'priorizada' };
+    if (permitido[d.status] !== destino)
+      return { ok: false, erro: 'Não é possível voltar de "' + _statusTela(d.status) + '" para "' + novo_status + '".' };
+    const extra = destino === 'aprovada' ? { gut_gravidade: null, gut_urgencia: null, gut_tendencia: null } : {};
+    const { error } = await c.from('demandas').update({ status: destino, ...extra }).eq('id_demanda', id_demanda);
+    if (error) return { ok: false, erro: _erro(error) };
+    return { ok: true };
   },
 
   async get_justificativa_reprovacao({ id_demanda }) {
@@ -335,73 +430,159 @@ const ACOES = {
   },
 
   // ─── Orçamento ─────────────────────────────────────────────────────────────
-  // Saldos vêm da view v_saldos, que aplica a cascata hierárquica: o alocado de
-  // uma unidade é o que ela recebeu do pai, e o distribuído é só o que desceu um
-  // nível. Somar a subárvore inteira contaria o mesmo dinheiro várias vezes.
-  // As telas leem `resp.dotacoes` (era o nome no Apps Script), nao `resp.saldos`.
-  // Devolvo os dois: `dotacoes` no formato que Orcamento.html e Demandas.html
-  // esperam, e `saldos` cru da view para quem quiser a cascata completa.
+  // Modelo: uma dotação por exercício (em geral na Reitoria) e repasses em
+  // cascata — cada unidade repassa às subordinadas diretas. Os saldos vêm da
+  // view v_saldos: recebido (alocado), repassado às filhas diretas
+  // (distribuido) e saldo próprio. A tela trabalha com "linhas de dotação":
+  // uma por unidade que o usuário gere, identificada por "<dotação>::<unidade>".
   async listar_dotacoes({ exercicio }) {
     const c = await sb();
     const ex = Number(exercicio || await _exercicioAtual());
-    const { data, error } = await c.from('v_saldos').select('*').eq('exercicio', ex);
+    const p = await _meuPerfil();
+    const [{ data: saldos, error }, arv, { data: dots }] = await Promise.all([
+      c.from('v_saldos').select('*').eq('exercicio', ex),
+      _arvore(),
+      c.from('dotacoes').select('*').eq('exercicio', ex),
+    ]);
     if (error) return { ok: false, erro: _erro(error) };
+    const saldoDe = id => (saldos || []).find(s => s.id_unidade === id);
 
-    const dotacoes = (data || []).map(s => ({
-      id_unidade_fk:     s.id_unidade,
-      nome_unidade:      s.nome,
-      sigla:             s.sigla,
-      exercicio:         s.exercicio,
-      valor_total:       Number(s.alocado || 0),
-      valor_distribuido: Number(s.distribuido || 0),
-      saldo:             Number(s.saldo || 0),
-    }));
-    return { ok: true, dotacoes, saldos: data, exercicio: ex };
+    // Unidades cujas linhas aparecem: a do usuário; para o administrador
+    // global (sem unidade), as unidades donas de dotação no exercício.
+    let unidadesLinha = p && p.id_unidade_fk ? [p.id_unidade_fk]
+                      : [...new Set((dots || []).map(d => d.id_unidade_fk))];
+    unidadesLinha = unidadesLinha.filter(id => saldoDe(id));
+
+    // Demandas do exercício (RLS já limita ao escopo) para "Total solicitado".
+    const { data: dems } = await c.from('demandas').select('id_unidade_fk,valor_estimado,status')
+      .eq('exercicio', ex).in('status', ['submetida', 'aprovada', 'priorizada', 'homologada']);
+
+    const dotacoes = [];
+    for (const id of unidadesLinha) {
+      const s = saldoDe(id);
+      const { data: idDot } = await c.rpc('dotacao_de_origem', { p_unidade: id, p_exercicio: ex });
+      const propria = (dots || []).find(d => d.id_unidade_fk === id);
+      const sub = arv.sub(id);
+      const solicitado = (dems || []).filter(d => sub.includes(d.id_unidade_fk))
+        .reduce((t, d) => t + Number(d.valor_estimado || 0), 0);
+      dotacoes.push({
+        id_dotacao:                idDot ? idDot + '::' + id : '',
+        id_dotacao_real:           idDot,
+        id_unidade_fk:             id,
+        nome_unidade:              s.nome,
+        sigla:                     s.sigla,
+        exercicio:                 ex,
+        status:                    propria ? propria.status : 'aberto',
+        e_dono:                    !!propria,
+        valor_recebido:            Number(s.alocado || 0),
+        valor_distribuido_proprio: Number(s.distribuido || 0),
+        saldo_proprio:             Number(s.saldo || 0),
+        valor_solicitado:          solicitado,
+        // nomes antigos, usados por outras telas
+        valor_total:               Number(s.alocado || 0),
+        valor_distribuido:         Number(s.distribuido || 0),
+        saldo:                     Number(s.saldo || 0),
+      });
+    }
+    return { ok: true, dotacoes, saldos, exercicio: ex };
   },
 
-  async listar_distribuicoes({ exercicio }) {
+  // Repasses feitos pela unidade da linha às suas subordinadas diretas.
+  async listar_distribuicoes({ id_dotacao, exercicio }) {
     const c = await sb();
-    const { data, error } = await c.from('distribuicoes')
-      .select('*, unidades!distribuicoes_id_unidade_destino_fk_fkey(nome,sigla), dotacoes(exercicio)')
+    const [idDot, idUnidade] = String(id_dotacao || '').split('::');
+    const arv = await _arvore();
+    let q = c.from('distribuicoes')
+      .select('*, unidades!distribuicoes_id_unidade_destino_fk_fkey(nome,sigla)')
       .order('data_hora', { ascending: false });
+    if (idDot) q = q.eq('id_dotacao_origem_fk', idDot);
+    const { data, error } = await q;
     if (error) return { ok: false, erro: _erro(error) };
-    const ex = Number(exercicio || await _exercicioAtual());
-    return { ok: true, distribuicoes: (data || []).filter(d => !d.dotacoes || d.dotacoes.exercicio === ex) };
+    const distribuicoes = (data || []).filter(d => !idUnidade || arv.pai[d.id_unidade_destino_fk] === idUnidade);
+    return { ok: true, distribuicoes };
   },
 
-  async salvar_dotacao({ id_unidade_fk, exercicio, valor_total, observacao }) {
+  async salvar_dotacao(params) {
+    const x = params.dotacao || params;
     const c = await sb();
     const p = await _meuPerfil();
-    const { error } = await c.from('dotacoes').upsert({
-      id_unidade_fk, exercicio: Number(exercicio), valor_total,
-      observacao, id_usuario_criou_fk: p.id_usuario,
-    }, { onConflict: 'id_unidade_fk,exercicio' });
-    return error ? { ok: false, erro: _erro(error) } : { ok: true };
-  },
-
-  // O trigger a_validar_saldo devolve mensagem pronta se faltar saldo.
-  async distribuir_orcamento({ id_dotacao_origem_fk, id_unidade_destino_fk, valor, observacao }) {
-    const c = await sb();
-    const p = await _meuPerfil();
-    const { error } = await c.from('distribuicoes').insert({
-      id_dotacao_origem_fk, id_unidade_destino_fk,
-      valor, observacao, id_usuario_fk: p.id_usuario,
+    const ex = Number(x.exercicio);
+    if (!x.id_unidade_fk || !ex || !(Number(x.valor_total) > 0))
+      return { ok: false, erro: 'Informe unidade, exercício e valor.' };
+    const { data: existe } = await c.from('dotacoes').select('id_dotacao')
+      .eq('id_unidade_fk', x.id_unidade_fk).eq('exercicio', ex);
+    if (existe && existe.length)
+      return { ok: false, erro: 'Já existe dotação desta unidade para ' + ex + '. Use os repasses para ajustar a distribuição.' };
+    const { error } = await c.from('dotacoes').insert({
+      id_unidade_fk: x.id_unidade_fk, exercicio: ex, valor_total: Number(x.valor_total),
+      observacao: x.observacao || null, id_usuario_criou_fk: p.id_usuario,
     });
     return error ? { ok: false, erro: _erro(error) } : { ok: true };
   },
 
-  async editar_distribuicao({ id_distribuicao, valor, observacao }) {
+  // O trigger a_validar_saldo devolve mensagem pronta se faltar saldo.
+  async distribuir_orcamento(params) {
+    const e = await _confirmarSenha(params.senha); if (e) return { ok: false, erro: e };
+    const idDot = String(params.id_dotacao_origem_fk || params.id_dotacao || '').split('::')[0];
+    const destino = params.id_unidade_destino_fk || params.id_unidade_destino;
+    if (!idDot) return { ok: false, erro: 'Não há dotação para este exercício. Cadastre a dotação antes de repassar.' };
+    if (!destino) return { ok: false, erro: 'Selecione a subunidade.' };
     const c = await sb();
-    const { error } = await c.from('distribuicoes')
-      .update({ valor, observacao }).eq('id_distribuicao', id_distribuicao);
+    const p = await _meuPerfil();
+    const { error } = await c.from('distribuicoes').insert({
+      id_dotacao_origem_fk: idDot, id_unidade_destino_fk: destino,
+      valor: Number(params.valor), observacao: params.observacao || null, id_usuario_fk: p.id_usuario,
+    });
     return error ? { ok: false, erro: _erro(error) } : { ok: true };
   },
 
-  async excluir_distribuicao({ id_distribuicao }) {
+  async editar_distribuicao({ id_distribuicao, valor, observacao, senha }) {
+    const e = await _confirmarSenha(senha); if (e) return { ok: false, erro: e };
+    const c = await sb();
+    const { error } = await c.from('distribuicoes')
+      .update({ valor: Number(valor), observacao }).eq('id_distribuicao', id_distribuicao);
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  async excluir_distribuicao({ id_distribuicao, senha }) {
+    const e = await _confirmarSenha(senha); if (e) return { ok: false, erro: e };
     const c = await sb();
     const { error } = await c.from('distribuicoes')
       .delete().eq('id_distribuicao', id_distribuicao);
     return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  // Devolve parte de um repasse ao saldo de quem repassou. Só o que a unidade
+  // de destino ainda não comprometeu (demandas ativas) nem repassou adiante.
+  async cancelar_saldo_subordinada({ id_distribuicao, valor_cancelar, justificativa, senha }) {
+    if (!justificativa || String(justificativa).trim().length < 5)
+      return { ok: false, erro: 'Justificativa obrigatória (mínimo 5 caracteres).' };
+    const e = await _confirmarSenha(senha); if (e) return { ok: false, erro: e };
+    const c = await sb();
+    const { data: dist } = await c.from('distribuicoes').select('*').eq('id_distribuicao', id_distribuicao).single();
+    if (!dist) return { ok: false, erro: 'Repasse não encontrado.' };
+    // O exercício é o selecionado na tela (o mesmo da dotação de origem).
+    let exercicio = null;
+    try { exercicio = Number(sessionStorage.getItem('pac_exercicio')) || null; } catch (x) {}
+    exercicio = exercicio || Number(await _exercicioAtual());
+    const { data: linhas } = await c.from('v_saldos').select('saldo')
+      .eq('id_unidade', dist.id_unidade_destino_fk).eq('exercicio', exercicio);
+    const linha = (linhas || [])[0] || {};
+    const { data: dems } = await c.from('demandas').select('valor_estimado')
+      .eq('id_unidade_fk', dist.id_unidade_destino_fk)
+      .in('status', ['submetida', 'aprovada', 'priorizada', 'homologada'])
+      .eq('exercicio', exercicio);
+    const comprometido = (dems || []).reduce((t, d) => t + Number(d.valor_estimado || 0), 0);
+    const livre = Math.min(Number(dist.valor), Number(linha.saldo || 0) - comprometido);
+    const v = Number(valor_cancelar);
+    if (!(v > 0) || v > livre)
+      return { ok: false, erro: 'Valor maior que o saldo livre da subunidade (R$ ' + Math.max(livre, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ').' };
+    const obs = (dist.observacao ? dist.observacao + ' ' : '') +
+      '[CANCELAMENTO PARCIAL R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + '] ' + justificativa;
+    const { error } = await c.from('distribuicoes')
+      .update({ valor: Number(dist.valor) - v, observacao: obs }).eq('id_distribuicao', id_distribuicao);
+    if (error) return { ok: false, erro: _erro(error) };
+    return { ok: true, valor_devolvido: v, saldo_livre_anterior: livre };
   },
 
   // ─── Administração de usuários ─────────────────────────────────────────────
@@ -609,16 +790,23 @@ const ACOES = {
     return error ? { ok: false, erro: _erro(error) } : { ok: true, unidades: data };
   },
 
+  // Tela de homologação: demandas priorizadas e homologadas (ordem GUT) + resumo.
   async resumo_plano({ exercicio }) {
     const r = await ACOES.listar_demandas({ exercicio });
     if (!r.ok) return r;
-    const porStatus = {};
-    let total = 0;
-    r.demandas.forEach(d => {
-      porStatus[d.status] = (porStatus[d.status] || 0) + 1;
-      total += Number(d.valor_estimado || 0);
-    });
-    return { ok: true, por_status: porStatus, total_estimado: total, quantidade: r.demandas.length };
+    const soma = l => l.reduce((t, d) => t + Number(d.valor_estimado || 0), 0);
+    const por = st => r.demandas.filter(d => d.status === st);
+    const demandas = r.demandas.filter(d => ['priorizada', 'homologada'].includes(d.status))
+      .sort((a, b) => (a.status === b.status ? 0 : a.status === 'priorizada' ? -1 : 1) || (b.gut_total || 0) - (a.gut_total || 0));
+    return {
+      ok: true, exercicio: r.exercicio, demandas,
+      resumo: {
+        total: r.demandas.length, submetidas: por('submetida').length, de_acordo: por('de_acordo').length,
+        priorizadas: por('priorizada').length, homologadas: por('homologada').length, reprovadas: por('reprovada').length,
+        valor_total: soma(r.demandas), valor_homologado: soma(por('homologada')),
+        plano_ja_homologado: por('homologada').length > 0 && !por('priorizada').length,
+      },
+    };
   },
 };
 
@@ -632,8 +820,9 @@ async function _decidir(id_demanda, novoStatus, acao, justificativa) {
     .update({ status: novoStatus }).eq('id_demanda', id_demanda);
   if (error) return { ok: false, erro: _erro(error) };
 
-  const nivel = p.papel === 'chefe_secao' ? 'chefe_secao'
-              : p.papel === 'ord_despesas' ? 'ordenador' : 'chefia';
+  // De acordo / reprovação são atos da chefia imediata, mesmo quando quem
+  // assina é o ordenador (ex.: demandas das pró-reitorias, subordinadas à Reitoria).
+  const nivel = p.papel === 'chefe_secao' ? 'chefe_secao' : 'chefia';
   const { error: e2 } = await c.from('aprovacoes').insert({
     id_demanda_fk: id_demanda, id_usuario_fk: p.id_usuario,
     acao, justificativa: justificativa || null, nivel,
