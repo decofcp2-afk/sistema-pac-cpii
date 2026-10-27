@@ -8,6 +8,7 @@
 // Ações (POST JSON):
 //   { acao: 'criar',   usuario: { nome, email, papel, id_unidade_fk, matricula_siape } }
 //   { acao: 'resetar', id_usuario }
+//   { acao: 'editar',  usuario: { id_usuario, nome?, papel?, id_unidade_fk?, matricula_siape?, ativo? } }
 //
 // Quem pode chamar:
 //   - administrador global (papel 'licitacoes' sem unidade): qualquer usuário;
@@ -149,6 +150,47 @@ Deno.serve(async (req) => {
       });
       if (error) return resposta({ ok: false, erro: error.message });
       return resposta({ ok: true, senha_inicial: senha });
+    }
+
+    // ── Editar perfil (nome, SIAPE, papel, unidade, ativo) ─────────────────
+    // O papel `authenticated` só tem SELECT em perfis — de propósito, para que
+    // ninguém altere o próprio papel pela API. Edição passa por aqui.
+    if (corpo.acao === 'editar') {
+      const u = corpo.usuario || {};
+      const id = String(u.id_usuario || '');
+      const { data: alvo } = await admin.from('perfis')
+        .select('nome, papel, id_unidade_fk, ativo').eq('id_usuario', id).single();
+      if (!alvo) return resposta({ ok: false, erro: 'Usuário não encontrado.' });
+      if (!podeGerir(alvo.papel, alvo.id_unidade_fk))
+        return resposta({ ok: false, erro: 'Você não tem permissão para alterar este usuário.' });
+
+      const novo: Record<string, unknown> = {};
+      if ('nome' in u) {
+        const nome = String(u.nome || '').trim();
+        if (!nome) return resposta({ ok: false, erro: 'Informe o nome completo.' });
+        novo.nome = nome;
+      }
+      if ('matricula_siape' in u) novo.matricula_siape = u.matricula_siape ? String(u.matricula_siape).trim() : null;
+      if ('papel' in u) {
+        if (!PAPEIS.includes(String(u.papel))) return resposta({ ok: false, erro: 'Papel inválido.' });
+        novo.papel = String(u.papel);
+      }
+      if ('id_unidade_fk' in u) novo.id_unidade_fk = u.id_unidade_fk ? String(u.id_unidade_fk) : null;
+      if ('ativo' in u) novo.ativo = String(u.ativo).toLowerCase() === 'true';
+
+      const papelFinal = (novo.papel ?? alvo.papel) as string;
+      const unidadeFinal = ('id_unidade_fk' in novo ? novo.id_unidade_fk : alvo.id_unidade_fk) as string | null;
+      const ativoFinal = ('ativo' in novo ? novo.ativo : alvo.ativo) as boolean;
+      if (ativoFinal && papelFinal !== 'licitacoes' && !unidadeFinal)
+        return resposta({ ok: false, erro: 'Selecione a unidade do usuário.' });
+      if (!podeGerir(papelFinal, unidadeFinal))
+        return resposta({ ok: false, erro: 'Você só pode atribuir unidades sob sua responsabilidade.' });
+      if (id === user.id && (!ativoFinal || papelFinal !== eu.papel || unidadeFinal !== eu.id_unidade_fk))
+        return resposta({ ok: false, erro: 'Você não pode desativar nem alterar o papel ou a unidade do seu próprio usuário.' });
+
+      const { error } = await admin.from('perfis').update(novo).eq('id_usuario', id);
+      if (error) return resposta({ ok: false, erro: error.message });
+      return resposta({ ok: true });
     }
 
     return resposta({ ok: false, erro: 'Ação desconhecida.' });
