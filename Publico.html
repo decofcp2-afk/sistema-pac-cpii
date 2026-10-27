@@ -84,6 +84,26 @@
 
   .grafico-card { background: #fff; border: 1px solid #D3D1C7; border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; display: none; }
   .grafico-titulo { font-size: 14px; font-weight: 600; margin-bottom: 16px; }
+  .grafico-sub { font-size: 12px; color: #5F5E5A; margin: -10px 0 14px; line-height: 1.5; }
+  .grafico-sub b { color: #2C2C2A; }
+  .grafico-conf { font-size: 11px; color: #5F5E5A; margin-top: 10px; display: flex; align-items: center; gap: 6px; }
+  .grafico-conf .ok { color: #085041; font-weight: 600; }
+  .grafico-conf .dif { color: #791F1F; font-weight: 600; }
+  /* Observação (justificativas) */
+  #corpo-tabela td.num { white-space: nowrap; }
+  .obs-cell { max-width: 260px; font-size: 11px; color: #444441; cursor: help; line-height: 1.4; }
+  .obs-cell .obs-ico { display: inline-flex; width: 15px; height: 15px; border-radius: 50%; background: #EEEDFE; color: #3C3489; font-size: 10px; font-weight: 700; align-items: center; justify-content: center; margin-right: 5px; vertical-align: -2px; flex-shrink: 0; }
+  .obs-cell.rep .obs-ico { background: #FCEBEB; color: #A32D2D; }
+  .obs-cell:focus { outline: 2px solid #AFA9EC; outline-offset: 2px; border-radius: 4px; }
+  #obs-tip { position: fixed; z-index: 9999; max-width: 380px; background: #fff; border: 1px solid #D3D1C7; border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.14); padding: 14px 16px; font-size: 12px; color: #2C2C2A; line-height: 1.5; display: none; pointer-events: none; }
+  #obs-tip.vis { display: block; }
+  #obs-tip .t-tit { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #5F5E5A; margin-bottom: 4px; }
+  #obs-tip .t-dest { padding: 8px 10px; border-radius: 7px; margin-bottom: 10px; background: #E1F5EE; color: #04342C; }
+  #obs-tip .t-dest.rep { background: #FCEBEB; color: #501313; }
+  #obs-tip .t-bloco { margin-bottom: 10px; }
+  #obs-tip .t-passo { border-left: 2px solid #D3D1C7; padding: 0 0 6px 10px; margin-left: 2px; }
+  #obs-tip .t-passo b { font-weight: 600; }
+  #obs-tip .t-passo .t-data { color: #888780; font-size: 10px; }
   .grafico-wrap { height: 220px; }
 
   .tabela-card { background: #fff; border: 1px solid #D3D1C7; border-radius: 12px; overflow: hidden; }
@@ -285,8 +305,10 @@
     </div>
 
     <div class="grafico-card" id="grafico-card">
-      <div class="grafico-titulo">Planejamento de Divisão Orçamentária</div>
-      <div class="grafico-wrap"><canvas id="grafico"></canvas></div>
+      <div class="grafico-titulo" id="grafico-titulo">Distribuição orçamentária</div>
+      <div class="grafico-sub" id="grafico-sub"></div>
+      <div class="grafico-wrap" id="grafico-wrap"><canvas id="grafico" role="img" aria-label="Gráfico de barras com o saldo final de cada unidade"></canvas></div>
+      <div class="grafico-conf" id="grafico-conf"></div>
     </div>
 
     <div class="tabela-card">
@@ -304,7 +326,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202608121639"></script>
+<script src="api.js?v=202610271500"></script>
 <script>
   const APP_URL = APPS_SCRIPT_URL;
   const _di     = {};
@@ -505,78 +527,175 @@
     document.getElementById('r-valor').textContent    = 'R$ ' + fmtV(_dados.total_valor);
     document.getElementById('r-andamento').textContent = andamento;
     const nomeU = document.getElementById('f-unidade').selectedOptions[0]?.textContent || '';
-    document.getElementById('tabela-titulo').textContent = nomeU + ' · ' + document.getElementById('f-ano').value;
+    const selSetor = document.getElementById('f-setor');
+    const nomeS = selSetor.value ? ' › ' + (selSetor.selectedOptions[0]?.textContent || '') : '';
+    document.getElementById('tabela-titulo').textContent = nomeU + nomeS + ' · ' + document.getElementById('f-ano').value;
   }
 
+  // Gráfico: saldo final de cada unidade da estrutura selecionada.
+  // A raiz é o setor escolhido (se houver) ou a unidade ordenadora. Cada barra
+  // é o que ficou com a unidade depois de repassar às subordinadas — por isso a
+  // soma das barras é igual ao valor que a raiz recebeu.
   function renderGrafico() {
     try {
-    // Priorizar árvore de orçamento (saldo) se disponível
-    const arvore = _dados.arvoreOrcamento;
-    const g = _dados.dadosGrafico || {};
+    const card = document.getElementById('grafico-card');
+    const arvore = _dados.arvoreOrcamento || [];
+    const raiz = arvore[0];
+    if (_chart) { _chart.destroy(); _chart = null; }
 
-    if (arvore && arvore.length > 0 && arvore[0]) {
-      // Coletar TODOS os nós com saldo > 0 (todos os níveis)
-      function coletarNos(no) {
-        let lista = [];
-        if ((no.saldo || 0) > 0) lista.push(no);
-        (no.filhos||[]).forEach(f => { lista = lista.concat(coletarNos(f)); });
-        return lista;
-      }
-      const todos = coletarNos(arvore[0]);
-      // Excluir a raiz (unidade ordenadora) do gráfico
-      const nos = todos.filter(n => n.id !== arvore[0].id);
-      if (nos.length > 0) {
-        const tituloEl = document.getElementById('grafico-titulo');
-        if (tituloEl) tituloEl.textContent = 'Distribuição orçamentária entre setores';
-        const labels   = nos.map(n => n.sigla || n.nome);
-        const valSaldo = nos.map(n => n.saldo || 0);
-        document.getElementById('grafico-card').style.display = 'block';
-        if (_chart) { _chart.destroy(); _chart = null; }
-        _chart = new Chart(document.getElementById('grafico').getContext('2d'), {
-          type: 'bar',
-          data: {
-            labels,
-            datasets: [
-              { label: 'Saldo disponível', data: valSaldo,
-                backgroundColor: 'rgba(29,158,117,0.75)', borderColor: '#1D9E75', borderWidth: 1, borderRadius: 4 },
-            ]
-          },
-          options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-              y: { ticks: { callback: v => 'R$'+fmtK(v) } },
-              x: { ticks: { font: { size: 10 }, maxRotation: 45 } }
-            }
-          }
-        });
-        return;
-      }
+    if (!raiz || !raiz.recebido) {
+      card.style.display = 'block';
+      document.getElementById('grafico-titulo').textContent = 'Distribuição orçamentária';
+      document.getElementById('grafico-sub').textContent =
+        'Não há orçamento distribuído para ' + (raiz ? (raiz.sigla || raiz.nome) : 'esta unidade') + ' neste exercício.';
+      document.getElementById('grafico-wrap').style.display = 'none';
+      document.getElementById('grafico-conf').innerHTML = '';
+      return;
     }
 
-    // Fallback: gráfico de demandas homologadas
-    const labels = Object.keys(g);
-    if (labels.length === 0) { document.getElementById('grafico-card').style.display = 'none'; return; }
-    document.getElementById('grafico-titulo').textContent = 'Valores homologados por subunidade';
-    document.getElementById('grafico-card').style.display = 'block';
-    if (_chart) { _chart.destroy(); _chart = null; }
+    // Percorre a árvore em pré-ordem, para cada unidade vir logo antes das suas subordinadas.
+    const nos = [];
+    (function visitar(no, nivel) {
+      if (no.saldo > 0.004) nos.push({ ...no, nivel });
+      (no.filhos || []).forEach(f => visitar(f, nivel + 1));
+    })(raiz, 0);
+
+    const somaSaldos = nos.reduce((s, n) => s + n.saldo, 0);
+    const nomeRaiz = raiz.sigla || raiz.nome;
+
+    document.getElementById('grafico-titulo').textContent = 'Distribuição orçamentária — ' + nomeRaiz;
+    document.getElementById('grafico-sub').innerHTML =
+      'Saldo final disponível em cada unidade da estrutura. ' + escHtml(nomeRaiz) +
+      ' recebeu <b>R$ ' + fmtV(raiz.recebido) + '</b>' +
+      (raiz.repassado ? ', repassou R$ ' + fmtV(raiz.repassado) + ' às subordinadas e ficou com R$ ' + fmtV(raiz.saldo) + '.' : '.');
+
+    const dif = Math.abs(somaSaldos - raiz.recebido);
+    document.getElementById('grafico-conf').innerHTML = dif < 0.01
+      ? '<span class="ok">✓</span> Soma dos saldos: <b>R$ ' + fmtV(somaSaldos) + '</b> = valor recebido por ' + escHtml(nomeRaiz) + '.'
+      : '<span class="dif">!</span> Soma dos saldos: <b>R$ ' + fmtV(somaSaldos) + '</b> · recebido por ' + escHtml(nomeRaiz) + ': R$ ' + fmtV(raiz.recebido) + '.';
+
+    const wrap = document.getElementById('grafico-wrap');
+    wrap.style.display = 'block';
+    wrap.style.height = Math.max(120, nos.length * 38 + 40) + 'px';
+    card.style.display = 'block';
+
+    const labels = nos.map(n => '\u2003\u2003'.repeat(n.nivel) + (n.sigla || n.nome));
+    const valores = nos.map(n => n.saldo);
+    const cores = nos.map(n => n.nivel === 0 ? '#3C3489' : '#7F77DD');
+
+    // Rótulo de valor na ponta de cada barra.
+    const rotulosValor = {
+      id: 'rotulosValor',
+      afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        const meta = chart.getDatasetMeta(0);
+        ctx.save();
+        ctx.font = '600 11px system-ui, -apple-system, Segoe UI, sans-serif';
+        ctx.fillStyle = '#444441';
+        ctx.textBaseline = 'middle';
+        meta.data.forEach((bar, i) => {
+          const txt = 'R$ ' + fmtV(valores[i]);
+          const larg = ctx.measureText(txt).width;
+          const dentro = bar.x + 8 + larg > chart.chartArea.right;
+          ctx.fillStyle = dentro ? '#fff' : '#444441';
+          ctx.textAlign = dentro ? 'right' : 'left';
+          ctx.fillText(txt, dentro ? bar.x - 8 : bar.x + 6, bar.y);
+        });
+        ctx.restore();
+      }
+    };
+
     _chart = new Chart(document.getElementById('grafico').getContext('2d'), {
       type: 'bar',
-      data: {
-        labels,
-        datasets: [{ label: 'Valor homologado', data: labels.map(l => g[l]),
-          backgroundColor: 'rgba(60,52,137,0.75)', borderColor: '#3C3489', borderWidth: 1, borderRadius: 4 }]
-      },
+      data: { labels, datasets: [{
+        label: 'Saldo final', data: valores, backgroundColor: cores,
+        borderRadius: 4, borderSkipped: 'start', barThickness: 22, maxBarThickness: 26,
+      }] },
+      plugins: [rotulosValor],
       options: {
+        indexAxis: 'y',
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { y: { ticks: { callback: v => 'R$'+fmtK(v) } } }
+        layout: { padding: { right: 12 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: items => { const n = nos[items[0].dataIndex]; return (n.sigla ? n.sigla + ' — ' : '') + n.nome; },
+              label: item => {
+                const n = nos[item.dataIndex];
+                const pct = raiz.recebido ? (n.saldo / raiz.recebido * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : '0';
+                const linhas = ['Saldo final: R$ ' + fmtV(n.saldo) + ' (' + pct + '% de ' + nomeRaiz + ')'];
+                if (n.repassado) linhas.push('Recebeu R$ ' + fmtV(n.recebido) + ' e repassou R$ ' + fmtV(n.repassado));
+                return linhas;
+              },
+            }
+          }
+        },
+        scales: {
+          x: { beginAtZero: true, grid: { color: '#F1EFE8' }, border: { display: false },
+               ticks: { callback: v => 'R$ ' + fmtK(v), color: '#888780', font: { size: 10 } } },
+          y: { grid: { display: false }, border: { display: false },
+               ticks: { color: '#2C2C2A', font: { size: 11 }, crossAlign: 'far' } }
+        }
       }
     });
     } catch(err) { console.error('renderGrafico erro:', err); }
   }
 
+  // ── Observação: justificativas de aprovação/reprovação ─────────────────────
+  const ROT_ACAO  = { aprovacao: 'Aprovação', de_acordo: 'De acordo', priorizacao: 'Priorização (GUT)',
+                      homologacao: 'Homologação', reprovacao: 'Reprovação' };
+  const ROT_NIVEL = { chefe_secao: 'chefe de seção', chefia: 'chefia', reitoria_dg: 'reitoria/direção-geral',
+                      ordenador: 'ordenador de despesas' };
+
+  // Texto curto da coluna: a manifestação que decidiu o status atual.
+  function obsResumo(d) {
+    const tram = d.tramitacao || [];
+    if (d.status === 'reprovada') return d.justificativa_reprovacao || 'Reprovada (motivo não informado).';
+    const ult = tram.filter(t => t.acao !== 'reprovacao' && (t.justificativa || '').trim()).pop();
+    return ult ? ult.justificativa : (d.justificativa || '');
+  }
+
+  function obsHtml(d) {
+    const tram = d.tramitacao || [];
+    const rep = d.status === 'reprovada';
+    let h = '';
+    if (rep) {
+      h += `<div class="t-tit">Motivo da reprovação</div>
+            <div class="t-dest rep">${escHtml(d.justificativa_reprovacao || 'Não informado.')}</div>`;
+    }
+    if ((d.justificativa || '').trim()) {
+      h += `<div class="t-bloco"><div class="t-tit">Justificativa da demanda</div>${escHtml(d.justificativa)}</div>`;
+    }
+    const passos = tram.filter(t => !(rep && t.acao === 'reprovacao'));
+    if (passos.length) {
+      h += `<div class="t-tit">${rep ? 'Tramitação anterior' : 'Tramitação e justificativas'}</div>` +
+        passos.map(t => `<div class="t-passo"><b>${ROT_ACAO[t.acao] || t.acao}</b>` +
+          (ROT_NIVEL[t.nivel] ? ` · ${ROT_NIVEL[t.nivel]}` : '') +
+          ` <span class="t-data">${fmtD(t.data_hora)}</span><br>${escHtml(t.justificativa || '—')}</div>`).join('');
+    }
+    return h || 'Sem justificativas registradas.';
+  }
+
+  function mostrarObs(el) {
+    const d = _dados && _dados.demandas[Number(el.dataset.i)];
+    if (!d) return;
+    const tip = document.getElementById('obs-tip');
+    tip.innerHTML = obsHtml(d);
+    tip.classList.add('vis');
+    const r = el.getBoundingClientRect(), t = tip.getBoundingClientRect();
+    let x = Math.min(r.left, window.innerWidth - t.width - 12);
+    let y = r.bottom + 8;
+    if (y + t.height > window.innerHeight - 8) y = Math.max(8, r.top - t.height - 8);
+    tip.style.left = Math.max(8, x) + 'px';
+    tip.style.top  = y + 'px';
+  }
+  function esconderObs() { document.getElementById('obs-tip').classList.remove('vis'); }
+  window.addEventListener('wheel', esconderObs, { passive: true });
+  window.addEventListener('touchmove', esconderObs, { passive: true });
+
   function renderTabela() {
+    esconderObs();
     const lista = _dados.demandas;
     if (!lista.length) {
       document.getElementById('corpo-tabela').innerHTML = '<div class="vazio">Nenhuma demanda encontrada.</div>';
@@ -585,22 +704,27 @@
     document.getElementById('corpo-tabela').innerHTML = `
       <table><thead><tr>
         <th>#</th><th>Objeto</th><th>Setor</th>
-        <th class="num">Valor</th><th class="num">GUT</th><th>Status</th>
+        <th class="num">Valor</th><th class="num">GUT</th><th>Status</th><th>Observação</th>
         <th>Solicitante</th><th>De acordo</th><th>Priorização</th><th>Homologação</th>
       </tr></thead><tbody>
       ${lista.map((d,i) => {
         const gut = Number(d.gut_total||0);
         const cg  = gut>=64?'ga':gut>=27?'gm':gut>0?'gb':'';
+        const obs = obsResumo(d);
         return `<tr>
           <td style="color:#B4B2A9">${i+1}</td>
-          <td style="max-width:200px" title="${esc(d.descricao_objeto)}">${truncar(d.descricao_objeto,44)}</td>
-          <td style="font-size:11px;color:#888780">${d.sigla_unidade||d.nome_unidade||'—'}</td>
+          <td style="max-width:200px" title="${esc(d.descricao_objeto)}">${escHtml(truncar(d.descricao_objeto,44))}</td>
+          <td style="font-size:11px;color:#888780">${escHtml(d.sigla_unidade||d.nome_unidade||'—')}</td>
           <td class="num">R$ ${fmtV(Number(d.valor_estimado||0))}</td>
           <td class="num">${gut?`<span class="gut-b ${cg}">${gut}</span>`:'—'}</td>
           <td>
             <span class="badge badge-${d.status}">${rotular(d.status)}</span>
             ${d.status==='reprovada' ? `<br><button class="btn-ver-rep" onclick="verMotivoRep(${i})">⚠ Ver motivo</button>` : ''}
           </td>
+          <td><div class="obs-cell${d.status==='reprovada'?' rep':''}" data-i="${i}" tabindex="0"
+                   onmouseenter="mostrarObs(this)" onmouseleave="esconderObs()"
+                   onfocus="mostrarObs(this)" onblur="esconderObs()"
+                   aria-label="Ver justificativas"><span class="obs-ico">i</span>${obs ? escHtml(truncar(obs, 60)) : '<span style="color:#B4B2A9">—</span>'}</div></td>
           <td>${assHtml(d.ass_envio)}</td>
           <td>${assHtml(d.ass_de_acordo)}</td>
           <td>${assHtml(d.ass_priorizacao)}</td>
@@ -618,7 +742,7 @@
     const ass = d.ass_reprovacao;
     document.getElementById('rep-meta').textContent = ass
       ? 'Reprovado por ' + ass.nome + ' · SIAPE: ' + ass.siape + ' · ' + fmtD(ass.data)
-      : '';
+      : (d.data_reprovacao ? 'Reprovado em ' + fmtD(d.data_reprovacao) : '');
     document.getElementById('overlay-rep').classList.add('aberto');
   }
 
@@ -864,8 +988,10 @@
   function fmtD(iso) { if(!iso) return '—'; try{return new Date(iso).toLocaleString('pt-BR');}catch{return '—';} }
   function truncar(s,n) { if(!s) return '—'; return s.length>n?s.slice(0,n)+'…':s; }
   function esc(s) { return (s||'').replace(/"/g,'&quot;'); }
-  function rotular(s) { return {submetida:'Submetida',de_acordo:'De acordo',priorizada:'Priorizada',homologada:'Homologada',reprovada:'Reprovada'}[s]||s; }
+  function escHtml(s) { return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function rotular(s) { return {submetida:'Submetida',de_acordo:'De acordo',aprovada:'De acordo',priorizada:'Priorizada',homologada:'Homologada',reprovada:'Reprovada'}[s]||s; }
 </script>
+<div id="obs-tip" role="tooltip"></div>
 <!-- Modal justificativa de reprovação -->
 <div class="overlay-rep" id="overlay-rep">
   <div class="modal-rep">
@@ -877,4 +1003,4 @@
   </div>
 </div>
 </body>
-</
+</html>

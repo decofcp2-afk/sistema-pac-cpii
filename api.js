@@ -484,32 +484,77 @@ const ACOES = {
       escopo = escopo.filter(id => s.includes(id));
     }
 
-    let q = c.from('pac_publico').select('*').eq('exercicio', Number(ex));
-    const { data: pub, error: eD } = await q;
+    // pac_publico expoe as demandas ja enviadas (submetida em diante), sem
+    // rascunhos nem excluidas. Nenhum dado pessoal: so a unidade.
+    const [{ data: pub, error: eD }, { data: saldos, error: eS }] = await Promise.all([
+      c.from('pac_publico').select('*').eq('exercicio', Number(ex)),
+      c.from('saldos_publicos').select('*').eq('exercicio', Number(ex)),
+    ]);
     if (eD) return { ok: false, erro: _erro(eD) };
+    if (eS) return { ok: false, erro: _erro(eS) };
 
     const porId = Object.fromEntries((unidades || []).map(u => [u.id_unidade, u]));
-    let demandas = (pub || []).filter(d => {
-      const un = (unidades || []).find(u => u.nome === d.unidade);
-      return !un || escopo.includes(un.id_unidade);
-    });
-    if (status) demandas = demandas.filter(d => d.status === status || status === 'homologada');
+    // No banco a manifestacao da chefia gera status 'aprovada'; a tela chama de 'de_acordo'.
+    const statusTela = s => (s === 'aprovada' ? 'de_acordo' : s);
+
+    let demandas = (pub || []).filter(d => escopo.includes(d.id_unidade));
+    if (status) demandas = demandas.filter(d => statusTela(d.status) === status);
     if (busca) {
       const b = String(busca).toLowerCase();
       demandas = demandas.filter(d => String(d.descricao_objeto || '').toLowerCase().includes(b));
     }
 
-    demandas = demandas.map(d => ({
-      ...d,
-      status:        'homologada',
-      nome_unidade:  d.unidade,
-      sigla_unidade: d.unidade_sigla,
-      gut_total:     d.gut_pontuacao,
-      // Assinaturas omitidas: identificam servidores nominalmente.
-      ass_envio: null, ass_de_acordo: null, ass_priorizacao: null,
-      ass_homologacao: null, ass_reprovacao: null,
-      justificativa_reprovacao: '',
-    }));
+    // Tramitacao (de acordo, priorizacao, homologacao, reprovacao) com as
+    // justificativas registradas em cada etapa — sem identificar o servidor.
+    const tramPorDemanda = {};
+    if (demandas.length) {
+      const { data: tram } = await c.from('pac_publico_tramitacao').select('*')
+        .in('id_demanda', demandas.map(d => d.id_demanda))
+        .order('data_hora', { ascending: true });
+      (tram || []).forEach(t => (tramPorDemanda[t.id_demanda] = tramPorDemanda[t.id_demanda] || []).push(t));
+    }
+
+    demandas = demandas.map(d => {
+      const tramitacao = tramPorDemanda[d.id_demanda] || [];
+      const rep = tramitacao.filter(t => t.acao === 'reprovacao').pop();
+      return {
+        ...d,
+        status:        statusTela(d.status),
+        nome_unidade:  d.unidade,
+        sigla_unidade: d.unidade_sigla,
+        gut_total:     d.gut_pontuacao,
+        gut_g: d.gut_gravidade, gut_u: d.gut_urgencia, gut_t: d.gut_tendencia,
+        tramitacao,
+        // Assinaturas omitidas: identificam servidores nominalmente.
+        ass_envio: null, ass_de_acordo: null, ass_priorizacao: null,
+        ass_homologacao: null, ass_reprovacao: null,
+        justificativa_reprovacao: rep ? (rep.justificativa || '') : '',
+        data_reprovacao: rep ? rep.data_hora : null,
+      };
+    });
+
+    // Arvore orcamentaria da estrutura selecionada (setor, se houver; senao a
+    // unidade ordenadora). Cada no traz o SALDO que ficou com ele depois de
+    // repassar as filhas. Como alocado = saldo proprio + repasses, a soma dos
+    // saldos de toda a subarvore e igual ao que a raiz recebeu.
+    const saldoPorId = Object.fromEntries((saldos || []).map(s => [s.id_unidade, s]));
+    const montarNo = (id) => {
+      const u = porId[id] || {};
+      const s = saldoPorId[id] || {};
+      const filhosNos = (filhos[id] || [])
+        .map(montarNo)
+        .filter(n => n.recebido || n.saldo || n.filhos.length)
+        .sort((a, b) => String(a.sigla || a.nome).localeCompare(String(b.sigla || b.nome)));
+      return {
+        id, nome: u.nome || '', sigla: u.sigla || '',
+        recebido:  Number(s.alocado || 0),
+        repassado: Number(s.distribuido || 0),
+        saldo:     Number(s.saldo || 0),
+        filhos:    filhosNos,
+      };
+    };
+    const raizOrc = id_setor || id_unidade;
+    const arvoreOrcamento = raizOrc && porId[raizOrc] ? [montarNo(raizOrc)] : [];
 
     // Grafico: soma por filha direta da unidade selecionada.
     const dadosGrafico = {};
@@ -517,10 +562,7 @@ const ACOES = {
       (filhos[id_unidade] || []).forEach(idFilha => {
         const ids = subarvore(idFilha);
         const total = demandas
-          .filter(d => {
-            const un = (unidades || []).find(u => u.nome === d.nome_unidade);
-            return un && ids.includes(un.id_unidade);
-          })
+          .filter(d => d.status === 'homologada' && ids.includes(d.id_unidade))
           .reduce((s, d) => s + Number(d.valor_estimado || 0), 0);
         if (total > 0) {
           const u = porId[idFilha];
@@ -553,7 +595,7 @@ const ACOES = {
       chefias,
       anos,
       exercicio: ex,
-      arvoreOrcamento: [],   // valores de dotacao nao sao expostos publicamente
+      arvoreOrcamento,
       total_valor: demandas.reduce((s, d) => s + Number(d.valor_estimado || 0), 0),
     };
   },
