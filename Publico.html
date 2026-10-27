@@ -783,203 +783,295 @@
   // ── Gerar PDF ─────────────────────────────────────────────────────────────
   function gerarPdf() {
     if (!_dados?.demandas?.length) { alert('Nenhum dado para gerar PDF.'); return; }
-    const nomeU = document.getElementById('f-unidade').selectedOptions[0]?.textContent || 'Unidade';
+    const selU  = document.getElementById('f-unidade').selectedOptions[0];
+    const selS  = document.getElementById('f-setor');
     const ano   = document.getElementById('f-ano').value;
-    const html  = montarPdf(nomeU, ano);
+    const html  = montarPdf({
+      ano,
+      nomeU: (selU?.textContent || 'Unidade').replace(/^\[[^\]]*\]\s*/, ''),
+      nomeS: selS.value ? (selS.selectedOptions[0]?.textContent || '').replace(/^\[[^\]]*\]\s*/, '') : '',
+      filtroStatus: document.getElementById('f-status').value,
+      filtroBusca:  document.getElementById('f-busca').value.trim(),
+    });
     // Usar Blob URL para evitar restrições do window.open com document.write
     const blob  = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url   = URL.createObjectURL(blob);
-    const win   = window.open(url, '_blank');
-    // Revogar URL após abertura
-    setTimeout(() => { URL.revokeObjectURL(url); }, 10000);
+    window.open(url, '_blank');
+    setTimeout(() => { URL.revokeObjectURL(url); }, 60000);
   }
 
-  function montarPdf(nomeU, ano) {
+  // ── Relatório (PDF) ────────────────────────────────────────────────────────
+  // Texto corrido em tópicos: cada etapa do PAC vira uma seção que diz quantas
+  // demandas chegaram até ali, quanto somam e, demanda a demanda, o que foi
+  // registrado (valor, justificativa, data e manifestação da etapa).
+  const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  function dataExtenso(dt) { return dt.getDate() + ' de ' + MESES[dt.getMonth()] + ' de ' + dt.getFullYear(); }
+  function fmtDia(iso) { if (!iso) return '—'; try { return new Date(iso).toLocaleDateString('pt-BR'); } catch { return '—'; } }
+  function rs(v) { return 'R$ ' + fmtV(v); }
+  function somaV(l) { return l.reduce((s, x) => s + Number(x.valor_estimado || 0), 0); }
+  function nDem(n) { return n === 1 ? '1 (uma) demanda' : n + ' demandas'; }
+  function passo(d, acao) { return (d.tramitacao || []).filter(t => t.acao === acao).pop() || null; }
+  function pct(a, b) { return b ? (a / b * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%' : '—'; }
+
+  const NIVEL_EXT = { chefe_secao: 'pela chefia de seção', chefia: 'pela chefia imediata',
+                      reitoria_dg: 'pela Reitoria/Direção-Geral', ordenador: 'pelo ordenador de despesas' };
+
+  function montarPdf(o) {
     const d = _dados;
-    const caps = [
-      { t: '1. Distribuição do Orçamento',                  html: capOrcamento(d) },
-      { t: '2. Solicitação de Demandas',                    html: capLista(d, ['submetida','de_acordo','priorizada','homologada'], null) },
-      { t: '3. Autorização pela Chefia Imediata',           html: capLista(d, ['de_acordo','priorizada','homologada'], 'ass_de_acordo') },
-      { t: '4. Priorização GUT — Gestão Estratégica',       html: capGut(d) },
-      { t: '5. Homologação pelo Ordenador de Despesas',     html: capLista(d, ['homologada'], 'ass_homologacao') },
-      { t: '6. Demandas Reprovadas',                        html: capReprovadas(d) },
-    ];
+    const todas = d.demandas;
+    const unidade = o.nomeS ? o.nomeS + ' (' + o.nomeU + ')' : o.nomeU;
+    const siglaRaiz = (d.arvoreOrcamento && d.arvoreOrcamento[0] && d.arvoreOrcamento[0].sigla) || '';
+
+    const autorizadas = todas.filter(x => ['de_acordo','priorizada','homologada'].includes(x.status));
+    const priorizadas = todas.filter(x => ['priorizada','homologada'].includes(x.status));
+    const homologadas = todas.filter(x => x.status === 'homologada');
+    const reprovadas  = todas.filter(x => x.status === 'reprovada');
+    const pendentes   = todas.filter(x => x.status === 'submetida');
+
+    const logo = (document.querySelector('img') || {}).src || '';
+    const filtro = [o.filtroStatus ? 'status "' + rotular(o.filtroStatus) + '"' : '',
+                    o.filtroBusca ? 'busca por "' + escHtml(o.filtroBusca) + '"' : ''].filter(Boolean).join(' e ');
+
+    const raiz = (d.arvoreOrcamento || [])[0];
+    const recebido = raiz ? raiz.recebido : 0;
+
     return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
-    <title>PAC ${ano} — ${nomeU}</title>
+    <title>Relatório PAC ${o.ano} — ${escHtml(siglaRaiz || unidade)}</title>
     <style>
       *{box-sizing:border-box}
-      body{font-family:Arial,sans-serif;font-size:12px;color:#000;margin:20px}
-      .cab{width:100%;border-bottom:2px solid #1a1060;padding-bottom:10px;margin-bottom:18px;overflow:hidden}
-      .cab table{width:100%;border-collapse:collapse;border:none}
-      .cab table td{border:none;padding:0;vertical-align:middle}
-      
-      .cab-texto-td{text-align:center}
-      .cab-mec{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#555;margin:0}
-      .cab-inst{font-size:15px;font-weight:bold;color:#1a1060;margin:3px 0 2px}
-      .cab-unid{font-size:11px;color:#444;margin:0}
-      .cab-pac{font-size:11px;font-weight:bold;color:#1a1060;margin-top:3px}
-      h2{font-size:13px;background:#1a1060;color:#fff;padding:7px 12px;margin:24px 0 10px;page-break-after:avoid}
-      table{width:100%;border-collapse:collapse;margin-bottom:10px;font-size:9px}
-      th{background:#e8e8e8;border:1px solid #ccc;padding:5px 7px;font-size:10px;text-transform:uppercase;text-align:left}
-      td{border:1px solid #ddd;padding:5px 7px;vertical-align:top}
-      .tree-row-0{background:#dde4f0;font-weight:bold;font-size:10px}
-      .tree-row-1{background:#eef1f8;font-size:9px}
-      .tree-row-2{background:#f7f8fc;font-size:9px}
-      .tree-row-3{background:#fff;font-size:9px}
-      .tree-indent-0{padding-left:4px}
-      .tree-indent-1{padding-left:20px}
-      .tree-indent-2{padding-left:36px}
-      .tree-indent-3{padding-left:52px}
-      .tree-val{text-align:right;white-space:nowrap;font-weight:bold}
-      .rep-just{font-size:9px;color:#791F1F;font-style:italic}
-      .ass-bloco{margin-top:24px;page-break-inside:avoid}
-      .ass-tit{font-size:9px;font-weight:bold;border-bottom:1px solid #ccc;padding-bottom:3px;margin-bottom:14px}
-      .ass-grid{display:table;width:100%}
-      .ass-item{display:table-cell;text-align:center;width:33%}
-      .ass-linha{border-top:1px solid #000;margin-bottom:3px;margin:0 20px 3px}
-      .ass-n{font-size:8px;font-weight:bold}
-      .ass-s{font-size:8px}
-      .ass-d{font-size:8px;color:#555}
-      @media print{@page{margin:12mm}body{margin:0}}
+      body{font-family:Calibri,Carlito,'Segoe UI',Arial,sans-serif;font-size:11.5pt;color:#111;margin:0;background:#e9e9e9}
+      .folha{background:#fff;max-width:210mm;margin:16px auto;padding:20mm 20mm 18mm;line-height:1.45}
+      .barra{max-width:210mm;margin:16px auto 0;display:flex;justify-content:flex-end;gap:8px}
+      .barra button{font:inherit;font-size:10pt;padding:7px 14px;border-radius:6px;border:1px solid #1F4E79;background:#1F4E79;color:#fff;cursor:pointer}
+      .cab{text-align:center;margin-bottom:6px}
+      .cab img{height:64px;margin-bottom:6px}
+      .cab p{margin:0;font-size:10.5pt;text-align:center}
+      .cab .b{font-weight:bold}
+      .data{text-align:right;margin:18px 0 26px}
+      h1{color:#1F4E79;font-size:14pt;text-align:center;margin:0 0 8px;font-weight:bold;letter-spacing:.3px}
+      .subt{color:#2E75B6;text-align:center;font-weight:bold;margin:0 0 26px}
+      h2{color:#1F4E79;font-size:12pt;margin:26px 0 8px;font-weight:bold;page-break-after:avoid}
+      h3{font-size:11.5pt;margin:14px 0 4px;page-break-after:avoid}
+      p{margin:0 0 9px;text-align:justify}
+      ol.consid{margin:4px 0 12px;padding-left:22px} ol.consid li{margin-bottom:5px;text-align:justify}
+      .sintese{page-break-inside:avoid;border:1px solid #BDD7EE;background:#F3F8FC;border-radius:4px;padding:10px 14px;margin:14px 0 4px}
+      .sintese table{width:100%;border-collapse:collapse;font-size:10.5pt}
+      .sintese td{padding:3px 4px;border-bottom:1px solid #DDEBF7}
+      .sintese tr:last-child td{border-bottom:none}
+      .sintese td.n{text-align:right;white-space:nowrap}
+      .item{margin:0 0 10px;padding-left:12px;border-left:3px solid #BDD7EE;page-break-inside:avoid}
+      .item.rep{border-left-color:#F4B6B6}
+      .item ul{margin:2px 0 0;padding-left:18px} .item li{margin:1px 0}
+      .tot{font-weight:bold}
+      .nada{color:#555;font-style:italic}
+      table.orc{width:100%;border-collapse:collapse;font-size:10pt;margin:6px 0 10px}
+      table.orc th{background:#DDEBF7;border:1px solid #9DC3E6;padding:4px 6px;text-align:left}
+      table.orc td{border:1px solid #BDD7EE;padding:3px 6px}
+      table.orc td.v{text-align:right;white-space:nowrap}
+      .rodape{margin-top:30px;font-size:9pt;color:#555;border-top:1px solid #ccc;padding-top:8px}
+      @media print{
+        body{background:#fff} .barra{display:none}
+        .folha{margin:0;padding:0;max-width:none}
+        @page{size:A4;margin:18mm 18mm 16mm}
+      }
     </style></head><body>
+    <div class="barra"><button onclick="window.print()">Imprimir / salvar em PDF</button></div>
+    <div class="folha">
+
     <div class="cab">
-      <p class="cab-mec">Ministério da Educação</p>
-      <p class="cab-inst">Colégio Pedro II</p>
-      <p class="cab-unid">${nomeU}</p>
-      <p class="cab-pac">Planejamento Anual de Contratações — ${ano}</p>
+      ${logo ? `<img src="${logo}" alt="">` : ''}
+      <p class="b">MINISTÉRIO DA EDUCAÇÃO</p>
+      <p class="b">COLÉGIO PEDRO II</p>
+      <p>${escHtml(o.nomeU).toUpperCase()}</p>
+      ${o.nomeS ? `<p>${escHtml(o.nomeS).toUpperCase()}</p>` : ''}
     </div>
-    <div style="background:#f8f9fc;border:1px solid #ccd;border-radius:6px;padding:14px 18px;margin-bottom:20px;font-size:10px;line-height:1.7;color:#333">
-      <strong>Sobre este documento:</strong> O Planejamento Anual de Contratações (PAC) do Colégio Pedro II demonstra como o orçamento institucional está sendo direcionado internamente e quais demandas futuras ele atenderá.
-      Este documento <strong>não representa a execução orçamentária ou das contratações</strong>, mas sim a sua <em>construção</em>, evidenciando áreas e necessidades priorizadas para o futuro.
-      A transparência neste processo é fundamental para a <strong>participação ativa da comunidade na gestão do Colégio Pedro II</strong>.
-    </div>
-    ${caps.map(c => `<h2>${c.t}</h2>${c.html}`).join('')}
-    </body></html>`;
+    <p class="data">Em ${dataExtenso(new Date())}.</p>
+
+    <h1>RELATÓRIO DO PLANO ANUAL DE CONTRATAÇÕES</h1>
+    <p class="subt">Plano Anual de Contratações ${o.ano} — ${escHtml(siglaRaiz || unidade)}</p>
+
+    <h2>APRESENTAÇÃO</h2>
+    <p>Este relatório registra a construção do Plano Anual de Contratações (PAC) ${o.ano} do Colégio Pedro II no âmbito de
+    <b>${escHtml(unidade)}</b>. Nele constam o orçamento distribuído internamente à unidade e às suas subordinadas, as demandas de
+    contratação de bens, serviços e obras levantadas para o exercício de ${o.ano} e o resultado de cada etapa de análise:
+    a manifestação da chefia imediata, a priorização pela matriz GUT (Gravidade, Urgência e Tendência), a homologação pelo
+    ordenador de despesas e as demandas não acolhidas, com as respectivas justificativas.</p>
+    <p>O documento <b>não representa a execução orçamentária nem as contratações efetivamente realizadas</b>, mas sim o seu
+    planejamento, evidenciando quais áreas e necessidades foram priorizadas.${filtro ? ` Foram consideradas apenas as demandas com ${filtro}, conforme o filtro aplicado no painel público.` : ''}</p>
+    <p>Cabe registrar que:</p>
+    <ol class="consid">
+      <li>O planejamento é um instrumento de governança essencial para a boa gestão dos recursos públicos, conforme preconiza o
+      Decreto nº 10.947/2022, que regulamenta o Plano Anual de Contratações no âmbito da Administração Pública Federal.</li>
+      <li>As demandas não incluídas no PAC ${o.ano} somente poderão ser atendidas em caráter excepcional, mediante justificativa
+      fundamentada da sua imprevisibilidade e urgência, e estarão sujeitas à disponibilidade orçamentária e à análise de
+      viabilidade pela Administração Superior.</li>
+      <li>A ausência de planejamento pode acarretar a não realização de contratações essenciais, impactando o cumprimento das
+      metas e dos objetivos da unidade.</li>
+      <li>As contratações planejadas devem observar os princípios da Lei nº 14.133/2021, especialmente os da legalidade,
+      impessoalidade, moralidade, publicidade, eficiência, interesse público, economicidade, desenvolvimento nacional
+      sustentável, razoabilidade, competitividade e proporcionalidade.</li>
+    </ol>
+
+    <div class="sintese"><table>
+      <tr><td>Orçamento recebido pela unidade</td><td class="n">${recebido ? rs(recebido) : '—'}</td></tr>
+      <tr><td>Demandas solicitadas</td><td class="n">${todas.length} · ${rs(somaV(todas))}</td></tr>
+      <tr><td>Autorizadas pela chefia imediata</td><td class="n">${autorizadas.length} · ${rs(somaV(autorizadas))}</td></tr>
+      <tr><td>Priorizadas (matriz GUT)</td><td class="n">${priorizadas.length} · ${rs(somaV(priorizadas))}</td></tr>
+      <tr><td><b>Homologadas pelo ordenador de despesas</b></td><td class="n"><b>${homologadas.length} · ${rs(somaV(homologadas))}</b></td></tr>
+      <tr><td>Reprovadas</td><td class="n">${reprovadas.length} · ${rs(somaV(reprovadas))}</td></tr>
+      ${pendentes.length ? `<tr><td>Aguardando manifestação da chefia</td><td class="n">${pendentes.length} · ${rs(somaV(pendentes))}</td></tr>` : ''}
+    </table></div>
+
+    <h2>1. DISTRIBUIÇÃO DO ORÇAMENTO</h2>
+    ${relOrcamento(d)}
+
+    <h2>2. DEMANDAS SOLICITADAS</h2>
+    ${relSolicitadas(todas)}
+
+    <h2>3. DEMANDAS AUTORIZADAS PELA CHEFIA IMEDIATA</h2>
+    ${relAutorizadas(todas, autorizadas)}
+
+    <h2>4. DEMANDAS PRIORIZADAS (MATRIZ GUT)</h2>
+    ${relPriorizadas(autorizadas, priorizadas)}
+
+    <h2>5. DEMANDAS HOMOLOGADAS PELO ORDENADOR DE DESPESAS</h2>
+    ${relHomologadas(priorizadas, homologadas, recebido)}
+
+    <h2>6. DEMANDAS REPROVADAS</h2>
+    ${relReprovadas(todas, reprovadas)}
+
+    <p class="rodape">Relatório gerado em ${new Date().toLocaleString('pt-BR')} a partir do Painel Público do PAC do Colégio Pedro II.
+    Os nomes dos servidores responsáveis por cada manifestação não são exibidos neste relatório público; os registros completos
+    constam do sistema PAC.</p>
+    </div></body></html>`;
   }
 
-  function capOrcamento(d) {
-    const arvore = d.arvoreOrcamento || [];
-    if (arvore.length === 0) return '<p style="color:#888">Sem dados de orçamento.</p>';
-
-    const raiz = arvore[0];
-    const totalRecebido = raiz.recebido || 0;
-
-    // Gráfico de barras inline (SVG simples)
-    function gerarGraficoSvg(nos) {
-      if (!nos || nos.length === 0) return '';
-      const maxVal = Math.max(...nos.map(n => n.recebido || 0));
-      if (maxVal === 0) return '';
-      const largura = 500, altBase = 120, barH = 14, gap = 4;
-      const altura = nos.length * (barH + gap) + 30;
-      let bars = '';
-      nos.forEach((n, i) => {
-        const pct = maxVal > 0 ? (n.recebido / maxVal) : 0;
-        const bw = Math.max(2, Math.round(pct * 300));
-        const y = 20 + i * (barH + gap);
-        const corR = n.saldo >= 0 ? '#3C3489' : '#A32D2D';
-        const corS = n.saldo >= 0 ? '#1D9E75' : '#E24B4A';
-        const bwS = Math.max(0, Math.round((n.saldo / maxVal) * 300));
-        bars += `<text x="0" y="${y+10}" font-size="8" fill="#333">${n.sigla||n.nome}</text>`;
-        bars += `<rect x="80" y="${y}" width="${bw}" height="${barH}" fill="${corR}" opacity="0.3" rx="2"/>`;
-        bars += `<rect x="80" y="${y}" width="${bwS}" height="${barH}" fill="${corS}" opacity="0.8" rx="2"/>`;
-        bars += `<text x="${80+bw+4}" y="${y+10}" font-size="7" fill="#555">R$ ${fmtV(n.saldo)}</text>`;
-      });
-      return `<svg width="${largura}" height="${altura}" style="display:block;margin:8px 0">
-        <text x="0" y="12" font-size="8" fill="#888" font-weight="bold">SALDO DISPONÍVEL POR UNIDADE</text>
-        ${bars}
-        <text x="80" y="${altura-2}" font-size="7" fill="#999">■ Recebido  ■ Saldo</text>
-      </svg>`;
-    }
-
-    // Tabela com recebido, repassado, saldo
-    function renderNo(no, nivel) {
-      const indent = nivel === 0 ? '' : nivel === 1 ? '▸ ' : nivel === 2 ? '  ▹ ' : '    · ';
-      const bg = ['#dde4f0','#eef1f8','#f7f8fc','#fff'][Math.min(nivel,3)];
-      const fw = nivel === 0 ? 'bold' : 'normal';
-      let html = `<tr style="background:${bg}">
-        <td style="padding:3px 6px;font-weight:${fw};font-size:9px">${indent}${no.sigla||no.nome}${no.sigla&&no.sigla!==no.nome?' — '+no.nome:''}</td>
-        <td style="text-align:right;padding:3px 6px;font-size:9px">R$ ${fmtV(no.recebido)}</td>
-        <td style="text-align:right;padding:3px 6px;font-size:9px;color:#555">R$ ${fmtV(no.repassado)}</td>
-        <td style="text-align:right;padding:3px 6px;font-size:9px;font-weight:bold;color:${no.saldo>=0?'#085041':'#791F1F'}">R$ ${fmtV(no.saldo)}</td>
-      </tr>`;
-      (no.filhos||[]).forEach(f => { html += renderNo(f, nivel+1); });
-      return html;
-    }
-
-    const grafico = gerarGraficoSvg(raiz.filhos && raiz.filhos.length > 0 ? raiz.filhos : [raiz]);
-
+  function relOrcamento(d) {
+    const raiz = (d.arvoreOrcamento || [])[0];
+    if (!raiz || !raiz.recebido) return '<p class="nada">Não há orçamento distribuído para esta unidade no exercício.</p>';
+    const linhas = [];
+    (function visitar(no, nivel) {
+      linhas.push({ ...no, nivel });
+      (no.filhos || []).forEach(f => visitar(f, nivel + 1));
+    })(raiz, 0);
+    const nomeRaiz = escHtml(raiz.sigla || raiz.nome);
+    const filhosDiretos = raiz.filhos || [];
     return `
-    <p style="margin-bottom:8px">Total da unidade ordenadora: <b>R$ ${fmtV(totalRecebido)}</b></p>
-    ${grafico}
-    <table>
-      <tr>
-        <th>Unidade / Setor</th>
-        <th style="text-align:right;width:130px">Recebido (R$)</th>
-        <th style="text-align:right;width:130px">Repassado (R$)</th>
-        <th style="text-align:right;width:130px">Saldo (R$)</th>
-      </tr>
-      ${renderNo(raiz, 0)}
+    <p>${nomeRaiz} recebeu <b>${rs(raiz.recebido)}</b> para o exercício.
+    ${raiz.repassado
+      ? `Desse total, repassou ${rs(raiz.repassado)} (${pct(raiz.repassado, raiz.recebido)}) a ${filhosDiretos.length === 1 ? '1 (uma) unidade subordinada' : filhosDiretos.length + ' unidades subordinadas'} e manteve sob sua gestão ${rs(raiz.saldo)}.`
+      : 'O valor não foi repassado a unidades subordinadas e permanece integralmente sob sua gestão.'}
+    A tabela abaixo apresenta, para cada unidade da estrutura, o valor recebido, o valor repassado às suas subordinadas e o
+    saldo final disponível. A soma dos saldos finais corresponde ao total recebido por ${nomeRaiz}.</p>
+    <table class="orc">
+      <tr><th>Unidade</th><th style="text-align:right">Recebido</th><th style="text-align:right">Repassado</th><th style="text-align:right">Saldo final</th></tr>
+      ${linhas.map(n => `<tr>
+        <td style="padding-left:${6 + n.nivel * 16}px;${n.nivel === 0 ? 'font-weight:bold' : ''}">${escHtml(n.sigla || n.nome)}${n.sigla && n.nome && n.nome !== n.sigla ? ' — ' + escHtml(n.nome.replace(/^[^–]*–\s*/, '')) : ''}</td>
+        <td class="v">${rs(n.recebido)}</td><td class="v">${rs(n.repassado)}</td><td class="v"><b>${rs(n.saldo)}</b></td></tr>`).join('')}
+      <tr><td class="tot">Soma dos saldos finais</td><td></td><td></td><td class="v tot">${rs(linhas.reduce((s, n) => s + n.saldo, 0))}</td></tr>
     </table>`;
   }
 
-  function capLista(d, statusFiltro, campoAss) {
-    const lista = d.demandas.filter(x => statusFiltro.includes(x.status));
-    if (!lista.length) return '<p style="color:#888">Nenhuma demanda nesta etapa.</p>';
-    const assinaturas = campoAss
-      ? [...new Map(lista.map(x=>x[campoAss]).filter(Boolean).map(a=>[a.nome,a])).values()]
-      : [];
-    return `<table><tr><th>#</th><th>Objeto</th><th>Setor</th><th>Valor</th><th>Status</th>
-      ${campoAss?'<th>Assinado por</th><th>SIAPE</th><th>Data</th>':''}</tr>
-      ${lista.map((x,i)=>{const a=campoAss?x[campoAss]:null;
-        return `<tr><td>${i+1}</td><td>${x.descricao_objeto||'—'}</td><td>${x.sigla_unidade||'—'}</td>
-        <td>R$ ${fmtV(Number(x.valor_estimado||0))}</td><td>${rotular(x.status)}</td>
-        ${campoAss?`<td>${a?a.nome:'—'}</td><td>${a?a.siape:'—'}</td><td>${a?fmtD(a.data):'—'}</td>`:''}</tr>`;
-      }).join('')}</table>
-    ${assinaturas.length?blocoAss(assinaturas,'Assinaturas desta etapa'):''}`;
+  // Bloco de um tópico de demanda. `extras` são linhas adicionais da etapa.
+  function itemDemanda(num, x, extras, rep) {
+    const qtd = x.quantidade ? Number(x.quantidade).toLocaleString('pt-BR') + (x.unidade_medida ? ' ' + escHtml(x.unidade_medida) : '') : '';
+    return `<div class="item${rep ? ' rep' : ''}">
+      <h3>${num} ${escHtml(x.descricao_objeto || 'Demanda sem descrição')}</h3>
+      <ul>
+        <li><b>Unidade demandante:</b> ${escHtml(x.sigla_unidade || x.nome_unidade || '—')}</li>
+        <li><b>Valor estimado:</b> ${rs(x.valor_estimado)}${qtd ? ' · <b>Quantidade:</b> ' + qtd : ''}</li>
+        ${extras.join('')}
+      </ul></div>`;
+  }
+  function li(rotulo, texto) { return texto ? `<li><b>${rotulo}:</b> ${escHtml(texto)}</li>` : ''; }
+
+  function relSolicitadas(todas) {
+    if (!todas.length) return '<p class="nada">Nenhuma demanda foi solicitada.</p>';
+    const porSetor = {};
+    todas.forEach(x => { const k = x.sigla_unidade || x.nome_unidade || '—'; porSetor[k] = (porSetor[k] || 0) + 1; });
+    const setores = Object.keys(porSetor).sort();
+    return `<p>Foram encaminhadas para o PAC <b>${nDem(todas.length)}</b>, que somam <b>${rs(somaV(todas))}</b>,
+      oriundas de ${setores.length === 1 ? 'uma unidade (' + escHtml(setores[0]) + ')' : setores.length + ' unidades (' + setores.map(s => escHtml(s) + ': ' + porSetor[s]).join('; ') + ')'}.
+      As demandas e as justificativas apresentadas pelas unidades demandantes são relacionadas a seguir.</p>
+      ${todas.map((x, i) => {
+        const envio = passo(x, 'aprovacao');
+        return itemDemanda('2.' + (i + 1) + '.', x, [
+          li('Justificativa da necessidade', x.justificativa),
+          envio ? `<li><b>Encaminhada em:</b> ${fmtDia(envio.data_hora)}</li>` : '',
+          `<li><b>Situação atual:</b> ${rotular(x.status)}</li>`,
+        ]);
+      }).join('')}`;
   }
 
-  function capGut(d) {
-    const lista = d.demandas.filter(x=>['priorizada','homologada'].includes(x.status))
-      .sort((a,b)=>Number(b.gut_total||0)-Number(a.gut_total||0));
-    if (!lista.length) return '<p style="color:#888">Nenhuma demanda priorizada.</p>';
-    const assinaturas = [...new Map(lista.map(x=>x.ass_priorizacao).filter(Boolean).map(a=>[a.nome,a])).values()];
-    return `<table><tr><th>#</th><th>Objeto</th><th>Setor</th><th>Valor</th><th>G</th><th>U</th><th>T</th><th>GUT</th></tr>
-      ${lista.map((x,i)=>`<tr><td>${i+1}</td><td>${x.descricao_objeto||'—'}</td><td>${x.sigla_unidade||'—'}</td>
-        <td>R$ ${fmtV(Number(x.valor_estimado||0))}</td><td>${x.gut_g||'—'}</td><td>${x.gut_u||'—'}</td>
-        <td>${x.gut_t||'—'}</td><td><b>${x.gut_total||'—'}</b></td></tr>`).join('')}</table>
-    ${assinaturas.length?blocoAss(assinaturas,'Assinaturas — Grupo estratégico'):''}`;
+  function relAutorizadas(todas, autorizadas) {
+    const nRep = todas.filter(x => x.status === 'reprovada').length;
+    const nPend = todas.filter(x => x.status === 'submetida').length;
+    const restantes = [nRep ? (nRep === 1 ? '1 (uma) foi reprovada' : nRep + ' foram reprovadas') : '',
+                       nPend ? (nPend === 1 ? '1 (uma) aguarda manifestação' : nPend + ' aguardam manifestação') : '']
+                      .filter(Boolean).join(' e ');
+    if (!autorizadas.length)
+      return `<p class="nada">Nenhuma das demandas solicitadas recebeu, até o momento, manifestação favorável da chefia imediata.</p>`;
+    return `<p>Das ${nDem(todas.length)} solicitadas, <b>${autorizadas.length}</b> ${autorizadas.length === 1 ? 'recebeu' : 'receberam'}
+      manifestação favorável (de acordo) da chefia imediata, no valor total de <b>${rs(somaV(autorizadas))}</b>
+      (${pct(somaV(autorizadas), somaV(todas))} do valor solicitado).${restantes ? ' Das demais, ' + restantes + '.' : ''}</p>
+      ${autorizadas.map((x, i) => {
+        const p = passo(x, 'de_acordo');
+        return itemDemanda('3.' + (i + 1) + '.', x, [
+          p ? `<li><b>De acordo da chefia em:</b> ${fmtDia(p.data_hora)}</li>` : '',
+          li('Manifestação da chefia', p && p.justificativa),
+        ]);
+      }).join('')}`;
   }
 
-  function capReprovadas(d) {
-    const lista = d.demandas.filter(x => x.status === 'reprovada');
-    if (!lista.length) return '<p style="color:#888">Nenhuma demanda reprovada neste exercício.</p>';
-    return `<table><tr>
-      <th>#</th><th>Objeto</th><th>Setor</th><th>Valor</th>
-      <th>Reprovado por</th><th>SIAPE</th><th>Data</th><th>Justificativa</th>
-    </tr>
-    ${lista.map((x,i) => {
-      const a = x.ass_reprovacao || null;
-      return `<tr>
-        <td>${i+1}</td>
-        <td>${x.descricao_objeto||'—'}</td>
-        <td>${x.sigla_unidade||'—'}</td>
-        <td>R$ ${fmtV(Number(x.valor_estimado||0))}</td>
-        <td>${a?a.nome:'—'}</td>
-        <td>${a?a.siape:'—'}</td>
-        <td>${a?fmtD(a.data):'—'}</td>
-        <td class="rep-just">${x.justificativa_reprovacao||'—'}</td>
-      </tr>`;
-    }).join('')}</table>`;
+  function relPriorizadas(autorizadas, priorizadas) {
+    if (!priorizadas.length)
+      return `<p class="nada">Nenhuma demanda foi priorizada até o momento.</p>`;
+    const lista = [...priorizadas].sort((a, b) => Number(b.gut_total || 0) - Number(a.gut_total || 0));
+    return `<p>As demandas autorizadas foram submetidas à priorização pela matriz GUT, em que se atribui nota de 1 a 5 à
+      Gravidade, à Urgência e à Tendência de cada necessidade; a pontuação final é o produto das três notas (máximo de 125).
+      Foram priorizadas <b>${nDem(priorizadas.length)}</b>, no valor de <b>${rs(somaV(priorizadas))}</b>, apresentadas abaixo
+      em ordem decrescente de pontuação.</p>
+      ${lista.map((x, i) => {
+        const p = passo(x, 'priorizacao');
+        const gut = x.gut_total ? `G ${x.gut_g || '—'} × U ${x.gut_u || '—'} × T ${x.gut_t || '—'} = <b>${x.gut_total}</b>` : '—';
+        return itemDemanda('4.' + (i + 1) + '.', x, [
+          `<li><b>Pontuação GUT:</b> ${gut}</li>`,
+          p ? `<li><b>Priorizada em:</b> ${fmtDia(p.data_hora)}</li>` : '',
+        ]);
+      }).join('')}`;
   }
 
-  function blocoAss(assinaturas, titulo) {
-    return `<div class="ass-bloco"><div class="ass-tit">${titulo}</div>
-    <div class="ass-grid">${assinaturas.map(a=>`
-      <div class="ass-item"><div class="ass-linha"></div>
-      <div class="ass-n">${a.nome}</div>
-      <div class="ass-s">SIAPE: ${a.siape}</div>
-      <div class="ass-d">${fmtD(a.data)}</div></div>`).join('')}
-    </div></div>`;
+  function relHomologadas(priorizadas, homologadas, recebido) {
+    if (!homologadas.length)
+      return `<p class="nada">Nenhuma demanda foi homologada até o momento.</p>`;
+    const total = somaV(homologadas);
+    return `<p>O ordenador de despesas homologou <b>${nDem(homologadas.length)}</b>, que passam a integrar o PAC ${document.getElementById('f-ano').value}
+      com valor total estimado de <b>${rs(total)}</b>${recebido ? `, equivalente a ${pct(total, recebido)} do orçamento recebido pela unidade (${rs(recebido)})` : ''}.</p>
+      ${homologadas.map((x, i) => {
+        const p = passo(x, 'homologacao');
+        return itemDemanda('5.' + (i + 1) + '.', x, [
+          x.gut_total ? `<li><b>Pontuação GUT:</b> ${x.gut_total}</li>` : '',
+          p ? `<li><b>Homologada em:</b> ${fmtDia(p.data_hora)}</li>` : '',
+          li('Manifestação do ordenador', p && p.justificativa),
+        ]);
+      }).join('')}
+      <p class="tot">Total homologado: ${rs(total)}.</p>`;
+  }
+
+  function relReprovadas(todas, reprovadas) {
+    if (!reprovadas.length)
+      return `<p class="nada">Nenhuma demanda foi reprovada.</p>`;
+    return `<p>Não foram acolhidas <b>${nDem(reprovadas.length)}</b>, no valor de <b>${rs(somaV(reprovadas))}</b>.
+      Os motivos registrados em cada caso são apresentados a seguir. Essas necessidades, caso persistam, somente poderão
+      ser atendidas nas condições excepcionais indicadas na apresentação deste relatório.</p>
+      ${reprovadas.map((x, i) => {
+        const p = passo(x, 'reprovacao');
+        return itemDemanda('6.' + (i + 1) + '.', x, [
+          li('Justificativa da necessidade', x.justificativa),
+          p ? `<li><b>Reprovada em:</b> ${fmtDia(p.data_hora)}${NIVEL_EXT[p.nivel] ? ', ' + NIVEL_EXT[p.nivel] : ''}</li>` : '',
+          `<li><b>Motivo da reprovação:</b> ${escHtml(x.justificativa_reprovacao || 'não informado')}</li>`,
+        ], true);
+      }).join('')}`;
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
