@@ -176,7 +176,8 @@
 
     <div id="area-senha-inicial" style="display:none">
       <div class="senha-inicial" id="senha-gerada">—</div>
-      <div class="senha-aviso">Anote esta senha — ela não será exibida novamente. O usuário deverá trocá-la no primeiro acesso.</div>
+      <div class="senha-aviso">Repasse ao usuário o e-mail e esta senha temporária — ela não será exibida novamente. No primeiro acesso, o sistema pedirá que ele defina uma senha própria.</div>
+      <div style="text-align:center;margin-top:10px"><button type="button" class="btn-secundario" onclick="copiarSenha('senha-gerada', this)">Copiar senha</button></div>
     </div>
 
     <div class="modal-footer">
@@ -186,7 +187,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202608121639"></script>
+<script src="api.js?v=202610271600"></script>
 <script>
   const token  = localStorage.getItem('pac_token') || '';
   const appUrl = APPS_SCRIPT_URL;
@@ -356,7 +357,7 @@
   }
 
   function resetarSenha(id, nome) {
-    if (!confirm('Resetar a senha de ' + nome + '?\nUma nova senha temporária será gerada e o usuário deverá trocá-la no próximo login.')) return;
+    if (!confirm('Resetar a senha de ' + nome + '?\nUma nova senha temporária será gerada e o usuário deverá trocá-la no próximo acesso.')) return;
     google.script.run
       .withSuccessHandler(function(resp) {
         if (!resp.ok) { alert('Erro: ' + (resp.erro||'Falha ao resetar.')); return; }
@@ -445,13 +446,13 @@
   function desativarUsuario(id) {
     if (!confirm('Desativar este usuário?')) return;
     google.script.run
-      .withSuccessHandler(function(resp) { if (resp.ok) carregarUsuarios(); })
+      .withSuccessHandler(function(resp) { if (resp.ok) carregarUsuarios(); else alert('Erro: ' + (resp.erro || 'falha ao desativar.')); })
       .chamarAcao(token, 'salvar_usuario', JSON.stringify({ usuario: { id_usuario: id, ativo: 'FALSE' } }));
   }
 
   function ativarUsuario(id) {
     google.script.run
-      .withSuccessHandler(function(resp) { if (resp.ok) carregarUsuarios(); })
+      .withSuccessHandler(function(resp) { if (resp.ok) carregarUsuarios(); else alert('Erro: ' + (resp.erro || 'falha ao ativar.')); })
       .chamarAcao(token, 'salvar_usuario', JSON.stringify({ usuario: { id_usuario: id, ativo: 'TRUE' } }));
   }
 
@@ -459,6 +460,12 @@
     google.script.run.chamarAcao(token, 'logout', '{}');
     try { localStorage.removeItem('pac_token'); } catch(e) {}
     navegar('login', '');
+  }
+
+  function copiarSenha(id, btn) {
+    const txt = document.getElementById(id).textContent.trim();
+    const ok = () => { const t = btn.textContent; btn.textContent = 'Copiada ✓'; setTimeout(() => btn.textContent = t, 1500); };
+    try { navigator.clipboard.writeText(txt).then(ok, () => {}); } catch (e) {}
   }
 
   function mostrarErro(msg) { const el = document.getElementById('erro-usuario'); el.textContent = msg; el.classList.add('vis'); }
@@ -471,5 +478,22 @@
     return u ? (u.sigla || u.nome) : '';
   }
 </script>
+<div class="overlay" id="overlay-reset">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <span class="modal-titulo">Senha redefinida</span>
+      <button class="modal-fechar" onclick="document.getElementById('overlay-reset').classList.remove('aberto')">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <p style="font-size:13px;color:#5F5E5A;margin:0 0 12px">Nova senha temporária de <b id="reset-nome">—</b>:</p>
+    <div class="senha-inicial" id="reset-senha">—</div>
+    <div class="senha-aviso">Repasse esta senha ao usuário — ela não será exibida novamente. No próximo acesso, ele deverá definir uma senha própria.</div>
+    <div class="modal-footer">
+      <button class="btn-secundario" onclick="copiarSenha('reset-senha', this)">Copiar senha</button>
+      <button class="btn-primario" onclick="document.getElementById('overlay-reset').classList.remove('aberto')">Fechar</button>
+    </div>
+  </div>
+</div>
 </body>
 </

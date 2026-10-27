@@ -174,10 +174,22 @@
   </button>
 </div>
 
-<script src="api.js?v=202608121639"></script>
+<script src="api.js?v=202610271600"></script>
 <script>
   let _token = '';
   let _primeiroAcesso = false;
+
+  // Vindo de uma tela interna com senha temporária ainda não trocada.
+  if (new URLSearchParams(location.search).has('trocar')) {
+    window.addEventListener('DOMContentLoaded', function () {
+      _primeiroAcesso = true;
+      try { _token = localStorage.getItem('pac_token') || ''; } catch (e) {}
+      document.getElementById('campo-atual').style.display = 'none';
+      document.getElementById('aviso-primeiro').style.display = 'block';
+      document.getElementById('tela-login').style.display = 'none';
+      document.getElementById('tela-trocar').style.display = 'block';
+    });
+  }
 
   // ── Tecla Enter ────────────────────────────────────────────────────────────
   document.getElementById('email').addEventListener('keydown', e => {

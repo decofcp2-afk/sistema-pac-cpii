@@ -326,7 +326,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202610271500"></script>
+<script src="api.js?v=202610271600"></script>
 <script>
   const APP_URL = APPS_SCRIPT_URL;
   const _di     = {};
@@ -426,7 +426,8 @@
   function trocarSenha() {
     const nova     = document.getElementById('s-nova').value;
     const confirma = document.getElementById('s-confirma').value;
-    if (!nova || nova.length < 6) { mostrarErroSenha('Senha deve ter ao menos 6 caracteres.'); return; }
+    if (!nova || nova.length < 8) { mostrarErroSenha('A senha deve ter ao menos 8 caracteres.'); return; }
+    if (!/[A-Z]/.test(nova) || !/[0-9]/.test(nova)) { mostrarErroSenha('Inclua ao menos uma letra maiúscula e um número.'); return; }
     if (nova !== confirma)         { mostrarErroSenha('As senhas não coincidem.'); return; }
 
     google.script.run

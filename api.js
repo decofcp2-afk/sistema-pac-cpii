@@ -71,6 +71,21 @@ async function _exercicioAtual() {
   return data ? data.valor : String(new Date().getFullYear());
 }
 
+// Gestão de usuários passa pela Edge Function `admin-usuarios`, que roda no
+// servidor com a chave de serviço (criar conta no Auth, definir senha
+// temporária, alterar perfis). O navegador só envia a sessão do usuário logado;
+// a função confere se ele é administrador antes de fazer qualquer coisa.
+async function _adminUsuarios(corpo) {
+  const c = await sb();
+  const { data, error } = await c.functions.invoke('admin-usuarios', { body: corpo });
+  if (error) {
+    let msg = error.message;
+    try { const j = await error.context.json(); if (j && j.erro) msg = j.erro; } catch (e) {}
+    return { ok: false, erro: msg };
+  }
+  return data || { ok: false, erro: 'Resposta vazia do servidor.' };
+}
+
 // Converte erro do PostgREST em mensagem legível. Violação de policy volta como
 // zero linhas ou 42501; violação de trigger traz a mensagem que escrevemos.
 function _erro(e) {
@@ -99,7 +114,11 @@ const ACOES = {
     if (!p.ativo) { await c.auth.signOut(); return { ok: false, erro: 'Usuário inativo.' }; }
     // O token deixa de ser um valor que o front guarda: quem cuida disso é o
     // supabase-js. Devolvemos o access_token só para não quebrar as telas.
-    return { ok: true, token: data.session.access_token, papel: p.papel, nome: p.nome };
+    // Usuário criado (ou com senha resetada) pelo sistema recebe senha
+    // temporária e precisa trocá-la no primeiro acesso.
+    const trocar = !!(data.user && data.user.user_metadata && data.user.user_metadata.deve_trocar_senha);
+    return { ok: true, token: data.session.access_token, papel: p.papel, nome: p.nome,
+             primeiro_acesso: trocar, deve_trocar_senha: trocar };
   },
 
   async logout() {
@@ -136,7 +155,9 @@ const ACOES = {
     if (String(senha_nova).length < 8)
       return { ok: false, erro: 'A senha deve ter ao menos 8 caracteres.' };
     const c = await sb();
-    const { error } = await c.auth.updateUser({ password: senha_nova });
+    const { error } = await c.auth.updateUser({ password: senha_nova, data: { deve_trocar_senha: false } });
+    if (error && /same|different from the old/i.test(error.message))
+      return { ok: false, erro: 'A nova senha deve ser diferente da senha temporária.' };
     return error ? { ok: false, erro: _erro(error) } : { ok: true };
   },
 
@@ -401,42 +422,18 @@ const ACOES = {
   },
 
   async salvar_usuario({ usuario }) {
-    const c = await sb();
-    if (!usuario.id_usuario)
-      return { ok: false, erro: 'Criação de usuário exige convite pelo painel do Supabase '
-                              + '(Authentication → Add user). Depois edite o perfil aqui.' };
-    const { error } = await c.from('perfis').update({
-      nome: usuario.nome, papel: usuario.papel,
-      id_unidade_fk: usuario.id_unidade_fk || null,
-      matricula_siape: usuario.matricula_siape || null,
-      ativo: usuario.ativo !== false,
-    }).eq('id_usuario', usuario.id_usuario);
-    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+    if (!usuario.id_usuario) return _adminUsuarios({ acao: 'criar', usuario });
+    return _adminUsuarios({ acao: 'editar', usuario });
   },
 
   async deletar_usuario({ id_usuario }) {
-    const c = await sb();
-    const { error } = await c.from('perfis').update({ ativo: false }).eq('id_usuario', id_usuario);
-    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+    return _adminUsuarios({ acao: 'editar', usuario: { id_usuario, ativo: false } });
   },
 
-  // Reset agora é por e-mail: ninguém — nem o admin — passa a conhecer a senha.
+  // Gera nova senha temporária, exibida ao administrador; o usuário troca no
+  // próximo acesso. (O reset por e-mail não funciona sem SMTP próprio.)
   async resetar_senha({ id_usuario }) {
-    const c = await sb();
-    const { data } = await c.from('perfis').select('email').eq('id_usuario', id_usuario).single();
-    if (!data) return { ok: false, erro: 'Usuário não encontrado.' };
-    const { error } = await c.auth.resetPasswordForEmail(data.email, {
-      redirectTo: window.location.origin + '/sistema-pac-cpii/Login.html',
-    });
-    if (error) return { ok: false, erro: _erro(error) };
-    // Admin.html exibe `resp.senha_inicial` numa janela. Nao existe mais senha
-    // inicial: quem define e o proprio usuario, pelo link. Preencho o campo com
-    // a explicacao para a tela nao mostrar "undefined".
-    return {
-      ok: true,
-      senha_inicial: 'Link de redefinicao enviado para ' + data.email
-                   + ' — o proprio usuario define a senha.',
-    };
+    return _adminUsuarios({ acao: 'resetar', id_usuario });
   },
 
   // ─── Configuração e consulta pública ───────────────────────────────────────
@@ -731,7 +728,10 @@ window.google.script.run = _criarRunner(null, null);
   const publicas = ['publico.html', 'login.html', 'index.html', ''];
   if (publicas.includes(pagina)) return;
   const { data: { session } } = await c.auth.getSession();
-  if (!session) location.href = _pacUrlPagina('login');
+  if (!session) { location.href = _pacUrlPagina('login'); return; }
+  // Senha temporária ainda não trocada: nenhuma tela interna antes da troca.
+  const md = session.user && session.user.user_metadata;
+  if (md && md.deve_trocar_senha) location.href = _pacUrlPagina('login') + '?trocar=1';
 })();
 
 })();
