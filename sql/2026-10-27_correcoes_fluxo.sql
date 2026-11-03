@@ -1,5 +1,6 @@
 -- Correções do fluxo do PAC — encontradas no teste ponta a ponta de 27/10/2026
--- (exercício 2024, dados fictícios). Aplicar no SQL Editor do Supabase.
+-- (exercício 2024, dados fictícios). APLICADO em 03/11/2026, com autorização do gestor,
+-- e testado ponta a ponta no mesmo dia.
 --
 -- 1. Repasse em cascata: hoje só quem gere a unidade dona da dotação (Reitoria)
 --    consegue repassar. A PROAD não consegue repassar às diretorias, nem as
