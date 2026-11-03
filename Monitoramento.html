@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PMO — Monitoramento da Execução</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #F1EFE8; color: #2C2C2A; min-height: 100vh; }
+  .topbar { background: #3C3489; height: 56px; display: flex; align-items: center; padding: 0 24px; gap: 16px; position: sticky; top: 0; z-index: 100; }
+  .topbar-logo { font-size: 15px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .topbar-sub  { font-size: 12px; color: rgba(255,255,255,0.55); border-left: 1px solid rgba(255,255,255,0.2); padding-left: 14px; }
+  .topbar-spacer { flex: 1; }
+  .topbar-usuario { display: flex; align-items: center; gap: 10px; font-size: 13px; color: rgba(255,255,255,0.85); }
+  .avatar { width: 32px; height: 32px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #fff; flex-shrink: 0; }
+  .btn-logout { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 5px 12px; font-size: 12px; color: rgba(255,255,255,0.85); cursor: pointer; }
+  .layout { display: flex; min-height: calc(100vh - 56px); }
+  .sidebar { width: 220px; background: #fff; border-right: 1px solid #D3D1C7; padding: 20px 0; flex-shrink: 0; }
+  .nav-titulo { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: #B4B2A9; padding: 0 18px 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 18px; font-size: 13px; color: #5F5E5A; text-decoration: none; border-left: 3px solid transparent; cursor: pointer; }
+  .nav-item:hover { background: #F1EFE8; color: #2C2C2A; }
+  .nav-item.ativo { background: #EEEDFE; color: #3C3489; border-left-color: #3C3489; font-weight: 500; }
+  .nav-item svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
+  .main { flex: 1; padding: 28px 32px; max-width: 1240px; min-width: 0; }
+  .cabecalho { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+  .page-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .page-sub { font-size: 13px; color: #888780; }
+  .escopo { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #5F5E5A; }
+  .escopo select { padding: 7px 10px; border: 1px solid #D3D1C7; border-radius: 7px; font-size: 13px; background: #fff; min-width: 240px; }
+  .selo { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: #F1EFE8; color: #5F5E5A; }
+
+  .abas { display: flex; gap: 4px; border-bottom: 1px solid #D3D1C7; margin-bottom: 18px; flex-wrap: wrap; }
+  .aba { background: none; border: none; border-bottom: 2px solid transparent; padding: 9px 14px; font-size: 13px; color: #5F5E5A; cursor: pointer; margin-bottom: -1px; }
+  .aba:hover { color: #2C2C2A; }
+  .aba.ativa { color: #3C3489; border-bottom-color: #3C3489; font-weight: 600; }
+  .aba .cnt { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 99px; font-size: 10.5px; font-weight: 700; background: #FCEBEB; color: #A32D2D; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .card { background: #fff; border: 1px solid #D3D1C7; border-radius: 12px; padding: 14px 16px; }
+  .card-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: #888780; margin-bottom: 6px; }
+  .card-valor { font-size: 19px; font-weight: 600; }
+  .card-det { font-size: 11.5px; color: #888780; margin-top: 3px; }
+  .card.vermelho .card-valor { color: #A32D2D; } .card.amarelo .card-valor { color: #7A4A00; }
+
+  .secao { background: #fff; border: 1px solid #D3D1C7; border-radius: 12px; overflow: hidden; margin-bottom: 18px; }
+  .secao-header { padding: 13px 18px; border-bottom: 1px solid #F1EFE8; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .secao-titulo { font-size: 14px; font-weight: 600; flex: 1; }
+  .grade2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 1100px) { .grade2 { grid-template-columns: 1fr; } }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: #888780; padding: 9px 12px; text-align: left; background: #FAFAF8; border-bottom: 1px solid #F1EFE8; white-space: nowrap; }
+  th.num, td.num { text-align: right; }
+  td { font-size: 13px; padding: 9px 12px; border-bottom: 1px solid #F8F7F4; vertical-align: middle; }
+  td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr.clicavel { cursor: pointer; } tbody tr.clicavel:hover td { background: #FAFAF8; }
+  .tabela-scroll { overflow-x: auto; }
+
+  .cod-dem { display: inline-block; font-size: 10.5px; font-weight: 700; color: #3C3489; background: #EEEDFE; border-radius: 4px; padding: 1px 6px; margin-bottom: 3px; white-space: nowrap; }
+  .sub { display: block; font-size: 11px; color: #888780; margin-top: 2px; }
+  .barra { height: 6px; background: #F1EFE8; border-radius: 99px; overflow: hidden; min-width: 70px; }
+  .barra > div { height: 100%; background: #534AB7; border-radius: 99px; }
+  .barra.pago > div { background: #1D9E75; }
+
+  .sit { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .sit-aguardando { background: #F1EFE8; color: #5F5E5A; }
+  .sit-em_contratacao { background: #E6F1FB; color: #0C447C; }
+  .sit-empenhada { background: #EEEDFE; color: #3C3489; }
+  .sit-em_execucao { background: #FAEEDA; color: #633806; }
+  .sit-concluida { background: #E1F5EE; color: #085041; }
+  .sit-nao_executada { background: #FCEBEB; color: #791F1F; }
+
+  .sem { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; white-space: nowrap; }
+  .sem::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #D3D1C7; flex-shrink: 0; }
+  .sem-vencido::before { background: #E24B4A; } .sem-vencido { color: #A32D2D; font-weight: 600; }
+  .sem-a_vencer::before { background: #EF9F27; } .sem-a_vencer { color: #7A4A00; font-weight: 600; }
+  .sem-no_prazo::before { background: #1D9E75; }
+  .sem-cumprido::before { background: #1D9E75; } .sem-cumprido { color: #085041; }
+  .sem-cumprido_atraso::before { background: #B4B2A9; } .sem-cumprido_atraso { color: #5F5E5A; }
+  .sem-sem_prazo { color: #888780; } .sem-nao_aplica { color: #B4B2A9; }
+
+  .filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .filtros select, .filtros input { padding: 6px 10px; border: 1px solid #D3D1C7; border-radius: 7px; font-size: 12.5px; background: #fff; }
+  .btn { border: 1px solid #D3D1C7; background: #fff; color: #444441; border-radius: 7px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: #F1EFE8; }
+  .btn-p { background: #3C3489; border-color: #3C3489; color: #fff; font-weight: 600; } .btn-p:hover { background: #534AB7; }
+  .btn-v { background: #085041; border-color: #085041; color: #fff; font-weight: 600; } .btn-v:hover { background: #0F6E56; }
+  .btn-r { color: #A32D2D; border-color: #F7C1C1; } .btn-r:hover { background: #FCEBEB; }
+  .btn-mini { padding: 3px 8px; font-size: 11.5px; }
+  .so-editor { } body.leitura .so-editor { display: none !important; }
+
+  .carregando, .vazio { text-align: center; padding: 34px; color: #B4B2A9; font-size: 13px; }
+  .grupo-un { padding: 10px 18px; background: #FAFAF8; font-size: 12px; font-weight: 700; color: #5F5E5A; border-bottom: 1px solid #F1EFE8; }
+
+  /* Modal */
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; overflow-y: auto; padding: 24px; }
+  .overlay.aberto { display: flex; align-items: flex-start; justify-content: center; }
+  .modal { background: #fff; border-radius: 14px; width: 100%; max-width: 980px; margin: auto; }
+  .modal.estreito { max-width: 560px; }
+  .modal-header { display: flex; align-items: flex-start; gap: 12px; padding: 20px 24px 14px; border-bottom: 1px solid #F1EFE8; }
+  .modal-titulo { font-size: 16px; font-weight: 600; flex: 1; line-height: 1.4; }
+  .modal-fechar { background: none; border: none; font-size: 20px; color: #888780; cursor: pointer; line-height: 1; }
+  .modal-corpo { padding: 18px 24px 22px; }
+  .bloco { margin-bottom: 20px; }
+  .bloco-titulo { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #888780; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .bloco-titulo .btn { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .caixa { border: 1px solid #F1EFE8; border-radius: 10px; overflow: hidden; }
+  .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .campo { display: flex; flex-direction: column; gap: 4px; }
+  .campo.largo { grid-column: 1 / -1; }
+  .campo label { font-size: 12px; font-weight: 600; color: #444441; }
+  .campo input, .campo select, .campo textarea { padding: 8px 10px; border: 1px solid #D3D1C7; border-radius: 7px; font-size: 13px; font-family: inherit; }
+  .campo input:focus, .campo select:focus, .campo textarea:focus { outline: none; border-color: #534AB7; box-shadow: 0 0 0 3px rgba(83,74,183,0.1); }
+  .campo .hint { font-size: 11px; color: #B4B2A9; }
+  .rodape { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .msg-erro { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 8px; padding: 8px 12px; font-size: 13px; color: #791F1F; margin-bottom: 12px; display: none; }
+  .msg-erro.vis { display: block; }
+  .mini-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .mini { background: #FAFAF8; border-radius: 9px; padding: 10px 12px; }
+  .mini b { display: block; font-size: 15px; margin-top: 2px; }
+  .mini span { font-size: 11px; color: #888780; }
+  .linha-cob { padding: 9px 12px; border-bottom: 1px solid #F8F7F4; font-size: 12.5px; }
+  .linha-cob:last-child { border-bottom: none; }
+  .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: #2C2C2A; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 400; display: none; }
+  .toast.vis { display: block; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="topbar-logo" title="Planejamento e Monitoramento Orçamentário">PMO</span>
+  <span class="topbar-sub">Monitoramento da Execução</span>
+  <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:4px 10px;">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <select id="sel-exercicio" style="background:transparent;border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;outline:none;padding:0 2px;" onchange="trocarExercicio(this.value)"></select>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-usuario">
+    <div class="avatar" id="av">?</div>
+    <div>
+      <div style="font-weight:500" id="nome-usuario">Carregando...</div>
+      <div style="font-size:11px;opacity:0.7" id="unidade-usuario"></div>
+    </div>
+    <button class="btn-logout" onclick="fazerLogout()">Sair</button>
+  </div>
+</div>
+
+<div class="layout">
+  <nav class="sidebar" id="sidebar"></nav>
+  <main class="main">
+    <div class="cabecalho">
+      <div>
+        <div class="page-title">Monitoramento da Execução</div>
+        <div class="page-sub" id="page-sub">Demandas homologadas — exercício <span id="exercicio-label">…</span></div>
+      </div>
+      <div class="escopo" id="caixa-escopo" style="display:none">
+        <label for="sel-escopo">Ver</label>
+        <select id="sel-escopo" onchange="carregar()"></select>
+      </div>
+      <span class="selo" id="selo-modo" style="display:none"></span>
+    </div>
+
+    <div class="abas" id="abas">
+      <button class="aba ativa" data-aba="painel" onclick="mostrarAba('painel')">Painel</button>
+      <button class="aba" data-aba="demandas" onclick="mostrarAba('demandas')">Demandas</button>
+      <button class="aba" data-aba="empenhos" onclick="mostrarAba('empenhos')">Empenhos</button>
+      <button class="aba" data-aba="pendencias" onclick="mostrarAba('pendencias')">Pendências<span class="cnt" id="cnt-pend" style="display:none"></span></button>
+      <button class="aba" data-aba="calendario" onclick="mostrarAba('calendario')">Calendário de marcos</button>
+    </div>
+
+    <div id="conteudo"><div class="carregando">Carregando…</div></div>
+  </main>
+</div>
+
+<div class="overlay" id="overlay" onclick="if(event.target===this) fecharModal()">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div class="modal-titulo" id="modal-titulo"></div>
+      <button class="modal-fechar" onclick="fecharModal()" aria-label="Fechar">×</button>
+    </div>
+    <div class="modal-corpo" id="modal-corpo"></div>
+  </div>
+</div>
+<div class="overlay" id="overlay2" onclick="if(event.target===this) fecharModal2()" style="z-index:300">
+  <div class="modal estreito">
+    <div class="modal-header">
+      <div class="modal-titulo" id="modal2-titulo"></div>
+      <button class="modal-fechar" onclick="fecharModal2()" aria-label="Fechar">×</button>
+    </div>
+    <div class="modal-corpo"><div class="msg-erro" id="modal2-erro"></div><div id="modal2-corpo"></div></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="api.js?v=202611031500"></script>
+<script>
+  const token = localStorage.getItem('pac_token') || '';
+  let _usuario = null, _ctx = null, _dados = null, _aba = 'painel';
+  let _fichaAtual = null, _empenhoAtual = null;
+
+  const MENUS = {
+    chefe_secao:   [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Minhas demandas', page:'demandas', icon:'list' }, { label:'Execução', page:'monitoramento', icon:'activity' }],
+    chefia:        [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Minhas demandas', page:'demandas', icon:'list' }, { label:'Aprovar demandas', page:'aprovacoes', icon:'check' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }, { label:'Execução', page:'monitoramento', icon:'activity' }],
+    ord_despesas:  [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }, { label:'Prioridades GUT', page:'prioridades', icon:'star' }, { label:'Homologar plano', page:'homologacao', icon:'shield' }, { label:'Monitoramento', page:'monitoramento', icon:'activity' }],
+    licitacoes:    [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Usuários', page:'admin', icon:'users' }, { label:'Todas as demandas', page:'demandas', icon:'list' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Prioridades GUT', page:'prioridades', icon:'star' }, { label:'Homologar plano', page:'homologacao', icon:'shield' }, { label:'Monitoramento', page:'monitoramento', icon:'activity' }],
+    monitoramento: [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Monitoramento', page:'monitoramento', icon:'activity' }],
+  };
+  const ICONS = {
+    home: '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+    list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>',
+    check: '<path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+    dollar: '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>',
+    star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    users: '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',
+    activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+  };
+  const ESTADOS = { vencido: 'Vencido', a_vencer: 'A vencer', no_prazo: 'No prazo', sem_prazo: 'Sem prazo',
+                    cumprido: 'Cumprido', cumprido_atraso: 'Cumprido com atraso', nao_aplica: '—' };
+  const DOCS = { ordem_fornecimento: 'Ordem de fornecimento', ordem_servico: 'Ordem de serviço', requisicao: 'Requisição', outro: 'Outro' };
+  const CANAIS = { sei: 'SEI', email: 'E-mail', telefone: 'Telefone', presencial: 'Presencial', outro: 'Outro' };
+  const TIPOS_EMP = { estimativo: 'Estimativo', global: 'Global', ordinario: 'Ordinário' };
+
+  // ── Utilitários ───────────────────────────────────────────────────────────
+  const $ = id => document.getElementById(id);
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function fmtV(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function fmtD(d) { if (!d) return '—'; if (d === 'informado') return 'informado'; const s = String(d).slice(0, 10); return s.slice(8,10) + '/' + s.slice(5,7) + '/' + s.slice(0,4); }
+  function fmtDH(d) { if (!d) return '—'; try { return new Date(d).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); } catch (e) { return '—'; } }
+  function pct(a, b) { return b ? Math.round(a / b * 100) : 0; }
+  function barra(a, b, cls) { const p = Math.min(100, pct(a, b)); return `<div class="barra ${cls||''}" title="${p}%"><div style="width:${p}%"></div></div>`; }
+  function sem(m) {
+    if (!m) return '<span class="sem sem-nao_aplica">—</span>';
+    const dias = m.estado === 'vencido' ? ` há ${-m.dias} d` : m.estado === 'a_vencer' ? ` em ${m.dias} d` : '';
+    return `<span class="sem sem-${m.estado}" title="${esc(m.nome)} — prazo ${fmtD(m.prazo)}">${esc(m.nome)}${m.prazo ? ' · ' + fmtD(m.prazo) : ''}${dias}</span>`;
+  }
+  function sit(d) { return `<span class="sit sit-${d.situacao}">${esc(d.situacao_nome)}${d.empenho_parcial && d.situacao==='empenhada' ? ' (parcial)' : ''}</span>`; }
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('vis'); setTimeout(() => t.classList.remove('vis'), 2600); }
+  function chamar(acao, params) {
+    return new Promise(ok => google.script.run.withSuccessHandler(ok)
+      .withFailureHandler(e => ok({ ok: false, erro: e.message })).chamarAcao(token, acao, JSON.stringify(params || {})));
+  }
+  const podeEditar = () => _ctx && _ctx.pode_editar;
+  const podeProcesso = () => _usuario && ['monitoramento','chefe_secao','chefia','licitacoes','ord_despesas'].includes(_usuario.papel);
+
+  // ── Exercício e navegação ─────────────────────────────────────────────────
+  function getExercicio() { return sessionStorage.getItem('pac_exercicio') || ''; }
+  function trocarExercicio(ano) { sessionStorage.setItem('pac_exercicio', String(ano)); carregar(); }
+  function popularSeletorExercicios(atualCfg) {
+    const base = Number(atualCfg) || new Date().getFullYear();
+    const atual = getExercicio() || base;
+    const anos = []; for (let a = base - 3; a <= base + 2; a++) anos.push(a);
+    $('sel-exercicio').innerHTML = anos.map(a => `<option value="${a}" style="background:#3C3489;color:#fff"${String(a)===String(atual)?' selected':''}>${a}</option>`).join('');
+    if (!getExercicio()) sessionStorage.setItem('pac_exercicio', String(base));
+  }
+  function navegar(page) { window.location.href = _pacUrlPagina(page); }
+  function fazerLogout() { google.script.run.chamarAcao(token, 'logout', '{}'); try { localStorage.removeItem('pac_token'); } catch (e) {} navegar('login'); }
+
+  // ── Inicialização ─────────────────────────────────────────────────────────
+  (async function iniciar() {
+    const r = await chamar('dados_usuario');
+    if (!r.ok) { navegar('login'); return; }
+    _usuario = r.usuario;
+    $('av').textContent = _usuario.nome.charAt(0).toUpperCase();
+    $('nome-usuario').textContent = _usuario.nome;
+    $('unidade-usuario').textContent = _usuario.unidade || '';
+    const menus = MENUS[_usuario.papel] || [];
+    $('sidebar').innerHTML = '<div class="nav-titulo" style="margin-top:8px">Menu</div>' + menus.map(m =>
+      `<a class="nav-item${m.page==='monitoramento'?' ativo':''}" href="#" onclick="navegar('${m.page}');return false;"><svg viewBox="0 0 24 24">${ICONS[m.icon]||''}</svg> ${m.label}</a>`).join('');
+
+    _ctx = await chamar('mon_contexto');
+    if (!_ctx.ok) { $('conteudo').innerHTML = `<div class="vazio">${esc(_ctx.erro)}</div>`; return; }
+    if (!podeEditar()) {
+      document.body.classList.add('leitura');
+      $('selo-modo').style.display = '';
+      $('selo-modo').textContent = 'Somente consulta';
+    }
+    if (_ctx.opcoes_escopo.length) {
+      $('caixa-escopo').style.display = '';
+      $('sel-escopo').innerHTML = _ctx.opcoes_escopo.map(o => `<option value="${o.valor}">${esc(o.nome)}</option>`).join('');
+    }
+    popularSeletorExercicios(_ctx.exercicio);
+    const abaUrl = new URLSearchParams(location.search).get('aba');
+    if (abaUrl) _aba = abaUrl;
+    carregar();
+  })();
+
+  async function carregar() {
+    $('exercicio-label').textContent = getExercicio();
+    $('conteudo').innerHTML = '<div class="carregando">Carregando…</div>';
+    const escopo = $('sel-escopo').value || 'todos';
+    const r = await chamar('mon_dados', { exercicio: getExercicio(), escopo });
+    if (!r.ok) { $('conteudo').innerHTML = `<div class="vazio">${esc(r.erro)}</div>`; return; }
+    _dados = r;
+    const n = r.resumo.vencidos;
+    $('cnt-pend').style.display = n ? '' : 'none';
+    $('cnt-pend').textContent = n;
+    mostrarAba(_aba);
+  }
+
+  function mostrarAba(aba) {
+    _aba = aba;
+    document.querySelectorAll('.aba').forEach(b => b.classList.toggle('ativa', b.dataset.aba === aba));
+    if (!_dados) return;
+    ({ painel: renderPainel, demandas: renderDemandas, empenhos: renderEmpenhos,
+       pendencias: renderPendencias, calendario: renderCalendario })[aba]();
+  }
+
+  // ── Painel ────────────────────────────────────────────────────────────────
+  function renderPainel() {
+    const s = _dados.resumo;
+    const linhas = (lista, rotulo) => lista.length ? `
+      <table><thead><tr><th>${rotulo}</th><th class="num">Demandas</th><th class="num">Homologado</th><th class="num">Empenhado</th><th>Pedido</th><th class="num">Atrasadas</th></tr></thead><tbody>
+      ${lista.map(x => `<tr>
+        <td>${esc(x.nome)}</td><td class="num">${x.n}</td><td class="num">${fmtV(x.planejado)}</td><td class="num">${fmtV(x.reservado)}</td>
+        <td style="min-width:140px"><div style="display:flex;align-items:center;gap:8px">${barra(x.pedido, x.planejado)}<span style="font-size:11.5px;color:#888780">${pct(x.pedido, x.planejado)}%</span></div></td>
+        <td class="num">${x.atrasadas ? `<span class="sem sem-vencido">${x.atrasadas}</span>` : '—'}</td></tr>`).join('')}
+      </tbody></table>` : '<div class="vazio">Nenhuma demanda homologada neste filtro.</div>';
+    const sits = ['aguardando','em_contratacao','empenhada','em_execucao','concluida','nao_executada'];
+    const nomes = { aguardando:'Aguardando início', em_contratacao:'Em contratação', empenhada:'Empenhada', em_execucao:'Em execução', concluida:'Concluída', nao_executada:'Não executada' };
+    $('conteudo').innerHTML = `
+      <div class="cards">
+        <div class="card"><div class="card-label">Homologado</div><div class="card-valor">${fmtV(s.planejado)}</div><div class="card-det">${s.n} demanda(s)</div></div>
+        <div class="card"><div class="card-label">Empenhado (reservado)</div><div class="card-valor">${fmtV(s.reservado)}</div><div class="card-det">${pct(s.reservado, s.planejado)}% do homologado</div></div>
+        <div class="card"><div class="card-label">Pedido</div><div class="card-valor">${fmtV(s.pedido)}</div><div class="card-det">${pct(s.pedido, s.planejado)}% do homologado</div></div>
+        <div class="card"><div class="card-label">Pago</div><div class="card-valor">${fmtV(s.pago)}</div><div class="card-det">liquidado ${fmtV(s.liquidado)}</div></div>
+        <div class="card ${s.vencidos?'vermelho':''}"><div class="card-label">Marcos vencidos</div><div class="card-valor">${s.vencidos}</div><div class="card-det">a vencer em 15 dias: ${s.a_vencer}</div></div>
+      </div>
+      <div class="secao"><div class="secao-header"><span class="secao-titulo">Situação das demandas</span></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;padding:14px 18px">
+          ${sits.map(k => `<button class="btn" onclick="_filtroSit='${k}';mostrarAba('demandas')"><span class="sit sit-${k}">${nomes[k]}</span> <b style="margin-left:4px">${s.por_situacao[k]||0}</b></button>`).join('')}
+        </div></div>
+      <div class="grade2">
+        <div class="secao"><div class="secao-header"><span class="secao-titulo">Por unidade</span></div><div class="tabela-scroll">${linhas(s.por_unidade, 'Unidade')}</div></div>
+        <div class="secao"><div class="secao-header"><span class="secao-titulo">Por categoria de despesa</span></div><div class="tabela-scroll">${linhas(s.por_categoria, 'Categoria')}</div></div>
+      </div>`;
+  }
+
+  // ── Demandas ──────────────────────────────────────────────────────────────
+  let _filtroSit = '', _filtroSem = '', _busca = '';
+  function renderDemandas() {
+    const lista = _dados.demandas.filter(d =>
+      (!_filtroSit || d.situacao === _filtroSit) &&
+      (!_filtroSem || d.pior_estado === _filtroSem) &&
+      (!_busca || [d.codigo, d.descricao_objeto, d.sigla_unidade, d.categoria].some(v => String(v||'').toLowerCase().includes(_busca.toLowerCase()))));
+    const opt = (o, v) => Object.entries(o).map(([k, n]) => `<option value="${k}"${k===v?' selected':''}>${n}</option>`).join('');
+    $('conteudo').innerHTML = `
+      <div class="secao">
+        <div class="secao-header">
+          <span class="secao-titulo">${lista.length} de ${_dados.demandas.length} demanda(s) homologada(s)</span>
+          <div class="filtros">
+            <select onchange="_filtroSit=this.value;renderDemandas()"><option value="">Todas as situações</option>${opt({aguardando:'Aguardando início',em_contratacao:'Em contratação',empenhada:'Empenhada',em_execucao:'Em execução',concluida:'Concluída',nao_executada:'Não executada'}, _filtroSit)}</select>
+            <select onchange="_filtroSem=this.value;renderDemandas()"><option value="">Todos os prazos</option>${opt({vencido:'Com marco vencido',a_vencer:'Com marco a vencer',no_prazo:'No prazo',sem_prazo:'Sem prazo definido'}, _filtroSem)}</select>
+            <input type="search" placeholder="ID, objeto, unidade…" value="${esc(_busca)}" oninput="_busca=this.value;clearTimeout(window._tb);window._tb=setTimeout(renderDemandas,250)">
+          </div>
+        </div>
+        <div class="tabela-scroll">${lista.length ? `
+        <table><thead><tr><th>Demanda</th><th>Unidade</th><th class="num">Homologado</th><th class="num">Empenhado</th><th class="num">Pedido</th><th>Execução</th><th>Situação</th><th>Próximo marco</th></tr></thead><tbody>
+        ${lista.map(d => `<tr class="clicavel" onclick="abrirFicha('${d.id_demanda}')">
+          <td style="max-width:280px"><span class="cod-dem">${esc(d.codigo)}</span><br>${esc(d.descricao_objeto)}<span class="sub">${esc(d.categoria||'Sem categoria')}</span></td>
+          <td>${esc(d.sigla_unidade)}</td>
+          <td class="num">${fmtV(d.valor_estimado)}</td><td class="num">${fmtV(d.reservado)}</td><td class="num">${fmtV(d.pedido)}</td>
+          <td style="min-width:90px">${barra(d.pedido, d.valor_estimado)}<span class="sub">${d.pct_execucao}%</span></td>
+          <td>${sit(d)}</td>
+          <td>${sem(d.proximo_marco)}</td></tr>`).join('')}
+        </tbody></table>` : '<div class="vazio">Nenhuma demanda neste filtro.</div>'}</div>
+      </div>`;
+  }
+
+  // ── Ficha da demanda ──────────────────────────────────────────────────────
+  async function abrirFicha(id) {
+    abrirModal('Carregando…', '<div class="carregando">Carregando…</div>');
+    const r = await chamar('mon_ficha', { id_demanda: id });
+    if (!r.ok) { $('modal-corpo').innerHTML = `<div class="vazio">${esc(r.erro)}</div>`; return; }
+    _fichaAtual = r;
+    const d = r.demanda;
+    $('modal-titulo').innerHTML = `<span class="cod-dem">${esc(d.codigo)}</span> ${esc(d.descricao_objeto)}<span class="sub">${esc(d.nome_unidade)} · ${esc(d.categoria||'Sem categoria')}${d.natureza_despesa ? ' · ND ' + esc(d.natureza_despesa) : ''}</span>`;
+    const ed = podeEditar(), proc = podeProcesso() && !d.encerramento;
+    $('modal-corpo').innerHTML = `
+      <div class="mini-cards">
+        <div class="mini"><span>Homologado</span><b>${fmtV(d.valor_estimado)}</b></div>
+        <div class="mini"><span>Empenhado (reservado)</span><b>${fmtV(d.reservado)}</b></div>
+        <div class="mini"><span>Pedido</span><b>${fmtV(d.pedido)}</b></div>
+        <div class="mini"><span>Pago</span><b>${fmtV(d.pago)}</b></div>
+        <div class="mini"><span>Situação</span><b style="font-size:13px;margin-top:4px">${sit(d)}</b></div>
+      </div>
+
+      <div class="bloco"><div class="bloco-titulo">Processo</div>
+        <div class="form">
+          <div class="campo"><label>Processo SEI</label><input id="fx-sei" value="${esc(d.processo_sei||'')}" ${proc?'':'disabled'} placeholder="23040.000000/2026-00"></div>
+          <div class="campo"><label>Abertura do processo</label><input type="date" id="fx-abert" value="${esc(d.data_abertura_processo||'')}" ${proc?'':'disabled'}></div>
+          <div class="campo"><label>Envio para contratação</label><input type="date" id="fx-envio" value="${esc(d.data_envio_processo||'')}" ${proc?'':'disabled'}></div>
+          ${proc ? `<div class="campo" style="justify-content:flex-end"><button class="btn btn-p" onclick="salvarProcesso()">Salvar processo</button></div>` : ''}
+        </div>
+        <div class="msg-erro" id="fx-erro" style="margin-top:10px"></div>
+      </div>
+
+      <div class="bloco"><div class="bloco-titulo">Marcos e prazos</div>
+        <div class="caixa"><table><thead><tr><th>Marco</th><th>Prazo</th><th>Cumprido em</th><th>Situação</th>${ed?'<th></th>':''}</tr></thead><tbody>
+        ${d.marcos.map(m => `<tr><td>${esc(m.nome)}</td>
+          <td>${fmtD(m.prazo)}${m.prazo_proprio ? ' <span class="sub" style="display:inline">(próprio)</span>' : ''}</td>
+          <td>${fmtD(m.cumprido_em)}</td><td>${sem({ ...m, nome: ESTADOS[m.estado], prazo: null })}</td>
+          ${ed ? `<td style="text-align:right"><button class="btn btn-mini" onclick="editarPrazo('${m.tipo}')">Prazo</button>
+                 ${['vencido','a_vencer'].includes(m.estado) ? `<button class="btn btn-mini" onclick="registrarCobranca('${d.id_demanda}','${m.tipo}')">Cobrar</button>` : ''}</td>` : ''}
+        </tr>`).join('')}</tbody></table></div>
+      </div>
+
+      <div class="bloco"><div class="bloco-titulo">Empenhos e pedidos ${ed && !d.encerramento ? `<button class="btn btn-mini" onclick="novaReservaDaFicha()">+ Reservar em empenho</button>` : ''}</div>
+        ${r.vinculos.length ? r.vinculos.map(v => `
+          <div class="caixa" style="margin-bottom:10px">
+            <div style="display:flex;gap:10px;align-items:center;padding:10px 12px;background:#FAFAF8;flex-wrap:wrap">
+              <b>${esc(v.empenho.numero)}</b><span class="sub" style="display:inline;margin:0">${fmtD(v.empenho.data_emissao)} · ${esc(v.empenho.favorecido_nome||'')}</span>
+              <span style="margin-left:auto;font-size:12.5px">Reservado <b>${fmtV(v.valor_reservado)}</b> · pedido <b>${fmtV(v.pedido)}</b> · saldo <b>${fmtV(v.saldo_reserva)}</b></span>
+              ${ed ? `<button class="btn btn-mini" onclick="novoPedido('${v.id_vinculo}', ${v.saldo_reserva})">+ Pedido</button>` : ''}
+            </div>
+            ${v.execucoes.length ? `<table><thead><tr><th>Data</th><th>Documento</th><th class="num">Valor</th><th>Nota fiscal</th><th class="num">Liquidado</th><th class="num">Pago</th>${ed?'<th></th>':''}</tr></thead><tbody>
+              ${v.execucoes.map(x => `<tr><td>${fmtD(x.data_pedido)}</td><td>${esc(DOCS[x.tipo_documento]||'')} ${esc(x.numero_documento||'')}<span class="sub">${esc(x.descricao||'')}</span></td>
+                <td class="num">${fmtV(x.valor)}</td><td>${esc(x.nota_fiscal||'—')}</td>
+                <td class="num">${fmtV(x.valor_liquidado)}<span class="sub">${fmtD(x.data_liquidacao)}</span></td>
+                <td class="num">${fmtV(x.valor_pago)}<span class="sub">${fmtD(x.data_pagamento)}</span></td>
+                ${ed ? `<td style="text-align:right;white-space:nowrap"><button class="btn btn-mini" onclick='editarPedido(${JSON.stringify(x).replace(/'/g,"&#39;")})'>Editar</button></td>` : ''}</tr>`).join('')}
+            </tbody></table>` : '<div class="vazio" style="padding:14px">Nenhum pedido lançado nesta reserva.</div>'}
+          </div>`).join('') : '<div class="caixa"><div class="vazio" style="padding:16px">Nenhum empenho vinculado ainda.</div></div>'}
+      </div>
+
+      <div class="bloco"><div class="bloco-titulo">Cobranças ${ed ? `<button class="btn btn-mini" onclick="registrarCobranca('${d.id_demanda}','')">+ Registrar cobrança</button>` : ''}</div>
+        <div class="caixa">${r.cobrancas.length ? r.cobrancas.map(c => `<div class="linha-cob">
+          <b>${fmtDH(c.data_cobranca)}</b> · ${esc(CANAIS[c.canal]||c.canal)}${c.tipo_marco ? ' · ' + esc(c.tipo_nome) : ''}${c.autor ? ' · ' + esc(c.autor) : ''}<br>${esc(c.registro)}
+          ${c.resposta ? `<div style="margin-top:4px;color:#085041">Resposta (${fmtD(c.data_resposta)}): ${esc(c.resposta)}</div>`
+                       : (ed ? `<div style="margin-top:4px"><button class="btn btn-mini" onclick="registrarResposta('${c.id_cobranca}')">Registrar resposta</button></div>` : '')}
+          </div>`).join('') : '<div class="vazio" style="padding:14px">Nenhuma cobrança registrada.</div>'}</div>
+      </div>
+
+      ${ed ? `<div class="bloco"><div class="bloco-titulo">Encerramento</div>
+        ${d.encerramento ? `<div style="font-size:13px">${d.encerramento === 'concluida' ? 'Execução concluída' : 'Não executada'} em ${fmtD(d.data_encerramento)}${d.justificativa_encerramento ? ' — ' + esc(d.justificativa_encerramento) : ''}
+            <button class="btn btn-mini" style="margin-left:8px" onclick="reabrir()">Reabrir</button></div>`
+          : `<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-v" onclick="encerrar('concluida')">Marcar como concluída</button>
+             <button class="btn btn-r" onclick="encerrar('nao_executada')">Marcar como não executada</button></div>`}
+      </div>` : (d.encerramento ? `<div class="bloco"><div class="bloco-titulo">Encerramento</div><div style="font-size:13px">${d.encerramento === 'concluida' ? 'Execução concluída' : 'Não executada'} em ${fmtD(d.data_encerramento)}${d.justificativa_encerramento ? ' — ' + esc(d.justificativa_encerramento) : ''}</div></div>` : '')}
+    `;
+  }
+  async function recarregarFicha() { if (_fichaAtual) await abrirFicha(_fichaAtual.demanda.id_demanda); carregarSilencioso(); }
+  async function carregarSilencioso() {
+    const r = await chamar('mon_dados', { exercicio: getExercicio(), escopo: $('sel-escopo').value || 'todos' });
+    if (r.ok) { _dados = r; $('cnt-pend').style.display = r.resumo.vencidos ? '' : 'none'; $('cnt-pend').textContent = r.resumo.vencidos; mostrarAba(_aba); }
+  }
+
+  async function salvarProcesso() {
+    const d = _fichaAtual.demanda;
+    const r = await chamar('mon_salvar_execucao', { id_demanda: d.id_demanda, processo_sei: $('fx-sei').value.trim(),
+      data_abertura_processo: $('fx-abert').value, data_envio_processo: $('fx-envio').value });
+    if (!r.ok) { $('fx-erro').textContent = r.erro; $('fx-erro').classList.add('vis'); return; }
+    toast('Processo salvo.'); recarregarFicha();
+  }
+
+  function editarPrazo(tipo) {
+    const m = _fichaAtual.demanda.marcos.find(x => x.tipo === tipo);
+    abrirModal2('Prazo — ' + m.nome, `
+      <div class="form">
+        <div class="campo"><label>Data limite para esta demanda</label><input type="date" id="pz-data" value="${m.prazo_proprio ? esc(m.prazo) : ''}">
+          <span class="hint">Em branco = usa o calendário do exercício${m.prazo && !m.prazo_proprio ? ' (' + fmtD(m.prazo) + ')' : ''}</span></div>
+        <div class="campo largo"><label>Motivo</label><input id="pz-motivo" placeholder="Ex.: contrato vigente vence em 15/03"></div>
+      </div>
+      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarPrazo('${tipo}')">Salvar</button></div>`);
+  }
+  async function salvarPrazo(tipo) {
+    const r = await chamar('mon_prazo_demanda', { id_demanda: _fichaAtual.demanda.id_demanda, tipo, data_limite: $('pz-data').value, motivo: $('pz-motivo').value });
+    if (!r.ok) return erro2(r.erro);
+    fecharModal2(); toast('Prazo salvo.'); recarregarFicha();
+  }
+
+  function registrarCobranca(idDemanda, tipo) {
+    const marcos = (_dados.demandas.find(d => d.id_demanda === idDemanda) || (_fichaAtual && _fichaAtual.demanda) || {}).marcos || [];
+    abrirModal2('Registrar cobrança', `
+      <div class="form">
+        <div class="campo"><label>Marco</label><select id="cb-marco"><option value="">Geral</option>${marcos.map(m => `<option value="${m.tipo}"${m.tipo===tipo?' selected':''}>${esc(m.nome)}</option>`).join('')}</select></div>
+        <div class="campo"><label>Canal</label><select id="cb-canal">${Object.entries(CANAIS).map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select></div>
+        <div class="campo largo"><label>Registro</label><textarea id="cb-reg" rows="3" placeholder="Ex.: Ofício nº 12/2026 enviado pelo SEI à chefia da unidade"></textarea></div>
+      </div>
+      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarCobranca('${idDemanda}')">Registrar</button></div>`);
+  }
+  async function salvarCobranca(idDemanda) {
+    const r = await chamar('mon_cobrar', { id_demanda: idDemanda, tipo_marco: $('cb-marco').value, canal: $('cb-canal').value, registro: $('cb-reg').value });
+    if (!r.ok) return erro2(r.erro);
+    fecharModal2(); toast('Cobrança registrada.');
+    if ($('overlay').classList.contains('aberto') && _fichaAtual) recarregarFicha(); else carregarSilencioso();
+  }
+  function registrarResposta(id) {
+    abrirModal2('Resposta da unidade', `
+      <div class="form"><div class="campo"><label>Data</label><input type="date" id="rp-data" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="campo largo"><label>Resposta</label><textarea id="rp-txt" rows="3"></textarea></div></div>
+      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarResposta('${id}')">Salvar</button></div>`);
+  }
+  async function salvarResposta(id) {
+    const r = await chamar('mon_resposta_cobranca', { id_cobranca: id, resposta: $('rp-txt').value, data_resposta: $('rp-data').value });
+    if (!r.ok) return erro2(r.erro);
+    fecharModal2(); recarregarFicha();
+  }
+
+  function encerrar(tipo) {
+    abrirModal2(tipo === 'concluida' ? 'Concluir execução' : 'Demanda não executada', `
+      <div class="form"><div class="campo"><label>Data</label><input type="date" id="en-data" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="campo largo"><label>${tipo === 'concluida' ? 'Observação (opcional)' : 'Justificativa'}</label><textarea id="en-just" rows="3" placeholder="${tipo === 'concluida' ? '' : 'Ex.: licitação deserta; necessidade superada'}"></textarea></div></div>
+      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn ${tipo==='concluida'?'btn-v':'btn-r'}" onclick="salvarEncerramento('${tipo}')">Confirmar</button></div>`);
+  }
+  async function salvarEncerramento(tipo) {
+    const r = await chamar('mon_salvar_execucao', { id_demanda: _fichaAtual.demanda.id_demanda, encerramento: tipo,
+      data_encerramento: $('en-data').value, justificativa_encerramento: $('en-just').value });
+    if (!r.ok) return erro2(r.erro);
+    fecharModal2(); toast('Execução encerrada.'); recarregarFicha();
+  }
+  async function reabrir() {
+    if (!confirm('Reabrir a execução desta demanda?')) return;
+    const r = await chamar('mon_salvar_execucao', { id_demanda: _fichaAtual.demanda.id_demanda, encerramento: '', data_encerramento: '', justificativa_encerramento: '' });
+    if (!r.ok) { alert(r.erro); return; }
+    recarregarFicha();
+  }
+
+  // ── Reservas e pedidos ────────────────────────────────────────────────────
+  function novaReservaDaFicha() {
+    const d = _fichaAtual.demanda;
+    const ja = new Set(_fichaAtual.vinculos.map(v => v.id_empenho));
+    const emps = _dados.empenhos.filter(e => e.saldo_a_reservar > 0 && !ja.has(e.id_empenho));
+    if (!emps.length) { alert('Não há empenho do exercício com saldo para reservar. Cadastre o empenho na aba Empenhos.'); return; }
+    const falta = Math.max(0, d.valor_estimado - d.reservado);
+    abrirModal2('Reservar em empenho — ' + d.codigo, `
+      <div class="form">
+        <div class="campo largo"><label>Empenho</label><select id="rv-emp">${emps.map(e => `<option value="${e.id_empenho}">${esc(e.numero)} · ${esc(e.favorecido_nome||'')} · disponível ${fmtV(e.saldo_a_reservar)}</option>`).join('')}</select></div>
+        <div class="campo"><label>Valor a reservar (R$)</label><input type="number" step="0.01" min="0" id="rv-valor" value="${falta.toFixed(2)}"></div>
+      </div>
+      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarReserva('${d.id_demanda}')">Reservar</button></div>`);
+  }
+  async function salvarReserva(idDemanda) {
+    const r = await chamar('mon_vincular', { id_empenho: $('rv-emp').value, id_demanda: idDemanda, valor_reservado: $('rv-valor').value });
+    if (!r.ok) return erro2(r.erro);
+    fecharModal2(); toast('Reserva registrada.'); recarregarFicha();
+  }
+
+  function formPedido(x) {
+    return `<div class="form">
+      <div class="campo"><label>Data do pedido</label><input type="date" id="pd-data" value="${esc(x.data_pedido || new Date().toISOString().slice(0,10))}"></div>
+      <div class="campo"><label>Valor (R$)</label><input type="number" step="0.01" min="0" id="pd-valor" value="${x.valor || ''}"></div>
+      <div class="campo"><label>Documento</label><select id="pd-tipo">${Object.entries(DOCS).map(([k, n]) => `<option value="${k}"${k===(x.tipo_documento||'ordem_fornecimento')?' selected':''}>${n}</option>`).join('')}</select></div>
+      <div class="campo"><label>Número</label><input id="pd-num" value="${esc(x.numero_documento||'')}"></div>
+      <div class="campo largo"><label>Descrição</label><input id="pd-desc" value="${esc(x.descricao||'')}" placeholder="O que foi pedido"></div>
+      <div class="campo"><label>Nota fiscal</label><input id="pd-nf" value="${esc(x.nota_fiscal||'')}"></div>
+      <div class="campo"><label>Data da liquidação</label><input type="date" id="pd-dliq" value="${esc(x.data_liquidacao||'')}"></div>
+      <div class="campo"><label>Valor liquidado (R$)</label><input type="number" step="0.01" min="0" id="pd-vliq" value="${x.valor_liquidado || ''}"></div>
+      <div class="campo"><label>Data do pagamento</label><input type="date" id="pd-dpag" value="${esc(x.data_pagamento||'')}"></div>
+      <div class="campo"><label>Valor pago (R$)</label><input type="number" step="0.01" min="0" id="pd-vpag" value="${x.valor_pago || ''}"></div>
+    </div>`;
+  }
+  function coletarPedido() {
+    return { data_pedido: $('pd-data').value, valor: $('pd-valor').value, tipo_documento: $('pd-tipo').value, numero_documento: $('pd-num').value,
+             descricao: $('pd-desc').value, nota_fiscal: $('pd-nf').value, data_liquidacao: $('pd-dliq').value, valor_liquidado: $('pd-vliq').value || 0,
+             data_pagamento: $('pd-dpag').value, valor_pago: $('pd-vpag').value || 0 };
+  }
+  function novoPedido(idVinculo, saldo, depois) {
+    abrirModal2('Novo pedido de execução', `<div class="sub" style="margin:-6px 0 12px">Saldo da reserva: <b>${fmtV(saldo)}</b></div>${formPedido({})}
+      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarPedido({id_vinculo:'${idVinculo}'}, '${depois||'ficha'}')">Lançar pedido</button></div>`);
+  }
+  function editarPedido(x, depois) {
+    abrirModal2('Pedido de execução', `${formPedido(x)}
+      <div class="rodape"><button class="btn btn-r" style="margin-right:auto" onclick="excluirPedido('${x.id_execucao}', '${depois||'ficha'}')">Excluir</button>
+      <button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarPedido({id_execucao:'${x.id_execucao}', id_vinculo:'${x.id_vinculo}'}, '${depois||'ficha'}')">Salvar</button></div>`);
+  }
+  async function salvarPedido(base, depois) {
+    const r = await chamar('mon_pedido', { ...base, ...coletarPedido() });
+    if (!r.ok) return erro2(r.erro);
+    fecharModal2(); toast('Pedido salvo.');
+    depois === 'empenho' ? recarregarEmpenho() : recarregarFicha();
+  }
+  async function excluirPedido(id, depois) {
+    if (!confirm('Excluir este pedido?')) return;
+    const r = await chamar('mon_excluir_pedido', { id_execucao: id });
+    if (!r.ok) return erro2(r.erro);
+    fecharModal2(); depois === 'empenho' ? recarregarEmpenho() : recarregarFicha();
+  }
+
+  // ── Empenhos ──────────────────────────────────────────────────────────────
+  function renderEmpenhos() {
+    const l = _dados.empenhos;
+    $('conteudo').innerHTML = `
+      <div class="secao">
+        <div class="secao-header"><span class="secao-titulo">${l.length} empenho(s) no exercício</span>
+          <button class="btn btn-p so-editor" onclick="formEmpenho({})">+ Novo empenho</button></div>
+        <div class="tabela-scroll">${l.length ? `
+        <table><thead><tr><th>Empenho</th><th>Favorecido</th><th>Gestora</th><th class="num">Valor atual</th><th class="num">Reservado</th><th class="num">Pedido</th><th class="num">Saldo do empenho</th><th class="num">Demandas</th></tr></thead><tbody>
+        ${l.map(e => `<tr class="clicavel" onclick="abrirEmpenho('${e.id_empenho}')">
+          <td><b>${esc(e.numero)}</b><span class="sub">${fmtD(e.data_emissao)} · ${esc(TIPOS_EMP[e.tipo]||'')}${e.natureza_despesa ? ' · ND ' + esc(e.natureza_despesa) : ''}</span></td>
+          <td>${esc(e.favorecido_nome||'—')}<span class="sub">${esc(e.favorecido_cnpj||'')}</span></td>
+          <td>${esc(e.sigla_gestora)}</td>
+          <td class="num">${fmtV(e.valor_atual)}</td><td class="num">${fmtV(e.reservado)}</td><td class="num">${fmtV(e.pedido)}</td>
+          <td class="num"><b>${fmtV(e.saldo_empenho)}</b>${barra(e.pedido, e.valor_atual)}</td><td class="num">${e.n_demandas}</td></tr>`).join('')}
+        </tbody></table>` : '<div class="vazio">Nenhum empenho cadastrado neste exercício.</div>'}</div>
+      </div>`;
+  }
+
+  function formEmpenho(e) {
+    const uns = _ctx.unidades.filter(u => ['reitoria','campus','pro_reitoria'].includes(u.tipo) || (_ctx.unidade && u.id === _ctx.unidade.id));
+    const gest = e.id_unidade_gestora_fk || (_ctx.unidade ? _ctx.unidade.id : '');
+    abrirModal2(e.id_empenho ? 'Editar empenho' : 'Novo empenho', `
+      <div class="form">
+        <div class="campo"><label>Número do empenho *</label><input id="em-num" value="${esc(e.numero||'')}" placeholder="2026NE000123"></div>
+        <div class="campo"><label>Data de emissão *</label><input type="date" id="em-data" value="${esc(e.data_emissao||'')}"></div>
+        <div class="campo"><label>Valor empenhado (R$) *</label><input type="number" step="0.01" min="0" id="em-valor" value="${e.valor_empenhado||''}"></div>
+        <div class="campo"><label>Tipo</label><select id="em-tipo">${Object.entries(TIPOS_EMP).map(([k, n]) => `<option value="${k}"${k===(e.tipo||'estimativo')?' selected':''}>${n}</option>`).join('')}</select></div>
+        <div class="campo"><label>Unidade gestora *</label><select id="em-gest">${uns.map(u => `<option value="${u.id}"${u.id===gest?' selected':''}>${esc(u.sigla)}</option>`).join('')}</select></div>
+        <div class="campo"><label>Código da UG (SIAFI)</label><input id="em-ug" value="${esc(e.ug_codigo||'')}"></div>
+        <div class="campo"><label>Favorecido — CNPJ/CPF</label><input id="em-cnpj" value="${esc(e.favorecido_cnpj||'')}"></div>
+        <div class="campo"><label>Favorecido — nome</label><input id="em-fav" value="${esc(e.favorecido_nome||'')}"></div>
+        <div class="campo"><label>Natureza de despesa</label><input id="em-nd" value="${esc(e.natureza_despesa||'')}" placeholder="3.3.90.30"></div>
+        <div class="campo"><label>Fonte</label><input id="em-fonte" value="${esc(e.fonte_codigo||'')}" placeholder="1000" maxlength="4"></div>
+        <div class="campo"><label>Processo SEI</label><input id="em-sei" value="${esc(e.processo_sei||'')}"></div>
+        <div class="campo largo"><label>Observação</label><input id="em-obs" value="${esc(e.observacao||'')}"></div>
+      </div>
+      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarEmpenho('${e.id_empenho||''}')">Salvar empenho</button></div>`);
+  }
+  async function salvarEmpenho(id) {
+    const empenho = { id_empenho: id || undefined, numero: $('em-num').value, data_emissao: $('em-data').value, valor_empenhado: $('em-valor').value,
+      tipo: $('em-tipo').value, id_unidade_gestora_fk: $('em-gest').value, ug_codigo: $('em-ug').value, favorecido_cnpj: $('em-cnpj').value,
+      favorecido_nome: $('em-fav').value, natureza_despesa: $('em-nd').value, fonte_codigo: $('em-fonte').value.trim(),
+      processo_sei: $('em-sei').value, observacao: $('em-obs').value };
+    const r = await chamar('mon_salvar_empenho', { empenho });
+    if (!r.ok) return erro2(r.erro);
+    fecharModal2(); toast('Empenho salvo.');
+    await carregarSilencioso();
+    abrirEmpenho(r.id_empenho);
+  }
+
+  async function abrirEmpenho(id) {
+    abrirModal('Carregando…', '<div class="carregando">Carregando…</div>');
+    const r = await chamar('mon_empenho', { id_empenho: id });
+    if (!r.ok) { $('modal-corpo').innerHTML = `<div class="vazio">${esc(r.erro)}</div>`; return; }
+    _empenhoAtual = r; _fichaAtual = null;
+    const e = r.empenho, ed = podeEditar();
+    $('modal-titulo').innerHTML = `Empenho ${esc(e.numero)}<span class="sub">${esc(e.favorecido_nome||'')} ${e.favorecido_cnpj ? '· ' + esc(e.favorecido_cnpj) : ''} · ${esc(TIPOS_EMP[e.tipo]||'')} · emitido em ${fmtD(e.data_emissao)} · gestora ${esc(e.sigla_gestora)}${e.natureza_despesa ? ' · ND ' + esc(e.natureza_despesa) : ''}${e.fonte_codigo ? ' · fonte ' + esc(e.fonte_codigo) : ''}</span>`;
+    $('modal-corpo').innerHTML = `
+      <div class="mini-cards">
+        <div class="mini"><span>Valor atual</span><b>${fmtV(e.valor_atual)}</b></div>
+        <div class="mini"><span>Reservado para demandas</span><b>${fmtV(e.reservado)}</b></div>
+        <div class="mini"><span>Disponível para reservar</span><b>${fmtV(e.saldo_a_reservar)}</b></div>
+        <div class="mini"><span>Pedido</span><b>${fmtV(e.pedido)}</b></div>
+        <div class="mini"><span>Saldo do empenho</span><b style="color:#085041">${fmtV(e.saldo_empenho)}</b></div>
+      </div>
+      <div class="bloco"><div class="bloco-titulo">Quem pediu o quê ${ed ? `<button class="btn btn-mini" onclick="reservarNoEmpenho()">+ Reservar para demanda</button>` : ''}</div>
+        <div class="caixa tabela-scroll">${r.vinculos.length ? `<table><thead><tr><th>Demanda</th><th>Unidade</th><th class="num">Reservado</th><th class="num">Pedido</th><th class="num">Pago</th><th class="num">Saldo da reserva</th><th>Último pedido</th>${ed?'<th></th>':''}</tr></thead><tbody>
+          ${r.vinculos.map(v => `<tr><td style="max-width:260px"><span class="cod-dem">${esc(v.codigo)}</span><br>${esc(v.descricao_objeto)}</td><td>${esc(v.sigla_unidade)}</td>
+            <td class="num">${fmtV(v.valor_reservado)}</td><td class="num">${fmtV(v.pedido)}</td><td class="num">${fmtV(v.pago)}</td><td class="num"><b>${fmtV(v.saldo_reserva)}</b></td><td>${fmtD(v.ultimo_pedido)}</td>
+            ${ed ? `<td style="text-align:right;white-space:nowrap"><button class="btn btn-mini" onclick="novoPedido('${v.id_vinculo}', ${v.saldo_reserva}, 'empenho')">+ Pedido</button>
+              <button class="btn btn-mini" onclick="editarReserva('${v.id_vinculo}', ${v.valor_reservado}, ${v.pedido})">Reserva</button></td>` : ''}</tr>
+            ${v.execucoes.map(x => `<tr><td colspan="2" style="padding-left:28px;font-size:12px;color:#5F5E5A">↳ ${fmtD(x.data_pedido)} · ${esc(DOCS[x.tipo_documento]||'')} ${esc(x.numero_documento||'')} ${x.descricao ? '· ' + esc(x.descricao) : ''}</td>
+              <td></td><td class="num" style="font-size:12px">${fmtV(x.valor)}</td><td class="num" style="font-size:12px">${fmtV(x.valor_pago)}</td><td></td><td style="font-size:12px">${esc(x.nota_fiscal || '')}</td>
+              ${ed ? `<td style="text-align:right"><button class="btn btn-mini" onclick='editarPedido(${JSON.stringify(x).replace(/'/g,"&#39;")}, "empenho")'>Editar</button></td>` : ''}</tr>`).join('')}`).join('')}
+          </tbody></table>` : '<div class="vazio" style="padding:16px">Nenhuma demanda reservada neste empenho.</div>'}</div>
+      </div>
+      <div class="bloco"><div class="bloco-titulo">Reforços e anulações ${ed ? `<button class="btn btn-mini" onclick="novoMovimento()">+ Lançar</button>` : ''}</div>
+        <div class="caixa">${r.movimentos.length ? `<table><thead><tr><th>Data</th><th>Tipo</th><th class="num">Valor</th><th>Documento</th>${ed?'<th></th>':''}</tr></thead><tbody>
+          ${r.movimentos.map(m => `<tr><td>${fmtD(m.data)}</td><td>${m.tipo === 'reforco' ? 'Reforço' : 'Anulação'}</td><td class="num">${m.tipo === 'anulacao' ? '−' : '+'} ${fmtV(m.valor)}</td><td>${esc(m.documento||'—')}</td>
+            ${ed ? `<td style="text-align:right"><button class="btn btn-mini btn-r" onclick="excluirMovimento('${m.id_movimento}')">Excluir</button></td>` : ''}</tr>`).join('')}
+          </tbody></table>` : '<div class="vazio" style="padding:14px">Sem reforços ou anulações.</div>'}</div>
+      </div>
+      ${ed ? `<div class="rodape" style="justify-content:flex-start"><button class="btn" onclick='formEmpenho(${JSON.stringify(e).replace(/'/g,"&#39;")})'>Editar dados do empenho</button></div>` : ''}`;
+  }
+  async function recarregarEmpenho() { if (_empenhoAtual) await abrirEmpenho(_empenhoAtual.empenho.id_empenho); carregarSilencioso(); }
+
+  function reservarNoEmpenho() {
+    const e = _empenhoAtual.empenho;
+    const ja = new Set(_empenhoAtual.vinculos.map(v => v.id_demanda));
+    const dems = _dados.demandas.filter(d => !ja.has(d.id_demanda) && !d.encerramento);
+    abrirModal2('Reservar no empenho ' + e.numero, `
+      <div class="sub" style="margin:-6px 0 12px">Disponível para reservar: <b>${fmtV(e.saldo_a_reservar)}</b></div>
+      <div class="form">
+        <div class="campo largo"><label>Demanda homologada</label>
+          <input list="lista-dem" id="rs-dem" placeholder="Digite o ID (DEM-2026-0001) ou parte do objeto">
+          <datalist id="lista-dem">${dems.map(d => `<option value="${esc(d.codigo)}">${esc(d.sigla_unidade)} · ${esc(d.descricao_objeto)} · homologado ${fmtV(d.valor_estimado)}</option>`).join('')}</datalist></div>
+        <div class="campo"><label>Valor a reservar (R$)</label><input type="number" step="0.01" min="0" id="rs-valor"></div>
+      </div>
+      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarReservaEmpenho()">Reservar</button></div>`);
+  }
+  async function salvarReservaEmpenho() {
+    const r = await chamar('mon_vincular', { id_empenho: _empenhoAtual.empenho.id_empenho, codigo: $('rs-dem').value.trim(), valor_reservado: $('rs-valor').value });
+    if (!r.ok) return erro2(r.erro);
+    fecharModal2(); toast('Reserva registrada.'); recarregarEmpenho();
+  }
+  function editarReserva(id, valor, pedido) {
+    abrirModal2('Alterar reserva', `
+      <div class="form"><div class="campo"><label>Valor reservado (R$)</label><input type="number" step="0.01" min="0" id="er-valor" value="${valor}">
+        <span class="hint">Mínimo: o já pedido (${fmtV(pedido)})</span></div></div>
+      <div class="rodape">${pedido ? '' : `<button class="btn btn-r" style="margin-right:auto" onclick="excluirReserva('${id}')">Excluir reserva</button>`}
+        <button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarEdicaoReserva('${id}')">Salvar</button></div>`);
+  }
+  async function salvarEdicaoReserva(id) {
+    const r = await chamar('mon_editar_vinculo', { id_vinculo: id, valor_reservado: $('er-valor').value });
+    if (!r.ok) return erro2(r.erro);
+    fecharModal2(); recarregarEmpenho();
+  }
+  async function excluirReserva(id) {
+    if (!confirm('Excluir esta reserva?')) return;
+    const r = await chamar('mon_excluir_vinculo', { id_vinculo: id });
+    if (!r.ok) return erro2(r.erro);
+    fecharModal2(); recarregarEmpenho();
+  }
+  function novoMovimento() {
+    abrirModal2('Reforço ou anulação', `
+      <div class="form">
+        <div class="campo"><label>Tipo</label><select id="mv-tipo"><option value="reforco">Reforço</option><option value="anulacao">Anulação</option></select></div>
+        <div class="campo"><label>Data</label><input type="date" id="mv-data" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="campo"><label>Valor (R$)</label><input type="number" step="0.01" min="0" id="mv-valor"></div>
+        <div class="campo"><label>Documento</label><input id="mv-doc" placeholder="Nº do empenho de reforço/anulação"></div>
+      </div>
+      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarMovimento()">Lançar</button></div>`);
+  }
+  async function salvarMovimento() {
+    const r = await chamar('mon_movimento', { id_empenho: _empenhoAtual.empenho.id_empenho, tipo: $('mv-tipo').value, data: $('mv-data').value,
+      valor: $('mv-valor').value, documento: $('mv-doc').value });
+    if (!r.ok) return erro2(r.erro);
+    fecharModal2(); recarregarEmpenho();
+  }
+  async function excluirMovimento(id) {
+    if (!confirm('Excluir este lançamento?')) return;
+    const r = await chamar('mon_excluir_movimento', { id_movimento: id });
+    if (!r.ok) { alert(r.erro); return; }
+    recarregarEmpenho();
+  }
+
+  // ── Pendências ────────────────────────────────────────────────────────────
+  function renderPendencias() {
+    const l = _dados.pendencias;
+    if (!l.length) { $('conteudo').innerHTML = '<div class="secao"><div class="vazio">Nenhum marco vencido ou a vencer nos próximos 15 dias.</div></div>'; return; }
+    const grupos = {};
+    l.forEach(p => (grupos[p.sigla_unidade] = grupos[p.sigla_unidade] || []).push(p));
+    $('conteudo').innerHTML = `<div class="secao">
+      <div class="secao-header"><span class="secao-titulo">${l.filter(p=>p.estado==='vencido').length} vencido(s) · ${l.filter(p=>p.estado==='a_vencer').length} a vencer em até 15 dias</span></div>
+      ${Object.keys(grupos).sort().map(u => `<div class="grupo-un">${esc(u)}</div>
+        <table><tbody>${grupos[u].map(p => `<tr>
+          <td style="width:42%"><span class="cod-dem">${esc(p.codigo)}</span><br>${esc(p.descricao_objeto)}</td>
+          <td>${sem(p)}</td>
+          <td style="font-size:12px;color:#888780">${p.ultima_cobranca ? 'Última cobrança: ' + fmtDH(p.ultima_cobranca) : 'Sem cobrança'}</td>
+          <td style="text-align:right;white-space:nowrap"><button class="btn btn-mini" onclick="abrirFicha('${p.id_demanda}')">Abrir</button>
+            <button class="btn btn-mini so-editor" onclick="registrarCobranca('${p.id_demanda}','${p.tipo}')">Cobrar</button></td></tr>`).join('')}</tbody></table>`).join('')}
+    </div>`;
+  }
+
+  // ── Calendário ────────────────────────────────────────────────────────────
+  function renderCalendario() {
+    const l = _dados.calendario;
+    $('conteudo').innerHTML = `<div class="secao">
+      <div class="secao-header"><span class="secao-titulo">Marcos do exercício ${esc(getExercicio())}</span>
+        <button class="btn btn-p so-editor" onclick="formMarco({})">+ Novo marco</button></div>
+      <div class="sub" style="padding:10px 18px 0">Cada demanda usa o marco do escopo mais próximo da sua unidade; sem marco próprio do campus, vale o da instituição. A ficha da demanda permite um prazo específico.</div>
+      ${l.length ? `<table style="margin-top:8px"><thead><tr><th>Data limite</th><th>Marco</th><th>Vale para</th><th>Descrição</th><th class="so-editor"></th></tr></thead><tbody>
+        ${l.map(m => `<tr><td><b>${fmtD(m.data_limite)}</b></td><td>${esc(m.tipo_nome)}</td><td>${esc(m.escopo_nome)}</td><td>${esc(m.descricao||'')}</td>
+          <td class="so-editor" style="text-align:right;white-space:nowrap">${m.editavel ? `<button class="btn btn-mini" onclick='formMarco(${JSON.stringify(m).replace(/'/g,"&#39;")})'>Editar</button>
+          <button class="btn btn-mini btn-r" onclick="excluirMarco('${m.id_marco}')">Excluir</button>` : '<span class="sub" style="display:inline">definido pela Reitoria</span>'}</td></tr>`).join('')}
+      </tbody></table>` : '<div class="vazio">Nenhum marco definido para este exercício.</div>'}
+    </div>`;
+  }
+  function formMarco(m) {
+    const ops = [];
+    if (_ctx.raiz) ops.push(['', 'Toda a instituição']);
+    const minhaSub = _ctx.unidade ? _ctx.unidades.filter(u => { let x = u.id, i = 0; while (x && i++ < 30) { if (x === _ctx.unidade.id) return true; x = (_ctx.unidades.find(z => z.id === x) || {}).pai; } return false; }) : _ctx.unidades;
+    minhaSub.filter(u => ['campus','pro_reitoria','reitoria'].includes(u.tipo) || (_ctx.unidade && u.id === _ctx.unidade.id))
+      .filter(u => !(_ctx.raiz && u.tipo === 'reitoria'))
+      .forEach(u => ops.push([u.id, u.sigla + ' — ' + u.nome.replace(/^[^–]*–\s*/, '')]));
+    abrirModal2(m.id_marco ? 'Editar marco' : 'Novo marco', `
+      <div class="form">
+        <div class="campo"><label>Marco</label><select id="mc-tipo">${_ctx.tipos_marco.map(t => `<option value="${t.valor}"${t.valor===m.tipo?' selected':''}>${t.nome}</option>`).join('')}</select></div>
+        <div class="campo"><label>Data limite</label><input type="date" id="mc-data" value="${esc(m.data_limite||'')}"></div>
+        <div class="campo largo"><label>Vale para</label><select id="mc-esc">${ops.map(([v, n]) => `<option value="${v}"${(m.id_unidade_escopo||'')===v?' selected':''}>${esc(n)}</option>`).join('')}</select></div>
+        <div class="campo largo"><label>Descrição</label><input id="mc-desc" value="${esc(m.descricao||'')}" placeholder="Ex.: prazo para envio dos processos à licitação"></div>
+      </div>
+      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarMarco('${m.id_marco||''}')">Salvar</button></div>`);
+  }
+  async function salvarMarco(id) {
+    const r = await chamar('mon_salvar_marco', { id_marco: id || undefined, exercicio: getExercicio(), tipo: $('mc-tipo').value,
+      data_limite: $('mc-data').value, id_unidade_escopo: $('mc-esc').value, descricao: $('mc-desc').value });
+    if (!r.ok) return erro2(r.erro);
+    fecharModal2(); toast('Marco salvo.'); carregarSilencioso();
+  }
+  async function excluirMarco(id) {
+    if (!confirm('Excluir este marco?')) return;
+    const r = await chamar('mon_excluir_marco', { id_marco: id });
+    if (!r.ok) { alert(r.erro); return; }
+    carregarSilencioso();
+  }
+
+  // ── Modais ────────────────────────────────────────────────────────────────
+  function abrirModal(titulo, html) { $('modal-titulo').innerHTML = titulo; $('modal-corpo').innerHTML = html; $('overlay').classList.add('aberto'); }
+  function fecharModal() { $('overlay').classList.remove('aberto'); _fichaAtual = null; _empenhoAtual = null; }
+  function abrirModal2(titulo, html) { $('modal2-titulo').textContent = titulo; $('modal2-corpo').innerHTML = html; $('modal2-erro').classList.remove('vis'); $('overlay2').classList.add('aberto'); }
+  function fecharModal2() { $('overlay2').classList.remove('aberto'); }
+  function erro2(msg) { $('modal2-erro').textContent = msg; $('modal2-erro').classList.add('vis'); }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { if ($('overlay2').classList.contains('aberto')) fecharModal2(); else fecharModal(); } });
+</script>
+</body>
+</html>

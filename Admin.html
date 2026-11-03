@@ -109,6 +109,9 @@
     <a class="nav-item" href="#" onclick="navegar('aprovacoes');return false;">
       <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Aprovações
     </a>
+    <a class="nav-item" href="#" onclick="navegar('monitoramento');return false;">
+      <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Monitoramento
+    </a>
   </nav>
 
   <main class="main">
@@ -165,6 +168,7 @@
         <option value="ord_despesas">Ordenador de Despesas</option>
         <option value="chefia">Chefia Intermediária</option>
         <option value="chefe_secao">Chefe de Seção</option>
+        <option value="monitoramento">Monitoramento</option>
       </select>
     </div>
     <div class="campo">
@@ -187,7 +191,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202611031200"></script>
+<script src="api.js?v=202611031500"></script>
 <script>
   const token  = localStorage.getItem('pac_token') || '';
   const appUrl = APPS_SCRIPT_URL;
@@ -492,7 +496,7 @@
   function mostrarErro(msg) { const el = document.getElementById('erro-usuario'); el.textContent = msg; el.classList.add('vis'); }
   function mostrarOk(msg)   { const el = document.getElementById('ok-usuario');   el.textContent = msg; el.classList.add('vis'); }
   function rotularPapel(p) {
-    return { ord_despesas:'Ordenador de Despesas', chefia:'Chefia Intermediária', chefe_secao:'Chefe de Seção', licitacoes:'Seção de Licitações' }[p] || p;
+    return { ord_despesas:'Ordenador de Despesas', chefia:'Chefia Intermediária', chefe_secao:'Chefe de Seção', licitacoes:'Seção de Licitações', monitoramento:'Monitoramento' }[p] || p;
   }
   function nomeUnidade(id) {
     const u = _unidades.find(x => x.id_unidade === id);

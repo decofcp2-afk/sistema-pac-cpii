@@ -114,6 +114,87 @@ async function _confirmarSenha(senha) {
   return error ? 'Senha incorreta.' : null;
 }
 
+// ─── Monitoramento: marcos, situação e semáforo ──────────────────────────────
+const TIPOS_MARCO = [
+  { valor: 'abertura_processo', nome: 'Abertura do processo' },
+  { valor: 'envio_processo',    nome: 'Envio do processo' },
+  { valor: 'empenho',           nome: 'Empenho' },
+  { valor: 'primeiro_pedido',   nome: 'Primeiro pedido' },
+  { valor: 'conclusao',         nome: 'Conclusão' },
+];
+const _nomeMarco = t => (TIPOS_MARCO.find(x => x.valor === t) || {}).nome || t || '';
+const DIAS_ALERTA = 15;   // amarelo: vence em até 15 dias (decisão do gestor)
+const SITUACOES = {
+  aguardando: 'Aguardando início', em_contratacao: 'Em contratação', empenhada: 'Empenhada',
+  em_execucao: 'Em execução', concluida: 'Concluída', nao_executada: 'Não executada',
+};
+
+// Filtro da chave seletora: 'todos', 'reitoria' (fora de qualquer campus) ou o id de um campus.
+function _filtroEscopo(arv, escopo) {
+  const cadeia = id => { const out = []; let x = id, i = 0; while (x && i++ < 30) { out.push(x); x = arv.pai[x]; } return out; };
+  if (!escopo || escopo === 'todos') return () => true;
+  if (escopo === 'reitoria') return id => !cadeia(id).some(u => (arv.porId[u] || {}).tipo === 'campus');
+  return id => cadeia(id).includes(escopo);
+}
+
+function _dias(iso) {
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const d = new Date(String(iso).slice(0, 10) + 'T00:00:00');
+  return Math.round((d - hoje) / 864e5);
+}
+
+// Junta os dados de execução de uma demanda com prazos (próprios ou do calendário).
+function _montarExecucao(d, arv, cal, overr, cobs) {
+  const n = k => Number(d[k] || 0);
+  const v = { ...d, valor_estimado: n('valor_estimado'), reservado: n('reservado'), pedido: n('pedido'),
+              liquidado: n('liquidado'), pago: n('pago') };
+  v.situacao = d.encerramento === 'nao_executada' ? 'nao_executada'
+             : d.encerramento === 'concluida'     ? 'concluida'
+             : v.pedido > 0                       ? 'em_execucao'
+             : v.reservado > 0                    ? 'empenhada'
+             : d.processo_sei                     ? 'em_contratacao'
+             : 'aguardando';
+  v.situacao_nome = SITUACOES[v.situacao];
+  v.empenho_parcial = v.reservado > 0 && v.reservado < v.valor_estimado;
+  v.pct_execucao = v.valor_estimado ? Math.round(v.pedido / v.valor_estimado * 100) : 0;
+
+  const cadeia = []; let x = d.id_unidade_fk, i = 0;
+  while (x && i++ < 30) { cadeia.push(x); x = arv.pai[x]; }
+  const prazoCal = tipo => {
+    for (const u of cadeia) { const m = cal.find(c => c.tipo === tipo && c.id_unidade_escopo === u && c.exercicio === d.exercicio); if (m) return m.data_limite; }
+    const g = cal.find(c => c.tipo === tipo && !c.id_unidade_escopo && c.exercicio === d.exercicio);
+    return g ? g.data_limite : null;
+  };
+  const feito = {
+    abertura_processo: d.data_abertura_processo || (d.processo_sei ? 'informado' : null),
+    envio_processo: d.data_envio_processo,
+    empenho: d.primeira_reserva,
+    primeiro_pedido: d.primeiro_pedido,
+    conclusao: d.encerramento === 'concluida' ? d.data_encerramento : null,
+  };
+  const ordem = { vencido: 5, a_vencer: 4, no_prazo: 3, sem_prazo: 2, cumprido_atraso: 1, cumprido: 0, nao_aplica: -1 };
+  v.marcos = TIPOS_MARCO.map(t => {
+    const proprio = overr.find(o => o.id_demanda === d.id_demanda && o.tipo === t.valor);
+    const prazo = proprio ? proprio.data_limite : prazoCal(t.valor);
+    const cumprido = feito[t.valor];
+    let estado, dias = null;
+    if (cumprido) estado = (prazo && cumprido !== 'informado' && String(cumprido) > String(prazo)) ? 'cumprido_atraso' : 'cumprido';
+    else if (d.encerramento) estado = 'nao_aplica';
+    else if (!prazo) estado = 'sem_prazo';
+    else { dias = _dias(prazo); estado = dias < 0 ? 'vencido' : dias <= DIAS_ALERTA ? 'a_vencer' : 'no_prazo'; }
+    return { tipo: t.valor, nome: t.nome, prazo, prazo_proprio: !!proprio, cumprido_em: cumprido, estado, dias };
+  });
+  v.pior_estado = v.marcos.reduce((a, m) => (ordem[m.estado] > ordem[a] ? m.estado : a), 'nao_aplica');
+  v.proximo_marco = v.marcos.find(m => ['vencido', 'a_vencer', 'no_prazo', 'sem_prazo'].includes(m.estado)) || null;
+  v.cobrancas_por_marco = {};
+  cobs.filter(c => c.id_demanda === d.id_demanda).forEach(c => {
+    const k = c.tipo_marco || 'geral';
+    if (!v.cobrancas_por_marco[k]) v.cobrancas_por_marco[k] = c.data_cobranca;
+  });
+  v.n_cobrancas = cobs.filter(c => c.id_demanda === d.id_demanda).length;
+  return v;
+}
+
 // Unidades e subárvores (para somas por estrutura).
 async function _arvore() {
   const c = await sb();
@@ -656,6 +737,332 @@ const ACOES = {
     return { ok: true, valor_devolvido: v, saldo_livre_anterior: livre };
   },
 
+  // ─── Monitoramento da execução ─────────────────────────────────────────────
+  // Permissões ficam no banco (RLS + gatilhos): o Monitoramento da Reitoria
+  // enxerga tudo, o de um campus só o seu campus; demais perfis só leem o que
+  // está no seu escopo. Aqui só montamos os dados e calculamos situação/semáforo.
+  async mon_contexto() {
+    const p = await _meuPerfil();
+    if (!p) return { ok: false, erro: 'Sessão expirada.' };
+    const arv = await _arvore();
+    const un = p.id_unidade_fk ? arv.porId[p.id_unidade_fk] : null;
+    const raiz = !un || !un.id_unidade_pai;
+    const campi = arv.lista.filter(u => u.tipo === 'campus').sort((a, b) => a.nome.localeCompare(b.nome));
+    const opcoes = raiz
+      ? [{ valor: 'todos', nome: 'Toda a instituição' }, { valor: 'reitoria', nome: 'Reitoria (sem os campi)' },
+         ...campi.map(c => ({ valor: c.id_unidade, nome: (c.sigla ? c.sigla + ' — ' : '') + c.nome.replace(/^[^–]*–\s*/, '') }))]
+      : [];
+    return {
+      ok: true, papel: p.papel, raiz, opcoes_escopo: opcoes,
+      unidade: un ? { id: un.id_unidade, sigla: un.sigla, nome: un.nome } : null,
+      pode_editar: p.papel === 'monitoramento' || (p.papel === 'licitacoes' && !p.id_unidade_fk),
+      tipos_marco: TIPOS_MARCO, exercicio: await _exercicioAtual(),
+      unidades: arv.lista.map(u => ({ id: u.id_unidade, sigla: u.sigla, nome: u.nome, tipo: u.tipo, pai: u.id_unidade_pai })),
+    };
+  },
+
+  async mon_dados({ exercicio, escopo } = {}) {
+    const c = await sb();
+    const ex = Number(exercicio || await _exercicioAtual());
+    const arv = await _arvore();
+    const dentro = _filtroEscopo(arv, escopo);
+    const [{ data: execs, error: e1 }, { data: emps, error: e2 }, { data: cal }, { data: overr },
+           { data: cobs }, { data: vincs }] = await Promise.all([
+      c.from('v_execucao_demandas').select('*').eq('exercicio', ex).order('codigo'),
+      c.from('v_empenhos_saldo').select('*').eq('exercicio', ex).order('data_emissao', { ascending: false }),
+      c.from('marcos_calendario').select('*').eq('exercicio', ex),
+      c.from('marcos_demanda').select('*'),
+      c.from('cobrancas').select('id_cobranca,id_demanda,tipo_marco,data_cobranca,canal').order('data_cobranca', { ascending: false }),
+      c.from('empenho_demandas').select('id_empenho,id_demanda'),
+    ]);
+    if (e1) return { ok: false, erro: _erro(e1) };
+    if (e2) return { ok: false, erro: _erro(e2) };
+
+    const demandas = (execs || []).filter(d => dentro(d.id_unidade_fk))
+      .map(d => _montarExecucao(d, arv, cal || [], overr || [], cobs || []));
+    const idsDem = new Set(demandas.map(d => d.id_demanda));
+    const empComDemanda = new Set((vincs || []).filter(v => idsDem.has(v.id_demanda)).map(v => v.id_empenho));
+    const empenhos = (emps || []).filter(e => dentro(e.id_unidade_gestora_fk) || empComDemanda.has(e.id_empenho))
+      .map(e => ({ ...e, ...['valor_empenhado','valor_atual','reservado','pedido','liquidado','pago','saldo_empenho','saldo_a_reservar']
+        .reduce((o, k) => (o[k] = Number(e[k] || 0), o), {}) }));
+
+    // Calendário: a Reitoria vê e edita todos os marcos; um campus vê os da
+    // instituição e os da sua estrutura, e edita só os da sua estrutura.
+    const eu = await _meuPerfil();
+    const minha = eu && eu.id_unidade_fk;
+    const raiz = !minha || !arv.pai[minha];
+    const minhaSub = minha ? arv.sub(minha) : [];
+    const acima = []; { let x = minha, i = 0; while (x && i++ < 30) { acima.push(x); x = arv.pai[x]; } }
+    const editor = eu && (eu.papel === 'monitoramento' || (eu.papel === 'licitacoes' && !eu.id_unidade_fk));
+    const calendario = (cal || [])
+      .filter(m => raiz || !m.id_unidade_escopo || minhaSub.includes(m.id_unidade_escopo) || acima.includes(m.id_unidade_escopo))
+      .map(m => ({
+        ...m, tipo_nome: _nomeMarco(m.tipo),
+        escopo_nome: m.id_unidade_escopo ? ((arv.porId[m.id_unidade_escopo] || {}).sigla || '') : 'Toda a instituição',
+        editavel: !!editor && (raiz || (!!m.id_unidade_escopo && minhaSub.includes(m.id_unidade_escopo))),
+      })).sort((a, b) => String(a.data_limite).localeCompare(String(b.data_limite)));
+
+    const soma = (l, k) => l.reduce((t, d) => t + Number(d[k] || 0), 0);
+    const agrupar = chave => {
+      const g = {};
+      demandas.forEach(d => {
+        const k = d[chave] || 'Sem categoria';
+        const x = g[k] = g[k] || { nome: k, n: 0, planejado: 0, reservado: 0, pedido: 0, pago: 0, atrasadas: 0 };
+        x.n++; x.planejado += d.valor_estimado; x.reservado += d.reservado; x.pedido += d.pedido; x.pago += d.pago;
+        if (d.pior_estado === 'vencido') x.atrasadas++;
+      });
+      return Object.values(g).sort((a, b) => b.planejado - a.planejado);
+    };
+    const porSituacao = {};
+    demandas.forEach(d => { porSituacao[d.situacao] = (porSituacao[d.situacao] || 0) + 1; });
+    const pendencias = [];
+    demandas.forEach(d => d.marcos.forEach(m => {
+      if (m.estado === 'vencido' || m.estado === 'a_vencer')
+        pendencias.push({ id_demanda: d.id_demanda, codigo: d.codigo, descricao_objeto: d.descricao_objeto,
+          sigla_unidade: d.sigla_unidade, id_unidade_fk: d.id_unidade_fk, ...m, ultima_cobranca: d.cobrancas_por_marco[m.tipo] || null });
+    }));
+    pendencias.sort((a, b) => (a.estado === b.estado ? 0 : a.estado === 'vencido' ? -1 : 1) || String(a.prazo).localeCompare(String(b.prazo)));
+
+    return {
+      ok: true, exercicio: ex, demandas, empenhos, calendario, pendencias,
+      resumo: {
+        n: demandas.length, planejado: soma(demandas, 'valor_estimado'), reservado: soma(demandas, 'reservado'),
+        pedido: soma(demandas, 'pedido'), liquidado: soma(demandas, 'liquidado'), pago: soma(demandas, 'pago'),
+        por_situacao: porSituacao, por_unidade: agrupar('sigla_unidade'), por_categoria: agrupar('categoria'),
+        vencidos: pendencias.filter(p => p.estado === 'vencido').length,
+        a_vencer: pendencias.filter(p => p.estado === 'a_vencer').length,
+      },
+    };
+  },
+
+  async mon_ficha({ id_demanda }) {
+    const c = await sb();
+    const arv = await _arvore();
+    const [{ data: ex, error }, { data: cal }, { data: overr }, { data: cobs }, { data: vincs }] = await Promise.all([
+      c.from('v_execucao_demandas').select('*').eq('id_demanda', id_demanda).maybeSingle(),
+      c.from('marcos_calendario').select('*'),
+      c.from('marcos_demanda').select('*').eq('id_demanda', id_demanda),
+      c.from('cobrancas').select('*, perfis(nome)').eq('id_demanda', id_demanda).order('data_cobranca', { ascending: false }),
+      c.from('empenho_demandas').select('*, empenhos(numero,data_emissao,favorecido_nome,natureza_despesa,tipo), execucoes(*)')
+        .eq('id_demanda', id_demanda).order('data_criacao'),
+    ]);
+    if (error) return { ok: false, erro: _erro(error) };
+    if (!ex) return { ok: false, erro: 'Demanda não encontrada ou não homologada.' };
+    const demanda = _montarExecucao(ex, arv, (cal || []).filter(m => m.exercicio === ex.exercicio), overr || [], cobs || []);
+    const vinculos = (vincs || []).map(v => {
+      const execucoes = (v.execucoes || []).sort((a, b) => String(a.data_pedido).localeCompare(String(b.data_pedido)))
+        .map(x => ({ ...x, valor: Number(x.valor), valor_liquidado: Number(x.valor_liquidado), valor_pago: Number(x.valor_pago) }));
+      const pedido = execucoes.reduce((t, x) => t + x.valor, 0);
+      return { id_vinculo: v.id_vinculo, id_empenho: v.id_empenho, valor_reservado: Number(v.valor_reservado),
+               observacao: v.observacao, empenho: v.empenhos || {}, execucoes, pedido,
+               saldo_reserva: Number(v.valor_reservado) - pedido };
+    });
+    return {
+      ok: true, demanda, vinculos,
+      cobrancas: (cobs || []).map(x => ({ ...x, autor: x.perfis ? x.perfis.nome : '', tipo_nome: _nomeMarco(x.tipo_marco) })),
+      prazos_proprios: overr || [],
+    };
+  },
+
+  async mon_empenho({ id_empenho }) {
+    const c = await sb();
+    const [{ data: e, error }, { data: movs }, { data: vincs }] = await Promise.all([
+      c.from('v_empenhos_saldo').select('*').eq('id_empenho', id_empenho).maybeSingle(),
+      c.from('empenho_movimentos').select('*').eq('id_empenho', id_empenho).order('data'),
+      c.from('empenho_demandas').select('*, demandas(codigo,descricao_objeto,valor_estimado,unidades(sigla)), execucoes(*)')
+        .eq('id_empenho', id_empenho).order('data_criacao'),
+    ]);
+    if (error) return { ok: false, erro: _erro(error) };
+    if (!e) return { ok: false, erro: 'Empenho não encontrado.' };
+    const vinculos = (vincs || []).map(v => {
+      const xs = (v.execucoes || []).sort((a, b) => String(a.data_pedido).localeCompare(String(b.data_pedido)));
+      const pedido = xs.reduce((t, x) => t + Number(x.valor), 0);
+      const d = v.demandas || {};
+      return {
+        id_vinculo: v.id_vinculo, id_demanda: v.id_demanda, codigo: d.codigo, descricao_objeto: d.descricao_objeto,
+        sigla_unidade: d.unidades ? d.unidades.sigla : '', valor_estimado: Number(d.valor_estimado || 0),
+        valor_reservado: Number(v.valor_reservado), pedido,
+        liquidado: xs.reduce((t, x) => t + Number(x.valor_liquidado), 0), pago: xs.reduce((t, x) => t + Number(x.valor_pago), 0),
+        saldo_reserva: Number(v.valor_reservado) - pedido,
+        ultimo_pedido: xs.length ? xs[xs.length - 1].data_pedido : null,
+        execucoes: xs.map(x => ({ ...x, valor: Number(x.valor), valor_liquidado: Number(x.valor_liquidado), valor_pago: Number(x.valor_pago) })),
+      };
+    });
+    const num = k => Number(e[k] || 0);
+    return {
+      ok: true,
+      empenho: { ...e, valor_empenhado: num('valor_empenhado'), valor_atual: num('valor_atual'), reservado: num('reservado'),
+                 pedido: num('pedido'), liquidado: num('liquidado'), pago: num('pago'),
+                 saldo_empenho: num('saldo_empenho'), saldo_a_reservar: num('saldo_a_reservar') },
+      movimentos: (movs || []).map(m => ({ ...m, valor: Number(m.valor) })),
+      vinculos,
+    };
+  },
+
+  async mon_salvar_empenho({ empenho }) {
+    const c = await sb();
+    const p = await _meuPerfil();
+    const x = { ...empenho };
+    ['numero', 'data_emissao', 'id_unidade_gestora_fk', 'valor_empenhado'].forEach(k => { if (typeof x[k] === 'string') x[k] = x[k].trim(); });
+    if (!x.numero) return { ok: false, erro: 'Informe o número do empenho.' };
+    if (!x.data_emissao) return { ok: false, erro: 'Informe a data de emissão.' };
+    if (!x.id_unidade_gestora_fk) return { ok: false, erro: 'Informe a unidade gestora.' };
+    if (!(Number(x.valor_empenhado) > 0)) return { ok: false, erro: 'Informe o valor empenhado.' };
+    x.numero = x.numero.toUpperCase();
+    x.valor_empenhado = Number(x.valor_empenhado);
+    x.exercicio = Number(x.exercicio || String(x.data_emissao).slice(0, 4));
+    if (!x.fonte_codigo) x.fonte_codigo = null;
+    const campos = ['numero','exercicio','id_unidade_gestora_fk','ug_codigo','data_emissao','favorecido_cnpj','favorecido_nome',
+                    'natureza_despesa','fonte_codigo','processo_sei','tipo','valor_empenhado','observacao'];
+    const dados = Object.fromEntries(campos.filter(k => k in x).map(k => [k, x[k] === '' ? null : x[k]]));
+    let r;
+    if (x.id_empenho) r = await c.from('empenhos').update(dados).eq('id_empenho', x.id_empenho).select('id_empenho').single();
+    else r = await c.from('empenhos').insert({ ...dados, criado_por: p.id_usuario }).select('id_empenho').single();
+    if (r.error) return { ok: false, erro: /duplicate|unique/i.test(r.error.message) ? 'Já existe um empenho com este número nesta UG.' : _erro(r.error) };
+    return { ok: true, id_empenho: r.data.id_empenho };
+  },
+
+  async mon_movimento({ id_empenho, tipo, valor, data, documento, observacao }) {
+    const c = await sb();
+    const p = await _meuPerfil();
+    if (!['reforco', 'anulacao'].includes(tipo)) return { ok: false, erro: 'Tipo inválido.' };
+    if (!(Number(valor) > 0) || !data) return { ok: false, erro: 'Informe valor e data.' };
+    const { error } = await c.from('empenho_movimentos').insert({
+      id_empenho, tipo, valor: Number(valor), data, documento: documento || null, observacao: observacao || null, criado_por: p.id_usuario });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  async mon_excluir_movimento({ id_movimento }) {
+    const c = await sb();
+    const { error } = await c.from('empenho_movimentos').delete().eq('id_movimento', id_movimento);
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  async mon_vincular({ id_empenho, id_demanda, codigo, valor_reservado, observacao }) {
+    const c = await sb();
+    const p = await _meuPerfil();
+    let idDem = id_demanda;
+    if (!idDem && codigo) {
+      const { data } = await c.from('demandas').select('id_demanda,status').eq('codigo', String(codigo).trim().toUpperCase()).maybeSingle();
+      if (!data) return { ok: false, erro: 'Demanda ' + codigo + ' não encontrada no seu escopo.' };
+      idDem = data.id_demanda;
+    }
+    if (!idDem) return { ok: false, erro: 'Informe a demanda.' };
+    if (!(Number(valor_reservado) > 0)) return { ok: false, erro: 'Informe o valor a reservar.' };
+    const { error } = await c.from('empenho_demandas').insert({
+      id_empenho, id_demanda: idDem, valor_reservado: Number(valor_reservado), observacao: observacao || null, criado_por: p.id_usuario });
+    if (error && /duplicate|unique/i.test(error.message)) return { ok: false, erro: 'Esta demanda já tem reserva neste empenho; altere o valor da reserva existente.' };
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  async mon_editar_vinculo({ id_vinculo, valor_reservado }) {
+    const c = await sb();
+    if (!(Number(valor_reservado) > 0)) return { ok: false, erro: 'Informe o valor a reservar.' };
+    const { error } = await c.from('empenho_demandas').update({ valor_reservado: Number(valor_reservado) }).eq('id_vinculo', id_vinculo);
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  async mon_excluir_vinculo({ id_vinculo }) {
+    const c = await sb();
+    const { error } = await c.from('empenho_demandas').delete().eq('id_vinculo', id_vinculo);
+    if (error && /foreign key|violates/i.test(error.message)) return { ok: false, erro: 'A reserva já tem pedidos lançados; exclua os pedidos antes.' };
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  async mon_pedido(params) {
+    const c = await sb();
+    const p = await _meuPerfil();
+    const x = params.pedido || params;
+    if (!x.id_vinculo) return { ok: false, erro: 'Selecione a reserva (empenho e demanda).' };
+    if (!x.data_pedido || !(Number(x.valor) > 0)) return { ok: false, erro: 'Informe data e valor do pedido.' };
+    const dados = {
+      id_vinculo: x.id_vinculo, data_pedido: x.data_pedido, valor: Number(x.valor),
+      tipo_documento: x.tipo_documento || 'ordem_fornecimento', numero_documento: x.numero_documento || null,
+      descricao: x.descricao || null, nota_fiscal: x.nota_fiscal || null,
+      data_liquidacao: x.data_liquidacao || null, valor_liquidado: Number(x.valor_liquidado || 0),
+      data_pagamento: x.data_pagamento || null, valor_pago: Number(x.valor_pago || 0),
+    };
+    if (dados.valor_liquidado > dados.valor) return { ok: false, erro: 'O valor liquidado não pode passar do valor do pedido.' };
+    if (dados.valor_pago > dados.valor_liquidado) return { ok: false, erro: 'O valor pago não pode passar do liquidado.' };
+    let r;
+    if (x.id_execucao) r = await c.from('execucoes').update(dados).eq('id_execucao', x.id_execucao);
+    else r = await c.from('execucoes').insert({ ...dados, criado_por: p.id_usuario });
+    return r.error ? { ok: false, erro: _erro(r.error) } : { ok: true };
+  },
+
+  async mon_excluir_pedido({ id_execucao }) {
+    const c = await sb();
+    const { error } = await c.from('execucoes').delete().eq('id_execucao', id_execucao);
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  // Processo (unidade ou Monitoramento) e encerramento (só Monitoramento — o banco confere).
+  async mon_salvar_execucao(params) {
+    const c = await sb();
+    const x = params.execucao || params;
+    if (!x.id_demanda) return { ok: false, erro: 'Demanda não informada.' };
+    const campos = ['processo_sei','data_abertura_processo','data_envio_processo','encerramento','justificativa_encerramento','data_encerramento'];
+    const dados = { id_demanda: x.id_demanda };
+    campos.forEach(k => { if (k in x) dados[k] = x[k] === '' ? null : x[k]; });
+    if (dados.processo_sei && !dados.data_abertura_processo && !('data_abertura_processo' in x))
+      dados.data_abertura_processo = new Date().toISOString().slice(0, 10);
+    if (dados.encerramento === 'nao_executada' && String(dados.justificativa_encerramento || '').trim().length < 5)
+      return { ok: false, erro: 'Justifique por que a demanda não será executada.' };
+    if (dados.encerramento && !dados.data_encerramento) dados.data_encerramento = new Date().toISOString().slice(0, 10);
+    const { error } = await c.from('execucao_demandas').upsert(dados, { onConflict: 'id_demanda' });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  async mon_salvar_marco(params) {
+    const c = await sb();
+    const p = await _meuPerfil();
+    const x = params.marco || params;
+    if (!TIPOS_MARCO.some(t => t.valor === x.tipo)) return { ok: false, erro: 'Selecione o marco.' };
+    if (!x.data_limite) return { ok: false, erro: 'Informe a data limite.' };
+    const dados = { exercicio: Number(x.exercicio), tipo: x.tipo, id_unidade_escopo: x.id_unidade_escopo || null,
+                    data_limite: x.data_limite, descricao: x.descricao || null };
+    let r;
+    if (x.id_marco) r = await c.from('marcos_calendario').update(dados).eq('id_marco', x.id_marco);
+    else r = await c.from('marcos_calendario').insert({ ...dados, criado_por: p.id_usuario });
+    if (r.error && /duplicate|unique/i.test(r.error.message)) return { ok: false, erro: 'Já existe esse marco para este exercício e escopo; edite o existente.' };
+    if (r.error && /row-level|42501/i.test(r.error.message))
+      return { ok: false, erro: 'Você só pode criar marcos para a sua unidade' + (p.id_unidade_fk ? '' : '') + '; marcos de toda a instituição são da Reitoria.' };
+    return r.error ? { ok: false, erro: _erro(r.error) } : { ok: true };
+  },
+
+  async mon_excluir_marco({ id_marco }) {
+    const c = await sb();
+    const { error } = await c.from('marcos_calendario').delete().eq('id_marco', id_marco);
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  // Prazo específico de uma demanda (substitui o do calendário). data_limite vazia = volta ao calendário.
+  async mon_prazo_demanda({ id_demanda, tipo, data_limite, motivo }) {
+    const c = await sb();
+    const p = await _meuPerfil();
+    let r;
+    if (!data_limite) r = await c.from('marcos_demanda').delete().eq('id_demanda', id_demanda).eq('tipo', tipo);
+    else r = await c.from('marcos_demanda').upsert({ id_demanda, tipo, data_limite, motivo: motivo || null, criado_por: p.id_usuario },
+                                                     { onConflict: 'id_demanda,tipo' });
+    return r.error ? { ok: false, erro: _erro(r.error) } : { ok: true };
+  },
+
+  async mon_cobrar({ id_demanda, tipo_marco, canal, registro }) {
+    const c = await sb();
+    const p = await _meuPerfil();
+    if (String(registro || '').trim().length < 5) return { ok: false, erro: 'Descreva a cobrança (mínimo 5 caracteres).' };
+    const { error } = await c.from('cobrancas').insert({
+      id_demanda, tipo_marco: tipo_marco || null, canal: canal || 'sei', registro: String(registro).trim(), criado_por: p.id_usuario });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  async mon_resposta_cobranca({ id_cobranca, resposta, data_resposta }) {
+    const c = await sb();
+    const { error } = await c.from('cobrancas').update({
+      resposta: resposta || null, data_resposta: data_resposta || new Date().toISOString().slice(0, 10) }).eq('id_cobranca', id_cobranca);
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
   // ─── Administração de usuários ─────────────────────────────────────────────
   // O embed precisa nomear a FK: existem DUAS relacoes entre perfis e unidades
   // (perfis.id_unidade_fk -> unidades, e unidades.id_ordenador_fk -> perfis).
@@ -972,7 +1379,7 @@ function _criarRunner(onSuccess, onFailure) {
 const PAGE_FILE_MAP = {
   admin: 'Admin.html', aprovacoes: 'Aprovacoes.html', dashboard: 'Dashboard.html',
   demandas: 'Demandas.html', homologacao: 'Homologacao.html', login: 'Login.html',
-  orcamento: 'Orcamento.html', prioridades: 'Prioridades.html',
+  orcamento: 'Orcamento.html', prioridades: 'Prioridades.html', monitoramento: 'Monitoramento.html',
   publico: 'Publico.html', index: 'index.html',
 };
 

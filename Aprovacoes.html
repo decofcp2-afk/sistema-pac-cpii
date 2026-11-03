@@ -210,7 +210,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202611031200"></script>
+<script src="api.js?v=202611031500"></script>
 <script>
   const token  = localStorage.getItem('pac_token') || '';
   const appUrl = APPS_SCRIPT_URL;
@@ -249,9 +249,10 @@
 
   // ── Menus ─────────────────────────────────────────────────────────────────
   const MENUS = {
-    chefia:       [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Minhas demandas', page:'demandas', icon:'list' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }],
-    ord_despesas: [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }, { label:'Prioridades GUT', page:'prioridades', icon:'star' }, { label:'Homologar plano', page:'homologacao', icon:'shield' }],
-    licitacoes:   [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Usuários', page:'admin', icon:'users' }, { label:'Todas as demandas', page:'demandas', icon:'list' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Prioridades GUT', page:'prioridades', icon:'star' }, { label:'Homologar plano', page:'homologacao', icon:'shield' }],
+    chefia:       [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Minhas demandas', page:'demandas', icon:'list' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }, { label:'Execução', page:'monitoramento', icon:'activity' }],
+    ord_despesas: [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }, { label:'Prioridades GUT', page:'prioridades', icon:'star' }, { label:'Homologar plano', page:'homologacao', icon:'shield' }, { label:'Monitoramento', page:'monitoramento', icon:'activity' }],
+    licitacoes:   [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Usuários', page:'admin', icon:'users' }, { label:'Todas as demandas', page:'demandas', icon:'list' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Prioridades GUT', page:'prioridades', icon:'star' }, { label:'Homologar plano', page:'homologacao', icon:'shield' }, { label:'Monitoramento', page:'monitoramento', icon:'activity' }],
+    monitoramento: [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Monitoramento', page:'monitoramento', icon:'activity' }],
   };
   const ICONS = {
     home:   '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
@@ -261,6 +262,7 @@
     star:   '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
     shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
     users:  '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',
+    activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
   };
 
   // ── Navegação ─────────────────────────────────────────────────────────────
