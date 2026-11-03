@@ -237,3 +237,17 @@ where d.status in ('submetida','aprovada','reprovada','priorizada','homologada')
 grant select on public.pac_publico to anon, authenticated;
 
 select 'migracao aplicada' as resultado;
+
+-- ═══ Ajuste: valores em formato brasileiro nas mensagens (R$ 110.000,00) ═════
+create or replace function public.fmt_brl(v numeric) returns text
+language sql immutable as $$ select translate(to_char(v, 'FM999G999G999G990D00'), ',.', '.,') $$;
+do $$
+declare f text; d text;
+begin
+  foreach f in array array['validar_saldo_envio','validar_comprometido_distribuicao','validar_saldo_distribuicao'] loop
+    select pg_get_functiondef(('public.' || f)::regproc) into d;
+    d := regexp_replace(d, 'to_char\(([^,()]+(\([^()]*\))?), ''FM999G999G990D00''\)', 'public.fmt_brl(\1)', 'g');
+    execute d;
+  end loop;
+end $$;
+select 'formato ajustado' as resultado;
