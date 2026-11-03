@@ -326,7 +326,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202610271800"></script>
+<script src="api.js?v=202611031000"></script>
 <script>
   const APP_URL = APPS_SCRIPT_URL;
   const _di     = {};
@@ -492,7 +492,7 @@
     google.script.run
       .withSuccessHandler(function(resp) {
         if (!resp.ok) {
-          document.getElementById('corpo-tabela').innerHTML = '<div class="vazio">Erro ao carregar dados.</div>';
+          document.getElementById('corpo-tabela').innerHTML = '<div class="vazio">' + escHtml(resp.erro || 'Erro ao carregar dados.') + '</div>';
           return;
         }
         _dados = resp;

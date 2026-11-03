@@ -114,11 +114,17 @@ async function _arvore() {
   return { lista, filhos, sub, pai, porId: Object.fromEntries(lista.map(u => [u.id_unidade, u])) };
 }
 
+const MSG_SEM_CONEXAO = 'Não foi possível conectar ao banco de dados do PAC. '
+  + 'Ele pode estar pausado ou em manutenção — tente de novo em alguns minutos '
+  + 'ou avise o administrador do sistema.';
+
 // Converte erro do PostgREST em mensagem legível. Violação de policy volta como
 // zero linhas ou 42501; violação de trigger traz a mensagem que escrevemos.
 function _erro(e) {
   if (!e) return 'Erro desconhecido.';
   const m = e.message || String(e);
+  if (/failed to fetch|networkerror|load failed|fetch failed|timeout|503|502|504|ECONN/i.test(m))
+    return MSG_SEM_CONEXAO;
   if (/row-level security|42501/i.test(m))
     return 'Você não tem permissão para esta operação.';
   return m.replace(/^new row violates.*?:\s*/i, '');
@@ -135,7 +141,12 @@ const ACOES = {
   async login({ email, senha }) {
     const c = await sb();
     const { data, error } = await c.auth.signInWithPassword({ email, password: senha });
-    if (error) return { ok: false, erro: 'E-mail ou senha incorretos.' };
+    if (error) {
+      // Só é "senha errada" quando o servidor de fato recusou as credenciais.
+      // Sem resposta (banco pausado, sem internet) a mensagem tem de dizer isso.
+      const recusou = error.status === 400 || /invalid.*credentials|invalid login/i.test(error.message || '');
+      return { ok: false, erro: recusou ? 'E-mail ou senha incorretos.' : MSG_SEM_CONEXAO };
+    }
     _perfil = null;
     const p = await _meuPerfil();
     if (!p)      return { ok: false, erro: 'Perfil não encontrado. Procure o administrador.' };
