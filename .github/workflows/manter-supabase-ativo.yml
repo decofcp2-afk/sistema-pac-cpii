@@ -1,0 +1,32 @@
+name: Manter o banco (Supabase) ativo
+
+# O plano gratuito do Supabase pausa o projeto depois de cerca de 7 dias sem
+# uso; pausado, o sistema não abre, o login falha e o painel público fica vazio.
+# Esta rotina faz uma consulta leve ao banco a cada 3 dias para mantê-lo ativo.
+# A chave usada é a chave pública (a mesma que está em api.js).
+#
+# Atenção: o GitHub desliga rotinas agendadas de repositórios sem nenhuma
+# alteração por 60 dias. Se isso acontecer, reative em Actions → esta rotina →
+# "Enable workflow".
+
+on:
+  schedule:
+    - cron: '17 11 */3 * *'   # a cada 3 dias, 08h17 (Brasília)
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consulta leve ao banco
+        run: |
+          KEY='sb_publishable_36ZcT_xq_sljUuJJ0zodvw_Z4lbQdbB'
+          URL='https://moitotympuemxudzdeit.supabase.co/rest/v1/unidades_publicas?select=sigla&limit=1'
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -m 60 "$URL" -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+            echo "Tentativa $i: HTTP $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 30
+          done
+          echo "::error::O banco não respondeu. Ele pode estar pausado: abra o projeto no painel do Supabase e clique em Restore."
+          exit 1
