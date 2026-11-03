@@ -162,7 +162,7 @@
     </div>
     <div class="campo">
       <label>Papel *</label>
-      <select id="f-papel">
+      <select id="f-papel" onchange="montarOpcoesUnidade()">
         <option value="">Selecione...</option>
         <option value="licitacoes">Seção de Licitações</option>
         <option value="ord_despesas">Ordenador de Despesas</option>
@@ -277,34 +277,51 @@
         if (!resp.ok) return;
         _unidades = resp.unidades || [];
         if (_usuarios.length) renderizarUsuarios();   // a lista pode ter chegado antes das unidades
-        const sel = document.getElementById('f-unidade');
-        while (sel.options.length > 1) sel.remove(1);
-
-        const ehSetorial = _meuPapel === 'licitacoes' && _minhaUnidadeId;
-        if (ehSetorial) {
-          sel.options[0].style.display = 'none';
-          sel.options[0].disabled      = true;
+        if (_meuPapel === 'licitacoes' && _minhaUnidadeId) {
           _minhasSubordinadas = _unidades
             .filter(u => _pertenceHierarquia(u.id_unidade, _minhaUnidadeId, _unidades))
             .map(u => u.id_unidade);
-          _unidades
-            .filter(u => _minhasSubordinadas.includes(u.id_unidade))
-            .forEach(u => {
-              const opt = document.createElement('option');
-              opt.value = u.id_unidade;
-              opt.textContent = (u.sigla ? '['+u.sigla+'] ' : '') + u.nome;
-              sel.appendChild(opt);
-            });
-        } else {
-          _unidades.forEach(u => {
-            const opt = document.createElement('option');
-            opt.value = u.id_unidade;
-            opt.textContent = (u.sigla ? '['+u.sigla+'] ' : '') + u.nome;
-            sel.appendChild(opt);
-          });
         }
+        montarOpcoesUnidade();
       })
       .chamarAcao(token, 'listar_unidades', '{}');
+  }
+
+  // Monta a lista de unidades conforme o papel escolhido no formulário.
+  // - Monitoramento: só a Reitoria (CPII, vê toda a instituição) e os campi.
+  // - Demais papéis: todas as unidades (ou só as subordinadas, para o admin setorial),
+  //   com o CPII no topo. O texto começa pela sigla, para a busca por teclado funcionar.
+  function montarOpcoesUnidade(valorDesejado) {
+    const sel   = document.getElementById('f-unidade');
+    const papel = document.getElementById('f-papel').value;
+    const atual = valorDesejado !== undefined ? valorDesejado : sel.value;
+    const ehSetorial = _meuPapel === 'licitacoes' && !!_minhaUnidadeId;
+    const raiz  = _unidades.find(u => !u.id_unidade_pai);
+    const rotulo = u => u.nome || u.sigla;
+
+    sel.innerHTML = '';
+    const add = (valor, texto, pai) => {
+      const o = document.createElement('option');
+      o.value = valor; o.textContent = texto;
+      (pai || sel).appendChild(o);
+    };
+    const grupo = nome => { const g = document.createElement('optgroup'); g.label = nome; sel.appendChild(g); return g; };
+
+    let lista = ehSetorial ? _unidades.filter(u => _minhasSubordinadas.includes(u.id_unidade)) : _unidades.slice();
+
+    if (papel === 'monitoramento') {
+      add('', 'Selecione a unidade...');
+      if (raiz && lista.includes(raiz))
+        add(raiz.id_unidade, rotulo(raiz) + ' (Reitoria — acompanha toda a instituição)', grupo('Reitoria'));
+      const campi = lista.filter(u => u.tipo === 'campus').sort((a, b) => rotulo(a).localeCompare(rotulo(b), 'pt-BR'));
+      if (campi.length) { const g = grupo('Campus — acompanha só o próprio campus'); campi.forEach(u => add(u.id_unidade, rotulo(u), g)); }
+    } else {
+      if (ehSetorial) add('', 'Selecione a unidade...');
+      else add('', papel === 'licitacoes' ? 'Sem unidade (admin global)' : 'Selecione a unidade...');
+      lista.sort((a, b) => (a === raiz ? -1 : b === raiz ? 1 : rotulo(a).localeCompare(rotulo(b), 'pt-BR')))
+           .forEach(u => add(u.id_unidade, rotulo(u)));
+    }
+    sel.value = [...sel.options].some(o => o.value === atual) ? atual : '';
   }
 
   function _pertenceHierarquia(idUnidade, idRaiz, todasUnidades) {
@@ -386,7 +403,7 @@
     document.getElementById('f-email').value = '';
     if (document.getElementById('f-siape')) document.getElementById('f-siape').value = '';
     document.getElementById('f-papel').value   = '';
-    document.getElementById('f-unidade').value = '';
+    montarOpcoesUnidade('');
     document.getElementById('area-senha-inicial').style.display = 'none';
     document.getElementById('btn-salvar-usuario').textContent   = 'Criar usuário';
     document.getElementById('erro-usuario').classList.remove('vis');
@@ -405,7 +422,7 @@
     document.getElementById('f-email').value = u.email;
     if (document.getElementById('f-siape')) document.getElementById('f-siape').value = u.matricula_siape || '';
     document.getElementById('f-papel').value   = u.papel;
-    document.getElementById('f-unidade').value = u.id_unidade_fk || '';
+    montarOpcoesUnidade(u.id_unidade_fk || '');
     document.getElementById('area-senha-inicial').style.display = 'none';
     document.getElementById('btn-salvar-usuario').textContent   = 'Salvar alterações';
     document.getElementById('erro-usuario').classList.remove('vis');
@@ -425,6 +442,7 @@
     if (!nome)  { mostrarErro('Informe o nome completo.'); return; }
     if (!email) { mostrarErro('Informe o e-mail.'); return; }
     if (!papel) { mostrarErro('Selecione o papel.'); return; }
+    if (papel !== 'licitacoes' && !unidade) { mostrarErro('Selecione a unidade do usuário.'); return; }
 
     const usuario = { nome, email, papel, id_unidade_fk: unidade, matricula_siape: siape };
     if (_editandoId) usuario.id_usuario = _editandoId;
