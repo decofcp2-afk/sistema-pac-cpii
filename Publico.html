@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PAC — Planejamento Anual de Contratações · Colégio Pedro II</title>
+<title>Planejamento e Monitoramento Orçamentário · Colégio Pedro II</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -162,6 +162,8 @@
     .resumo-cards { grid-template-columns: 1fr 1fr; }
     .header-sub { display: none; }
   }
+  .cod-dem { display: inline-block; font-size: 10.5px; font-weight: 700; color: #3C3489; background: #EEEDFE; border-radius: 4px; padding: 1px 6px; margin-bottom: 3px; white-space: nowrap; }
+  .cat-dem { display: block; font-size: 11px; color: #888780; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -178,7 +180,7 @@
   <div class="header-info">
     <div class="header-mec">Ministério da Educação</div>
     <div class="header-nome">Colégio Pedro II</div>
-    <div class="header-sub">Planejamento Anual de Contratações — Painel Público</div>
+    <div class="header-sub">Planejamento e Monitoramento Orçamentário — Painel Público</div>
   </div>
 
   <!-- Botão login -->
@@ -230,10 +232,10 @@
     <div style="display:flex;align-items:flex-start;gap:16px">
       <div style="font-size:28px;flex-shrink:0">📋</div>
       <div>
-        <div style="font-size:15px;font-weight:700;color:#1a1060;margin-bottom:6px">Planejamento Anual de Contratações — Painel Público</div>
+        <div style="font-size:15px;font-weight:700;color:#1a1060;margin-bottom:6px">Planejamento e Monitoramento Orçamentário — Painel Público</div>
         <p style="font-size:13px;color:#444441;line-height:1.7;margin-bottom:8px">
-          Este painel tem por objetivo demonstrar à comunidade do Colégio Pedro II como o orçamento institucional está sendo direcionado internamente e quais demandas futuras ele atenderá. 
-          <strong>O PAC não representa a execução orçamentária ou das contratações</strong>, mas sim a sua <em>construção</em> — evidenciando quais áreas e necessidades estão sendo priorizadas para o futuro.
+          Este painel demonstra à comunidade do Colégio Pedro II como o orçamento institucional está sendo distribuído internamente e quais demandas ele deverá atender, compondo o Plano Anual de Contratações (PAC). 
+          <strong>Os valores apresentados são de planejamento e não representam a execução orçamentária ou das contratações</strong> — evidenciam quais áreas e necessidades estão sendo priorizadas.
         </p>
         <p style="font-size:13px;color:#444441;line-height:1.7;margin-bottom:0">
           A transparência neste processo é fundamental para a <strong>participação ativa da comunidade na gestão do Colégio Pedro II</strong>. 
@@ -278,7 +280,7 @@
       </div>
       <div class="campo-f">
         <label>Buscar objeto</label>
-        <input type="text" id="f-busca" placeholder="Palavra-chave..." onkeydown="if(event.key==='Enter')buscar()">
+        <input type="text" id="f-busca" placeholder="Objeto, ID ou categoria..." onkeydown="if(event.key==='Enter')buscar()">
       </div>
     </div>
     <div class="filtros-acoes">
@@ -326,7 +328,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202611031000"></script>
+<script src="api.js?v=202611031200"></script>
 <script>
   const APP_URL = APPS_SCRIPT_URL;
   const _di     = {};
@@ -714,7 +716,7 @@
         const obs = obsResumo(d);
         return `<tr>
           <td style="color:#B4B2A9">${i+1}</td>
-          <td style="max-width:200px" title="${esc(d.descricao_objeto)}">${escHtml(truncar(d.descricao_objeto,44))}</td>
+          <td style="max-width:220px" title="${esc(d.descricao_objeto)}"><span class="cod-dem">${escHtml(d.codigo||'')}</span><br>${escHtml(truncar(d.descricao_objeto,44))}${d.categoria ? `<span class="cat-dem">${escHtml(d.categoria)}</span>` : ''}</td>
           <td style="font-size:11px;color:#888780">${escHtml(d.sigla_unidade||d.nome_unidade||'—')}</td>
           <td class="num">R$ ${fmtV(Number(d.valor_estimado||0))}</td>
           <td class="num">${gut?`<span class="gut-b ${cg}">${gut}</span>`:'—'}</td>
@@ -766,7 +768,7 @@
     const nomeU = document.getElementById('f-unidade').selectedOptions[0]?.textContent || 'Unidade';
     const ano   = document.getElementById('f-ano').value;
     const linhas = _dados.demandas.map((d,i) => ({
-      '#': i+1, 'Objeto': d.descricao_objeto||'', 'Justificativa': d.justificativa||'',
+      '#': i+1, 'ID': d.codigo||'', 'Objeto': d.descricao_objeto||'', 'Categoria': d.categoria||'', 'Natureza de despesa': d.natureza_despesa||'', 'Justificativa': d.justificativa||'',
       'Setor': d.nome_unidade||'', 'Qtde': d.quantidade||'', 'Unid. Medida': d.unidade_medida||'',
       'Valor Estimado': Number(d.valor_estimado||0), 'Status': rotular(d.status),
       'G': d.gut_g||'', 'U': d.gut_u||'', 'T': d.gut_t||'', 'GUT': d.gut_total||'',
@@ -777,8 +779,8 @@
     }));
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(linhas);
-    XLSX.utils.book_append_sheet(wb, ws, 'PAC ' + ano);
-    XLSX.writeFile(wb, 'PAC_' + ano + '_' + nomeU.replace(/[^\w]/g,'_').slice(0,30) + '.xlsx');
+    XLSX.utils.book_append_sheet(wb, ws, 'PMO ' + ano);
+    XLSX.writeFile(wb, 'PMO_' + ano + '_' + nomeU.replace(/[^\w]/g,'_').slice(0,30) + '.xlsx');
   }
 
   // ── Gerar PDF ─────────────────────────────────────────────────────────────
@@ -941,9 +943,9 @@
     <h2>6. DEMANDAS REPROVADAS</h2>
     ${relReprovadas(todas, reprovadas)}
 
-    <p class="rodape">Relatório gerado em ${new Date().toLocaleString('pt-BR')} a partir do Painel Público do PAC do Colégio Pedro II.
+    <p class="rodape">Relatório gerado em ${new Date().toLocaleString('pt-BR')} a partir do Painel Público do sistema Planejamento e Monitoramento Orçamentário do Colégio Pedro II.
     Os nomes dos servidores responsáveis por cada manifestação não são exibidos neste relatório público; os registros completos
-    constam do sistema PAC.</p>
+    constam do sistema Planejamento e Monitoramento Orçamentário.</p>
     </div></body></html>`;
   }
 
@@ -977,9 +979,10 @@
   function itemDemanda(num, x, extras, rep) {
     const qtd = x.quantidade ? Number(x.quantidade).toLocaleString('pt-BR') + (x.unidade_medida ? ' ' + escHtml(x.unidade_medida) : '') : '';
     return `<div class="item${rep ? ' rep' : ''}">
-      <h3>${num} ${escHtml(x.descricao_objeto || 'Demanda sem descrição')}</h3>
+      <h3>${num} ${x.codigo ? escHtml(x.codigo) + ' — ' : ''}${escHtml(x.descricao_objeto || 'Demanda sem descrição')}</h3>
       <ul>
         <li><b>Unidade demandante:</b> ${escHtml(x.sigla_unidade || x.nome_unidade || '—')}</li>
+        ${x.categoria ? `<li><b>Categoria da despesa:</b> ${escHtml(x.categoria)}${x.natureza_despesa ? ' (ND ' + escHtml(x.natureza_despesa) + ')' : ''}</li>` : ''}
         <li><b>Valor estimado:</b> ${rs(x.valor_estimado)}${qtd ? ' · <b>Quantidade:</b> ' + qtd : ''}</li>
         ${extras.join('')}
       </ul></div>`;

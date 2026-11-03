@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sistema PAC — Aprovações</title>
+<title>PMO — Aprovações</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background: #F1EFE8; color: #2C2C2A; min-height: 100vh; }
@@ -98,6 +98,8 @@
   .spinner-inline { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 4px; }
   @keyframes spin { to { transform: rotate(360deg); } }
   #nav-form { display: none; }
+  .cod-dem { display: inline-block; font-size: 10.5px; font-weight: 700; color: #3C3489; background: #EEEDFE; border-radius: 4px; padding: 1px 6px; margin-bottom: 3px; letter-spacing: .2px; white-space: nowrap; }
+  .cat-dem { display: block; font-size: 11px; color: #888780; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -109,7 +111,7 @@
 </form>
 
 <div class="topbar">
-  <span class="topbar-logo">PAC</span>
+  <span class="topbar-logo" title="Planejamento e Monitoramento Orçamentário">PMO</span>
   <span class="topbar-sub">Aprovações</span>
   <!-- Seletor de exercício -->
   <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:4px 10px;">
@@ -208,7 +210,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202611031000"></script>
+<script src="api.js?v=202611031200"></script>
 <script>
   const token  = localStorage.getItem('pac_token') || '';
   const appUrl = APPS_SCRIPT_URL;
@@ -386,7 +388,7 @@
         </tr></thead>
         <tbody>
           ${lista.map(d => `<tr>
-            <td title="${d.descricao_objeto||''}">${truncar(d.descricao_objeto, 45)}</td>
+            <td title="${d.descricao_objeto||''}"><span class="cod-dem">${d.codigo||''}</span><br>${truncar(d.descricao_objeto, 45)}${d.categoria ? `<span class="cat-dem">${d.categoria}</span>` : ''}</td>
             <td>${d.nome_unidade||'—'}</td>
             <td class="num">R$ ${fmtValor(Number(d.valor_estimado||0))}</td>
             <td><span class="badge badge-${d.status}">${rotularStatus(d.status)}</span></td>
@@ -454,7 +456,11 @@
     document.getElementById('detalhe-conteudo').innerHTML = `
       <div class="detalhe-item detalhe-full">
         <div class="detalhe-label">Descrição do objeto</div>
-        <div class="detalhe-valor">${d.descricao_objeto||'—'}</div>
+        <div class="detalhe-valor"><span class="cod-dem">${d.codigo||''}</span> ${d.descricao_objeto||'—'}</div>
+      </div>
+      <div class="detalhe-item detalhe-full">
+        <div class="detalhe-label">Categoria da despesa</div>
+        <div class="detalhe-valor" style="font-weight:400">${d.categoria ? d.categoria + (d.natureza_despesa ? ' — ND ' + d.natureza_despesa : '') : 'Não informada'}</div>
       </div>
       <div class="detalhe-item detalhe-full">
         <div class="detalhe-label">Justificativa da necessidade</div>

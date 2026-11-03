@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sistema PAC — Demandas</title>
+<title>PMO — Demandas</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background: #F1EFE8; color: #2C2C2A; min-height: 100vh; }
@@ -48,6 +48,8 @@
   tr:last-child td { border-bottom: none; }
   tr:hover td { background: #FAFAF8; }
 
+  .cod-dem { display: inline-block; font-size: 10.5px; font-weight: 700; color: #3C3489; background: #EEEDFE; border-radius: 4px; padding: 1px 6px; margin-bottom: 3px; letter-spacing: .2px; white-space: nowrap; }
+  .cat-dem { display: block; font-size: 11px; color: #888780; margin-top: 2px; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
   .badge-rascunho   { background: #F1EFE8; color: #5F5E5A; }
   .badge-submetida  { background: #E6F1FB; color: #0C447C; }
@@ -137,8 +139,8 @@
 </form>
 
 <div class="topbar">
-  <span class="topbar-logo">PAC</span>
-  <span class="topbar-sub">Planejamento Anual de Contratações</span>
+  <span class="topbar-logo" title="Planejamento e Monitoramento Orçamentário">PMO</span>
+  <span class="topbar-sub">Planejamento e Monitoramento Orçamentário</span>
   <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:4px 10px;">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
     <select id="sel-exercicio" style="background:transparent;border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;outline:none;padding:0 2px;" onchange="trocarExercicio(this.value)">
@@ -229,6 +231,11 @@
           <label>Descrição do objeto <span class="obrig">*</span></label>
           <input type="text" id="f-descricao" placeholder="Descrição sucinta do bem ou serviço" maxlength="300">
           <span class="hint">Art. 8.3.2.1 — descrição sucinta e precisa</span>
+        </div>
+        <div class="campo span2">
+          <label>Categoria da despesa <span class="obrig">*</span></label>
+          <select id="f-categoria"><option value="">Selecione...</option></select>
+          <span class="hint">Classifica a demanda para o acompanhamento da despesa (ND = natureza de despesa de referência)</span>
         </div>
         <div class="campo span2">
           <label>Justificativa da necessidade <span class="obrig">*</span></label>
@@ -365,7 +372,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202611031000"></script>
+<script src="api.js?v=202611031200"></script>
 <script>
   const token  = localStorage.getItem('pac_token') || '';
   const appUrl = APPS_SCRIPT_URL;
@@ -476,6 +483,7 @@
 
   function recarregarDados() {
     carregarDemandas();
+    if (!_categorias.length) carregarCategorias();
     carregarSaldoOrcamento();
   }
 
@@ -528,6 +536,23 @@
     document.getElementById('orcamento-sem-dados').style.display = recebido > 0 ? 'none' : 'block';
   }
 
+  let _categorias = [];
+  function carregarCategorias() {
+    google.script.run.withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) return;
+      _categorias = resp.categorias || [];
+      const sel = document.getElementById('f-categoria');
+      const atual = sel.value;
+      const grupos = {};
+      _categorias.forEach(c => (grupos[c.grupo] = grupos[c.grupo] || []).push(c));
+      sel.innerHTML = '<option value="">Selecione...</option>' + Object.keys(grupos).map(g =>
+        `<optgroup label="${g}">` + grupos[g].map(c =>
+          `<option value="${c.id_categoria}">${c.nome}${c.natureza_despesa ? ' — ND ' + c.natureza_despesa : ''}</option>`).join('') +
+        '</optgroup>').join('');
+      sel.value = atual;
+    }).chamarAcao(token, 'listar_categorias', '{}');
+  }
+
   function carregarDemandas() {
     document.getElementById('corpo-tabela').innerHTML = '<div class="carregando">Carregando...</div>';
     google.script.run
@@ -566,7 +591,7 @@
         <tbody>
           ${lista.map(d => `
             <tr>
-              <td title="${d.descricao_objeto||''}">${truncar(d.descricao_objeto, 50)}</td>
+              <td title="${d.descricao_objeto||''}"><span class="cod-dem">${d.codigo||''}</span><br>${truncar(d.descricao_objeto, 50)}${d.categoria ? `<span class="cat-dem">${d.categoria}</span>` : ''}</td>
               <td>${d.nome_unidade||'—'}</td>
               <td>R$ ${fmtValor(Number(d.valor_estimado||0))}</td>
               <td><span class="badge badge-${d.status}">${rotularStatus(d.status)}</span></td>
@@ -661,6 +686,7 @@
       document.getElementById(id).value = '';
     });
     document.getElementById('f-unidade-medida').value = '';
+    document.getElementById('f-categoria').value = '';
     document.querySelector('input[name="contrato"][value="FALSE"]').checked = true;
     document.querySelector('input[name="exclusiva"][value="TRUE"]').checked = true;
     document.getElementById('campo-risco').style.display = 'none';
@@ -672,6 +698,7 @@
     document.getElementById('f-justificativa').value  = d.justificativa || '';
     document.getElementById('f-quantidade').value     = d.quantidade || '';
     document.getElementById('f-unidade-medida').value = d.unidade_medida || '';
+    document.getElementById('f-categoria').value      = d.id_categoria_fk || '';
     document.getElementById('f-valor').value          = d.valor_estimado || '';
     document.getElementById('f-gestor-tit').value     = d._gestor_tit || '';
     document.getElementById('f-gestor-sub').value     = d._gestor_sub || '';
@@ -698,6 +725,7 @@
       justificativa:         document.getElementById('f-justificativa').value.trim(),
       quantidade:            document.getElementById('f-quantidade').value,
       unidade_medida:        document.getElementById('f-unidade-medida').value,
+      id_categoria_fk:       document.getElementById('f-categoria').value,
       valor_estimado:        document.getElementById('f-valor').value,
       tem_contrato_vigente:  document.querySelector('input[name="contrato"]:checked').value,
       risco_nao_prorrogacao: document.querySelector('input[name="risco"]:checked')?.value || 'FALSE',
@@ -711,6 +739,7 @@
 
   function validarFormulario(dados) {
     if (!dados.descricao_objeto)  return 'Informe a descrição do objeto.';
+    if (!dados.id_categoria_fk)   return 'Selecione a categoria da despesa.';
     if (!dados.justificativa)     return 'Informe a justificativa da necessidade.';
     if (!dados.quantidade || isNaN(dados.quantidade) || Number(dados.quantidade) <= 0) return 'Informe uma quantidade válida.';
     if (!dados.unidade_medida)    return 'Selecione a unidade de medida.';

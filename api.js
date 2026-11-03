@@ -88,6 +88,18 @@ async function _adminUsuarios(corpo) {
 
 // No banco, o "de acordo" da chefia grava status 'aprovada'; as telas usam
 // 'de_acordo' (vocabulário do sistema antigo). A tradução fica toda aqui.
+// Origem do crédito da dotação (Lei 4.320/64, arts. 40–41; MCASP).
+const ORIGENS_DOTACAO = [
+  { valor: 'loa',              nome: 'Dotação inicial — LOA' },
+  { valor: 'emenda',           nome: 'Emenda parlamentar (LOA)' },
+  { valor: 'suplementar',      nome: 'Crédito adicional suplementar' },
+  { valor: 'especial',         nome: 'Crédito adicional especial' },
+  { valor: 'extraordinario',   nome: 'Crédito adicional extraordinário' },
+  { valor: 'descentralizacao', nome: 'Descentralização de crédito recebida (TED)' },
+  { valor: 'outra',            nome: 'Outra' },
+];
+const _nomeOrigem = v => (ORIGENS_DOTACAO.find(o => o.valor === v) || {}).nome || v || '';
+
 const _statusTela  = s => (s === 'aprovada' ? 'de_acordo' : s);
 const _statusBanco = s => (s === 'de_acordo' ? 'aprovada' : s);
 
@@ -218,7 +230,7 @@ const ACOES = {
     const ex = exercicio || await _exercicioAtual();
 
     let q = c.from('demandas')
-      .select('*, unidades!inner(nome,sigla), responsaveis_tecnicos(papel,nome_responsavel)')
+      .select('*, unidades!inner(nome,sigla), categorias_despesa(nome,grupo,natureza_despesa), responsaveis_tecnicos(papel,nome_responsavel)')
       .eq('exercicio', Number(ex))
       .neq('status', 'excluida');
 
@@ -253,7 +265,11 @@ const ACOES = {
         gut_g: d.gut_gravidade, gut_u: d.gut_urgencia,
         gut_t: d.gut_tendencia, gut_total: d.gut_pontuacao,
         data_ultima_atualizacao: d.data_ultima_atualizacao || d.data_envio || d.data_criacao,
+        categoria: d.categorias_despesa ? d.categorias_despesa.nome : '',
+        categoria_grupo: d.categorias_despesa ? d.categorias_despesa.grupo : '',
+        natureza_despesa: d.categorias_despesa ? d.categorias_despesa.natureza_despesa : '',
       };
+      delete out.categorias_despesa;
       (d.responsaveis_tecnicos || []).forEach(r => { if (RESP[r.papel]) out[RESP[r.papel]] = r.nome_responsavel; });
       delete out.responsaveis_tecnicos;
       return out;
@@ -281,9 +297,12 @@ const ACOES = {
     if ('gut_t' in d) { d.gut_tendencia = d.gut_t || null; delete d.gut_t; }
     delete d.gut_total; delete d.gut_pontuacao; delete d.nome_unidade; delete d.unidades;
     delete d.sigla_unidade; delete d.tramitacao; delete d.responsaveis_tecnicos;
+    delete d.codigo; delete d.categoria; delete d.categoria_grupo; delete d.natureza_despesa;
+    delete d.categorias_despesa; delete d.data_ultima_atualizacao;
+    if ('id_categoria_fk' in d) d.id_categoria_fk = Number(d.id_categoria_fk) || null;
     if (d.status) d.status = _statusBanco(d.status);
 
-    let id = d.id_demanda;
+    let id = d.id_demanda, codigo = null;
     if (id) {
       // "Revisar" uma demanda reprovada: ela volta a rascunho com as correções.
       const { data: atual } = await c.from('demandas').select('status').eq('id_demanda', id).single();
@@ -296,9 +315,10 @@ const ACOES = {
       d.id_unidade_fk       = p.id_unidade_fk;
       d.id_usuario_criou_fk = p.id_usuario;
       d.status              = 'rascunho';
-      const { data, error } = await c.from('demandas').insert(d).select('id_demanda').single();
+      const { data, error } = await c.from('demandas').insert(d).select('id_demanda,codigo').single();
       if (error) return { ok: false, erro: _erro(error) };
       id = data.id_demanda;
+      codigo = data.codigo;
     }
 
     // Responsáveis técnicos: nome livre, não usuário do sistema.
@@ -308,7 +328,32 @@ const ACOES = {
         .upsert({ id_demanda_fk: id, papel, nome_responsavel: nome },
                 { onConflict: 'id_demanda_fk,papel' });
     }
-    return { ok: true, id_demanda: id };
+    return { ok: true, id_demanda: id, codigo };
+  },
+
+  // ─── Tabelas de apoio ──────────────────────────────────────────────────────
+  async listar_categorias() {
+    const c = await sb();
+    const { data, error } = await c.from('categorias_despesa')
+      .select('id_categoria,nome,grupo,natureza_despesa,gnd').eq('ativo', true).order('ordem');
+    return error ? { ok: false, erro: _erro(error) } : { ok: true, categorias: data };
+  },
+
+  async listar_fontes() {
+    const c = await sb();
+    const { data, error } = await c.from('fontes_recurso').select('codigo,nome').eq('ativo', true).order('codigo');
+    return error ? { ok: false, erro: _erro(error) } : { ok: true, fontes: data, origens: ORIGENS_DOTACAO };
+  },
+
+  // Saldo que a unidade ainda pode usar em novas demandas no exercício.
+  async saldo_livre({ exercicio, id_unidade } = {}) {
+    const c = await sb();
+    const p = await _meuPerfil();
+    const un = id_unidade || (p && p.id_unidade_fk);
+    if (!un) return { ok: true, saldo_livre: null };
+    const ex = Number(exercicio || await _exercicioAtual());
+    const { data, error } = await c.rpc('saldo_livre_unidade', { p_unidade: un, p_exercicio: ex });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true, saldo_livre: Number(data || 0) };
   },
 
   // Envio exige a senha como assinatura do ato. Reautenticamos contra o Auth —
@@ -321,6 +366,8 @@ const ACOES = {
 
     const { error: eAuth } = await c.auth.signInWithPassword({ email: p.email, password: senha });
     if (eAuth) return { ok: false, erro: 'Senha incorreta. A demanda não foi enviada.' };
+    // O banco é quem barra (gatilho validar_saldo_envio); a mensagem dele já
+    // diz se falta dotação ou saldo e quanto há disponível.
 
     const { error } = await c.from('demandas')
       .update({ status: 'submetida', data_envio: new Date().toISOString() })
@@ -472,7 +519,8 @@ const ACOES = {
     for (const id of unidadesLinha) {
       const s = saldoDe(id);
       const { data: idDot } = await c.rpc('dotacao_de_origem', { p_unidade: id, p_exercicio: ex });
-      const propria = (dots || []).find(d => d.id_unidade_fk === id);
+      const proprias = (dots || []).filter(d => d.id_unidade_fk === id);
+      const propria = proprias[0];
       const sub = arv.sub(id);
       const solicitado = (dems || []).filter(d => sub.includes(d.id_unidade_fk))
         .reduce((t, d) => t + Number(d.valor_estimado || 0), 0);
@@ -489,6 +537,12 @@ const ACOES = {
         valor_distribuido_proprio: Number(s.distribuido || 0),
         saldo_proprio:             Number(s.saldo || 0),
         valor_solicitado:          solicitado,
+        // dotações cadastradas diretamente nesta unidade (origem e fonte)
+        dotacoes_proprias:         proprias.map(d => ({
+          id_dotacao: d.id_dotacao, valor_total: Number(d.valor_total || 0),
+          origem: d.origem, origem_nome: _nomeOrigem(d.origem), fonte_codigo: d.fonte_codigo,
+          observacao: d.observacao || '',
+        })),
         // nomes antigos, usados por outras telas
         valor_total:               Number(s.alocado || 0),
         valor_distribuido:         Number(s.distribuido || 0),
@@ -520,12 +574,18 @@ const ACOES = {
     const ex = Number(x.exercicio);
     if (!x.id_unidade_fk || !ex || !(Number(x.valor_total) > 0))
       return { ok: false, erro: 'Informe unidade, exercício e valor.' };
-    const { data: existe } = await c.from('dotacoes').select('id_dotacao')
-      .eq('id_unidade_fk', x.id_unidade_fk).eq('exercicio', ex);
+    const origem = x.origem || 'loa';
+    const fonte = x.fonte_codigo || null;
+    if (!ORIGENS_DOTACAO.some(o => o.valor === origem)) return { ok: false, erro: 'Origem inválida.' };
+    if (!fonte) return { ok: false, erro: 'Selecione a fonte de recursos.' };
+    let q = c.from('dotacoes').select('id_dotacao')
+      .eq('id_unidade_fk', x.id_unidade_fk).eq('exercicio', ex).eq('origem', origem).eq('fonte_codigo', fonte);
+    const { data: existe } = await q;
     if (existe && existe.length)
-      return { ok: false, erro: 'Já existe dotação desta unidade para ' + ex + '. Use os repasses para ajustar a distribuição.' };
+      return { ok: false, erro: 'Já existe dotação desta unidade em ' + ex + ' com a mesma origem e fonte. Cadastre outra origem/fonte ou ajuste os repasses.' };
     const { error } = await c.from('dotacoes').insert({
       id_unidade_fk: x.id_unidade_fk, exercicio: ex, valor_total: Number(x.valor_total),
+      origem, fonte_codigo: fonte,
       observacao: x.observacao || null, id_usuario_criou_fk: p.id_usuario,
     });
     return error ? { ok: false, erro: _erro(error) } : { ok: true };
@@ -695,7 +755,9 @@ const ACOES = {
     if (status) demandas = demandas.filter(d => statusTela(d.status) === status);
     if (busca) {
       const b = String(busca).toLowerCase();
-      demandas = demandas.filter(d => String(d.descricao_objeto || '').toLowerCase().includes(b));
+      // busca pelo objeto, pelo ID (DEM-2026-0001) ou pela categoria
+      demandas = demandas.filter(d => [d.descricao_objeto, d.codigo, d.categoria]
+        .some(v => String(v || '').toLowerCase().includes(b)));
     }
 
     // Tramitacao (de acordo, priorizacao, homologacao, reprovacao) com as

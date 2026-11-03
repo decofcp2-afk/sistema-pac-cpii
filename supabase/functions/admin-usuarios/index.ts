@@ -220,7 +220,7 @@ Deno.serve(async (req) => {
         ['distribuições', await conta('distribuicoes', 'id_usuario_fk')],
       ].filter(([, n]) => (n as number) > 0);
       if (usos.length)
-        return resposta({ ok: false, erro: alvo.nome + ' já tem registros no PAC (' +
+        return resposta({ ok: false, erro: alvo.nome + ' já tem registros no sistema (' +
           usos.map(([t, n]) => n + ' ' + t).join(', ') +
           '). Para preservar o histórico, desative o usuário em vez de excluí-lo.' });
 

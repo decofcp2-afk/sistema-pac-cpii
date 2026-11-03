@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sistema PAC — Orçamento</title>
+<title>PMO — Orçamento</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background: #F1EFE8; color: #2C2C2A; min-height: 100vh; }
@@ -119,7 +119,7 @@
 </form>
 
 <div class="topbar">
-  <span class="topbar-logo">PAC</span>
+  <span class="topbar-logo" title="Planejamento e Monitoramento Orçamentário">PMO</span>
   <span class="topbar-sub">Orçamento e Distribuição</span>
   <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:4px 10px;">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -192,12 +192,22 @@
       <select id="d-exercicio"></select>
     </div>
     <div class="campo">
+      <label>Origem do crédito <span class="obrig">*</span></label>
+      <select id="d-origem"><option value="">Selecione...</option></select>
+      <span class="hint">Lei 4.320/64, arts. 40–41: dotação inicial ou crédito adicional</span>
+    </div>
+    <div class="campo">
+      <label>Fonte de recursos <span class="obrig">*</span></label>
+      <select id="d-fonte"><option value="">Selecione...</option></select>
+      <span class="hint">Código de 4 dígitos (1º dígito = grupo: 1 exercício corrente, 3 exercícios anteriores)</span>
+    </div>
+    <div class="campo">
       <label>Valor total (R$) <span class="obrig">*</span></label>
       <input type="number" id="d-valor" placeholder="0,00" min="0" step="0.01">
     </div>
     <div class="campo">
       <label>Observação</label>
-      <textarea id="d-obs" rows="2" placeholder="Origem do recurso, fonte, etc."></textarea>
+      <textarea id="d-obs" rows="2" placeholder="Ex.: nº da emenda, do TED ou da portaria do crédito"></textarea>
     </div>
     <div class="modal-footer">
       <button class="btn-secundario" onclick="fecharModal('overlay-dotacao')">Cancelar</button>
@@ -291,7 +301,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202611031000"></script>
+<script src="api.js?v=202611031200"></script>
 <script>
   const token  = localStorage.getItem('pac_token') || '';
   const appUrl = APPS_SCRIPT_URL;
@@ -515,6 +525,7 @@
     document.getElementById('tabela-dotacoes').innerHTML = `
       <table>
         <thead><tr>
+          <th>Unidade / origem e fonte</th>
           <th class="num">Recebido</th>
           <th class="num">Repassado às subunidades</th>
           <th class="num">Saldo disponível</th>
@@ -530,7 +541,11 @@
             const pct       = recebido > 0 ? Math.round((repassado/recebido)*100) : 0;
             const cor       = pct >= 90 ? 'vermelho' : pct >= 70 ? 'amarelo' : 'verde';
             const nomeDot   = nomeUnidade(d.id_unidade_fk);
+            const det = (d.dotacoes_proprias || []).map(x =>
+              `<div style="font-size:11px;color:#888780;margin-top:2px">${x.origem_nome} · fonte ${x.fonte_codigo||'—'} · R$ ${fmtValor(x.valor_total)}</div>`).join('')
+              || '<div style="font-size:11px;color:#888780;margin-top:2px">Recebido por repasse</div>';
             return `<tr>
+              <td><b>${d.sigla || nomeDot}</b>${det}</td>
               <td class="num" style="font-weight:600;color:#3C3489">R$ ${fmtValor(recebido)}</td>
               <td class="num">R$ ${fmtValor(repassado)}</td>
               <td class="num" style="font-weight:600;color:${saldo<=0?'#A32D2D':'#085041'}">R$ ${fmtValor(saldo)}</td>
@@ -604,7 +619,25 @@
   }
 
   // ── Modal dotação ─────────────────────────────────────────────────────────
+  let _fontes = [], _origens = [];
+  function carregarFontes(cb) {
+    if (_fontes.length) { cb && cb(); return; }
+    google.script.run.withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) return;
+      _fontes = resp.fontes || []; _origens = resp.origens || [];
+      document.getElementById('d-origem').innerHTML = '<option value="">Selecione...</option>' +
+        _origens.map(o => `<option value="${o.valor}">${o.nome}</option>`).join('');
+      document.getElementById('d-fonte').innerHTML = '<option value="">Selecione...</option>' +
+        _fontes.map(f => `<option value="${f.codigo}">${f.codigo} — ${f.nome}</option>`).join('');
+      cb && cb();
+    }).chamarAcao(token, 'listar_fontes', '{}');
+  }
+
   function abrirModalDotacao() {
+    carregarFontes(function() {
+      document.getElementById('d-origem').value = 'loa';
+      document.getElementById('d-fonte').value = '';
+    });
     document.getElementById('d-unidade').value = '';
     document.getElementById('d-valor').value   = '';
     document.getElementById('d-obs').value     = '';
@@ -628,6 +661,10 @@
 
     if (!idUnidade) { mostrarErroDot('Selecione a unidade.'); return; }
     if (!exercicio) { mostrarErroDot('Selecione o exercício.'); return; }
+    const origem = document.getElementById('d-origem').value;
+    const fonte  = document.getElementById('d-fonte').value;
+    if (!origem) { mostrarErroDot('Selecione a origem do crédito.'); return; }
+    if (!fonte)  { mostrarErroDot('Selecione a fonte de recursos.'); return; }
     if (!valor || Number(valor) <= 0) { mostrarErroDot('Informe um valor válido.'); return; }
 
     setBtnLoad('btn-salvar-dotacao', true, 'Cadastrando...');
@@ -643,7 +680,7 @@
         mostrarErroDot('Erro: ' + err.message);
       })
       .chamarAcao(token, 'salvar_dotacao', JSON.stringify({
-        dotacao: { exercicio: String(exercicio), id_unidade_fk: idUnidade, valor_total: Number(valor), observacao: obs }
+        dotacao: { exercicio: String(exercicio), id_unidade_fk: idUnidade, valor_total: Number(valor), observacao: obs, origem, fonte_codigo: fonte }
       }));
   }
 
