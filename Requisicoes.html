@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PMO — Requisições</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #F1EFE8; color: #2C2C2A; min-height: 100vh; }
+  .topbar { background: #3C3489; height: 56px; display: flex; align-items: center; padding: 0 24px; gap: 16px; position: sticky; top: 0; z-index: 100; }
+  .topbar-logo { font-size: 15px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .topbar-sub  { font-size: 12px; color: rgba(255,255,255,0.55); border-left: 1px solid rgba(255,255,255,0.2); padding-left: 14px; }
+  .topbar-spacer { flex: 1; }
+  .topbar-usuario { display: flex; align-items: center; gap: 10px; font-size: 13px; color: rgba(255,255,255,0.85); }
+  .avatar { width: 32px; height: 32px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #fff; flex-shrink: 0; }
+  .btn-logout { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 5px 12px; font-size: 12px; color: rgba(255,255,255,0.85); cursor: pointer; }
+  .layout { display: flex; min-height: calc(100vh - 56px); }
+  .sidebar { width: 220px; background: #fff; border-right: 1px solid #D3D1C7; padding: 20px 0; flex-shrink: 0; }
+  .nav-titulo { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: #B4B2A9; padding: 0 18px 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 18px; font-size: 13px; color: #5F5E5A; text-decoration: none; border-left: 3px solid transparent; cursor: pointer; }
+  .nav-item:hover { background: #F1EFE8; color: #2C2C2A; }
+  .nav-item.ativo { background: #EEEDFE; color: #3C3489; border-left-color: #3C3489; font-weight: 500; }
+  .nav-item svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
+  .main { flex: 1; padding: 28px 32px; max-width: 1240px; min-width: 0; }
+  .cabecalho { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+  .page-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .page-sub { font-size: 13px; color: #888780; }
+  .escopo { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #5F5E5A; }
+  .escopo select { padding: 7px 10px; border: 1px solid #D3D1C7; border-radius: 7px; font-size: 13px; background: #fff; min-width: 240px; }
+  .selo { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: #F1EFE8; color: #5F5E5A; }
+
+  .abas { display: flex; gap: 4px; border-bottom: 1px solid #D3D1C7; margin-bottom: 18px; flex-wrap: wrap; }
+  .aba { background: none; border: none; border-bottom: 2px solid transparent; padding: 9px 14px; font-size: 13px; color: #5F5E5A; cursor: pointer; margin-bottom: -1px; }
+  .aba:hover { color: #2C2C2A; }
+  .aba.ativa { color: #3C3489; border-bottom-color: #3C3489; font-weight: 600; }
+  .aba .cnt { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 99px; font-size: 10.5px; font-weight: 700; background: #FCEBEB; color: #A32D2D; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .card { background: #fff; border: 1px solid #D3D1C7; border-radius: 12px; padding: 14px 16px; }
+  .card-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: #888780; margin-bottom: 6px; }
+  .card-valor { font-size: 19px; font-weight: 600; }
+  .card-det { font-size: 11.5px; color: #888780; margin-top: 3px; }
+  .card.vermelho .card-valor { color: #A32D2D; } .card.amarelo .card-valor { color: #7A4A00; }
+
+  .secao { background: #fff; border: 1px solid #D3D1C7; border-radius: 12px; overflow: hidden; margin-bottom: 18px; }
+  .secao-header { padding: 13px 18px; border-bottom: 1px solid #F1EFE8; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .secao-titulo { font-size: 14px; font-weight: 600; flex: 1; }
+  .grade2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 1100px) { .grade2 { grid-template-columns: 1fr; } }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: #888780; padding: 9px 12px; text-align: left; background: #FAFAF8; border-bottom: 1px solid #F1EFE8; white-space: nowrap; }
+  th.num, td.num { text-align: right; }
+  td { font-size: 13px; padding: 9px 12px; border-bottom: 1px solid #F8F7F4; vertical-align: middle; }
+  td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr.clicavel { cursor: pointer; } tbody tr.clicavel:hover td { background: #FAFAF8; }
+  .tabela-scroll { overflow-x: auto; }
+
+  .cod-dem { display: inline-block; font-size: 10.5px; font-weight: 700; color: #3C3489; background: #EEEDFE; border-radius: 4px; padding: 1px 6px; margin-bottom: 3px; white-space: nowrap; }
+  .sub { display: block; font-size: 11px; color: #888780; margin-top: 2px; }
+  .barra { height: 6px; background: #F1EFE8; border-radius: 99px; overflow: hidden; min-width: 70px; }
+  .barra > div { height: 100%; background: #534AB7; border-radius: 99px; }
+  .barra.pago > div { background: #1D9E75; }
+
+  .sit { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .sit-aguardando { background: #F1EFE8; color: #5F5E5A; }
+  .sit-em_contratacao { background: #E6F1FB; color: #0C447C; }
+  .sit-empenhada { background: #EEEDFE; color: #3C3489; }
+  .sit-em_execucao { background: #FAEEDA; color: #633806; }
+  .sit-concluida { background: #E1F5EE; color: #085041; }
+  .sit-nao_executada { background: #FCEBEB; color: #791F1F; }
+
+  .sem { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; white-space: nowrap; }
+  .sem::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #D3D1C7; flex-shrink: 0; }
+  .sem-vencido::before { background: #E24B4A; } .sem-vencido { color: #A32D2D; font-weight: 600; }
+  .sem-a_vencer::before { background: #EF9F27; } .sem-a_vencer { color: #7A4A00; font-weight: 600; }
+  .sem-no_prazo::before { background: #1D9E75; }
+  .sem-cumprido::before { background: #1D9E75; } .sem-cumprido { color: #085041; }
+  .sem-cumprido_atraso::before { background: #B4B2A9; } .sem-cumprido_atraso { color: #5F5E5A; }
+  .sem-sem_prazo { color: #888780; } .sem-nao_aplica { color: #B4B2A9; }
+
+  .filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .filtros select, .filtros input { padding: 6px 10px; border: 1px solid #D3D1C7; border-radius: 7px; font-size: 12.5px; background: #fff; }
+  .btn { border: 1px solid #D3D1C7; background: #fff; color: #444441; border-radius: 7px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: #F1EFE8; }
+  .btn-p { background: #3C3489; border-color: #3C3489; color: #fff; font-weight: 600; } .btn-p:hover { background: #534AB7; }
+  .btn-v { background: #085041; border-color: #085041; color: #fff; font-weight: 600; } .btn-v:hover { background: #0F6E56; }
+  .btn-r { color: #A32D2D; border-color: #F7C1C1; } .btn-r:hover { background: #FCEBEB; }
+  .btn-mini { padding: 3px 8px; font-size: 11.5px; }
+  .so-editor { } body.leitura .so-editor { display: none !important; }
+
+  .carregando, .vazio { text-align: center; padding: 34px; color: #B4B2A9; font-size: 13px; }
+  .grupo-un { padding: 10px 18px; background: #FAFAF8; font-size: 12px; font-weight: 700; color: #5F5E5A; border-bottom: 1px solid #F1EFE8; }
+
+  /* Modal */
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; overflow-y: auto; padding: 24px; }
+  .overlay.aberto { display: flex; align-items: flex-start; justify-content: center; }
+  .modal { background: #fff; border-radius: 14px; width: 100%; max-width: 980px; margin: auto; }
+  .modal.estreito { max-width: 560px; }
+  .modal-header { display: flex; align-items: flex-start; gap: 12px; padding: 20px 24px 14px; border-bottom: 1px solid #F1EFE8; }
+  .modal-titulo { font-size: 16px; font-weight: 600; flex: 1; line-height: 1.4; }
+  .modal-fechar { background: none; border: none; font-size: 20px; color: #888780; cursor: pointer; line-height: 1; }
+  .modal-corpo { padding: 18px 24px 22px; }
+  .bloco { margin-bottom: 20px; }
+  .bloco-titulo { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #888780; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .bloco-titulo .btn { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .caixa { border: 1px solid #F1EFE8; border-radius: 10px; overflow: hidden; }
+  .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .campo { display: flex; flex-direction: column; gap: 4px; }
+  .campo.largo { grid-column: 1 / -1; }
+  .campo label { font-size: 12px; font-weight: 600; color: #444441; }
+  .campo input, .campo select, .campo textarea { padding: 8px 10px; border: 1px solid #D3D1C7; border-radius: 7px; font-size: 13px; font-family: inherit; }
+  .campo input:focus, .campo select:focus, .campo textarea:focus { outline: none; border-color: #534AB7; box-shadow: 0 0 0 3px rgba(83,74,183,0.1); }
+  .campo .hint { font-size: 11px; color: #B4B2A9; }
+  .rodape { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .msg-erro { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 8px; padding: 8px 12px; font-size: 13px; color: #791F1F; margin-bottom: 12px; display: none; }
+  .msg-erro.vis { display: block; }
+  .mini-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .mini { background: #FAFAF8; border-radius: 9px; padding: 10px 12px; }
+  .mini b { display: block; font-size: 15px; margin-top: 2px; }
+  .mini span { font-size: 11px; color: #888780; }
+  .linha-cob { padding: 9px 12px; border-bottom: 1px solid #F8F7F4; font-size: 12.5px; }
+  .linha-cob:last-child { border-bottom: none; }
+  .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: #2C2C2A; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 400; display: none; }
+  .toast.vis { display: block; }
+
+  .st { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .st-aguardando_contratacao { background: #FAEEDA; color: #633806; }
+  .st-aguardando_gestor { background: #E6F1FB; color: #0C447C; }
+  .st-pendente { background: #FCEBEB; color: #791F1F; }
+  .st-aprovada { background: #E1F5EE; color: #085041; }
+  .st-em_solicitacao, .st-empenhada { background: #EEEDFE; color: #3C3489; }
+  .st-liquidada, .st-paga { background: #D7F0E6; color: #04342A; }
+  .st-cancelada, .st-encerrado, .st-fracassado { background: #F1EFE8; color: #888780; }
+  .st-vigente, .st-em_andamento { background: #E6F1FB; color: #0C447C; }
+  .st-concluido { background: #E1F5EE; color: #085041; }
+  .cod-req { display: inline-block; font-size: 10.5px; font-weight: 700; color: #085041; background: #E1F5EE; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+  .aviso { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; font-size: 13px; color: #791F1F; }
+  .aviso b { color: #A32D2D; }
+  .info { background: #F4F3FE; border: 1px solid #DAD7F7; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; color: #3C3489; }
+  .ok-box { background: #E1F5EE; border: 1px solid #B4E3D2; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; color: #085041; }
+  .bad-box { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; color: #791F1F; }
+  .dados-dem { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 16px; background: #FAFAF8; border-radius: 10px; padding: 12px 14px; font-size: 12.5px; }
+  .dados-dem span { display: block; font-size: 10.5px; color: #888780; text-transform: uppercase; letter-spacing: .3px; }
+  .dados-dem b { font-weight: 600; }
+  .dados-dem .largo { grid-column: 1 / -1; }
+  .formas { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+  .forma { border: 1px solid #D3D1C7; border-radius: 9px; padding: 9px 11px; cursor: pointer; font-size: 12.5px; display: flex; gap: 8px; align-items: flex-start; }
+  .forma:hover { background: #FAFAF8; }
+  .forma input { margin-top: 2px; }
+  .forma.sel { border-color: #534AB7; background: #F4F3FE; }
+  .forma small { display: block; font-size: 11px; color: #888780; }
+  .check { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; background: #FAEEDA; border-radius: 9px; padding: 10px 12px; color: #633806; }
+  .inst-card { border-top: 3px solid #534AB7; }
+  .inst-meta { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: #5F5E5A; }
+  .inst-meta b { color: #2C2C2A; }
+  .hist { font-size: 12.5px; }
+  .hist div { padding: 8px 12px; border-bottom: 1px solid #F8F7F4; }
+  .hist div:last-child { border-bottom: none; }
+  .dias { font-size: 11px; color: #888780; }
+  .btn:disabled, .btn:disabled:hover { opacity: .4; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="topbar-logo" title="Planejamento e Monitoramento Orçamentário">PMO</span>
+  <span class="topbar-sub">Requisições</span>
+  <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:4px 10px;">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <select id="sel-exercicio" style="background:transparent;border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;outline:none;padding:0 2px;" onchange="trocarExercicio(this.value)"></select>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-usuario">
+    <div class="avatar" id="av">?</div>
+    <div>
+      <div style="font-weight:500" id="nome-usuario">Carregando...</div>
+      <div style="font-size:11px;opacity:0.7" id="unidade-usuario"></div>
+    </div>
+    <button class="btn-logout" onclick="fazerLogout()">Sair</button>
+  </div>
+</div>
+
+<div class="layout">
+  <nav class="sidebar" id="sidebar"></nav>
+  <main class="main">
+    <div class="cabecalho">
+      <div>
+        <div class="page-title">Requisições</div>
+        <div class="page-sub">Pedidos de execução das demandas homologadas — exercício <span id="exercicio-label">…</span></div>
+      </div>
+      <button class="btn btn-p" id="btn-nova" style="margin-left:auto;display:none" onclick="formRequisicao(null)">+ Nova requisição</button>
+    </div>
+    <div id="conteudo"><div class="carregando">Carregando…</div></div>
+  </main>
+</div>
+
+<div class="overlay" id="overlay" onclick="if(event.target===this) fecharModal()">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div class="modal-titulo" id="modal-titulo"></div>
+      <button class="modal-fechar" onclick="fecharModal()" aria-label="Fechar">×</button>
+    </div>
+    <div class="modal-corpo"><div class="msg-erro" id="modal-erro"></div><div id="modal-corpo"></div></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="api.js?v=202611041300"></script>
+<script>
+  const token = localStorage.getItem('pac_token') || '';
+  let _usuario = null, _ctx = null, _dados = null;
+  const PAGINA_ATUAL = 'requisicoes';
+
+  // ── Utilitários ───────────────────────────────────────────────────────────
+  const $ = id => document.getElementById(id);
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function fmtV(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function fmtN(v) { return Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 }); }
+  function fmtD(d) { if (!d) return '—'; const s = String(d).slice(0, 10); return s.slice(8,10) + '/' + s.slice(5,7) + '/' + s.slice(0,4); }
+  function fmtDH(d) { if (!d) return '—'; try { return new Date(d).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); } catch (e) { return '—'; } }
+  function diasDesde(d) { if (!d) return ''; const n = Math.floor((Date.now() - new Date(d).getTime()) / 864e5); return n <= 0 ? 'hoje' : n === 1 ? 'há 1 dia' : 'há ' + n + ' dias'; }
+  function pct(a, b) { return b ? Math.round(a / b * 100) : 0; }
+  function barra(a, b) { const p = Math.min(100, pct(a, b)); return `<div class="barra" title="${p}%"><div style="width:${p}%"></div></div>`; }
+  function num(v) { const n = parseFloat(String(v).replace(/\./g, '').replace(',', '.')); return isNaN(n) ? 0 : n; }
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('vis'); setTimeout(() => t.classList.remove('vis'), 2600); }
+  function chamar(acao, params) {
+    return new Promise(ok => google.script.run.withSuccessHandler(ok)
+      .withFailureHandler(e => ok({ ok: false, erro: e.message })).chamarAcao(token, acao, JSON.stringify(params || {})));
+  }
+  const SIT_REQ = { aguardando_contratacao: 'Pendente: aguarda contratação', aguardando_gestor: 'Aguardando o gestor',
+    pendente: 'Pendente: devolvida', aprovada: 'Aprovada', em_solicitacao: 'Em solicitação de empenho',
+    empenhada: 'Empenhada', liquidada: 'Liquidada', paga: 'Paga', cancelada: 'Cancelada' };
+  const FORMAS = { contrato: 'Contrato vigente', ata: 'Ata de registro de preços', nova_contratacao: 'Nova contratação',
+    bolsas_editais: 'Bolsas e editais', diarias: 'Diárias', outros: 'Outros' };
+  const TIPOS_INST = { contrato: 'Contrato', ata: 'Ata de RP', processo: 'Processo de contratação' };
+  const SIT_INST = { vigente: 'Vigente', encerrado: 'Encerrado', em_andamento: 'Em andamento', concluido: 'Concluído', fracassado: 'Fracassado' };
+  function stReq(s) { return `<span class="st st-${s}">${esc(SIT_REQ[s] || s)}</span>`; }
+  function stInst(s) { return `<span class="st st-${s}">${esc(SIT_INST[s] || s)}</span>`; }
+  function abrirModal(titulo, html, largo) {
+    $('modal-titulo').innerHTML = titulo; $('modal-corpo').innerHTML = html;
+    $('modal').classList.toggle('estreito', !largo);
+    $('modal-erro').classList.remove('vis'); $('overlay').classList.add('aberto');
+  }
+  function fecharModal() { $('overlay').classList.remove('aberto'); }
+  function erroModal(m) { const e = $('modal-erro'); e.textContent = m; e.classList.add('vis'); e.scrollIntoView({ block: 'nearest' }); }
+
+  // ── Exercício e navegação ─────────────────────────────────────────────────
+  function getExercicio() { return sessionStorage.getItem('pac_exercicio') || ''; }
+  function trocarExercicio(ano) { sessionStorage.setItem('pac_exercicio', String(ano)); carregar(); }
+  function popularSeletorExercicios(atualCfg) {
+    const base = Number(atualCfg) || new Date().getFullYear();
+    const atual = getExercicio() || base;
+    const anos = []; for (let a = base - 3; a <= base + 2; a++) anos.push(a);
+    $('sel-exercicio').innerHTML = anos.map(a => `<option value="${a}" style="background:#3C3489;color:#fff"${String(a)===String(atual)?' selected':''}>${a}</option>`).join('');
+    if (!getExercicio()) sessionStorage.setItem('pac_exercicio', String(base));
+  }
+  function navegar(page) { window.location.href = _pacUrlPagina(page); }
+  function fazerLogout() { google.script.run.chamarAcao(token, 'logout', '{}'); try { localStorage.removeItem('pac_token'); } catch (e) {} navegar('login'); }
+
+  (async function iniciar() {
+    const r = await chamar('dados_usuario');
+    if (!r.ok) { navegar('login'); return; }
+    _usuario = r.usuario;
+    $('av').textContent = _usuario.nome.charAt(0).toUpperCase();
+    $('nome-usuario').textContent = _usuario.nome;
+    $('unidade-usuario').textContent = _usuario.sigla || _usuario.unidade || '';
+    const menus = PMO_MENUS[_usuario.papel] || [];
+    $('sidebar').innerHTML = '<div class="nav-titulo" style="margin-top:8px">Menu</div>' + menus.map(m =>
+      `<a class="nav-item${m.page===PAGINA_ATUAL?' ativo':''}" href="#" onclick="navegar('${m.page}');return false;"><svg viewBox="0 0 24 24">${PMO_ICONS[m.icon]||''}</svg> ${m.label}</a>`).join('');
+    _ctx = await chamar('req_contexto');
+    if (!_ctx.ok) { $('conteudo').innerHTML = `<div class="vazio">${esc(_ctx.erro)}</div>`; return; }
+    popularSeletorExercicios(_ctx.exercicio);
+    iniciarPagina();
+  })();
+
+  let _filtro = '', _busca = '';
+  function iniciarPagina() {
+    if (_ctx.pode_requisitar) $('btn-nova').style.display = '';
+    carregar();
+  }
+  async function carregar() {
+    $('exercicio-label').textContent = getExercicio();
+    if (!_ctx.pode_requisitar) {
+      $('conteudo').innerHTML = '<div class="secao"><div class="vazio">Seu perfil não faz requisições. Elas são feitas pelo chefe de seção ou pela chefia da unidade dona da demanda.</div></div>';
+      return;
+    }
+    const r = await chamar('req_dados', { exercicio: getExercicio() });
+    if (!r.ok) { $('conteudo').innerHTML = `<div class="vazio">${esc(r.erro)}</div>`; return; }
+    _dados = r; render();
+  }
+  function render() {
+    const R = _dados.requisicoes, D = _dados.demandas;
+    const comSaldo = D.filter(d => Number(d.saldo) > 0);
+    const soma = (l, k) => l.reduce((t, x) => t + Number(x[k] || 0), 0);
+    const pend = R.filter(x => x.situacao === 'pendente');
+    const analise = R.filter(x => ['aguardando_gestor','aguardando_contratacao'].includes(x.situacao));
+    const aprov = R.filter(x => !['pendente','aguardando_gestor','aguardando_contratacao','cancelada'].includes(x.situacao));
+    const lista = R.filter(x => (!_filtro || x.situacao === _filtro) &&
+      (!_busca || [x.codigo, x.codigo_demanda, x.descricao_objeto, x.numero_instrumento, x.sigla_gestora].some(v => String(v||'').toLowerCase().includes(_busca.toLowerCase()))));
+    $('conteudo').innerHTML = `
+      ${pend.length ? `<div class="aviso"><b>${pend.length} requisição(ões) devolvida(s)</b> esperam readequação ou cancelamento:
+        ${pend.map(p => `<div style="margin-top:6px"><span class="cod-req">${esc(p.codigo)}</span> ${esc(p.descricao_objeto)} — <i>${esc(p.motivo||'')}</i>
+          <button class="btn btn-mini" style="margin-left:6px" onclick="formRequisicao('${p.id_requisicao}')">Readequar</button></div>`).join('')}</div>` : ''}
+      <div class="cards">
+        <div class="card"><div class="card-label">Saldo a requisitar</div><div class="card-valor">${fmtV(soma(comSaldo, 'saldo'))}</div><div class="card-det">${comSaldo.length} demanda(s) homologada(s) com saldo</div></div>
+        <div class="card"><div class="card-label">Em análise</div><div class="card-valor">${analise.length}</div><div class="card-det">${fmtV(soma(analise, 'valor'))} requisitados</div></div>
+        <div class="card ${pend.length?'vermelho':''}"><div class="card-label">Pendentes</div><div class="card-valor">${pend.length}</div><div class="card-det">devolvidas pelo gestor</div></div>
+        <div class="card"><div class="card-label">Aprovadas</div><div class="card-valor">${fmtV(soma(aprov, 'valor_real'))}</div><div class="card-det">valor real de ${aprov.length} requisição(ões)</div></div>
+        <div class="card"><div class="card-label">Resíduo</div><div class="card-valor">${fmtV(soma(aprov, 'residuo'))}</div><div class="card-det">requisitado − real</div></div>
+      </div>
+      <div class="secao">
+        <div class="secao-header"><span class="secao-titulo">${lista.length} requisição(ões)</span>
+          <div class="filtros">
+            <select onchange="_filtro=this.value;render()"><option value="">Todas as situações</option>
+              ${Object.entries(SIT_REQ).map(([k, n]) => `<option value="${k}"${k===_filtro?' selected':''}>${n}</option>`).join('')}</select>
+            <input type="search" placeholder="REQ, DEM, objeto, instrumento…" value="${esc(_busca)}" oninput="_busca=this.value;clearTimeout(window._tb);window._tb=setTimeout(render,250)">
+          </div></div>
+        <div class="tabela-scroll">${lista.length ? `<table><thead><tr><th>Requisição</th><th>Demanda</th><th class="num">Qtd.</th><th class="num">Requisitado</th><th>Atendimento</th><th>Situação</th><th class="num">Valor real</th><th class="num">Resíduo</th></tr></thead><tbody>
+          ${lista.map(x => `<tr class="clicavel" onclick="abrirRequisicao('${x.id_requisicao}')">
+            <td><span class="cod-req">${esc(x.codigo)}</span><span class="sub">${fmtD(x.data_criacao)} · ${esc(x.sigla_unidade)}</span></td>
+            <td style="max-width:260px"><span class="cod-dem">${esc(x.codigo_demanda)}</span><br>${esc(x.descricao_objeto)}</td>
+            <td class="num">${fmtN(x.quantidade)}<span class="sub">${esc(x.unidade_medida||'')}</span></td>
+            <td class="num">${fmtV(x.valor)}</td>
+            <td>${esc(FORMAS[x.forma]||x.forma)}${x.numero_instrumento ? `<span class="sub">${esc(x.numero_instrumento)} · gestão ${esc(x.sigla_gestora)}</span>` : `<span class="sub">gestão ${esc(x.sigla_gestora)}</span>`}</td>
+            <td>${stReq(x.situacao)}<span class="dias">${diasDesde(x.data_situacao)}</span></td>
+            <td class="num">${x.valor_real ? fmtV(x.valor_real) : '—'}</td>
+            <td class="num">${Number(x.residuo) ? fmtV(x.residuo) : '—'}</td></tr>`).join('')}
+          </tbody></table>` : `<div class="vazio">${R.length ? 'Nenhuma requisição neste filtro.' : 'Nenhuma requisição neste exercício. Use “+ Nova requisição” para pedir a execução de uma demanda homologada.'}</div>`}</div>
+      </div>
+      <div class="secao">
+        <div class="secao-header"><span class="secao-titulo">Demandas homologadas e saldo a requisitar</span></div>
+        <div class="tabela-scroll">${D.length ? `<table><thead><tr><th>Demanda</th><th>Unidade</th><th class="num">Homologado</th><th class="num">Requisitado</th><th class="num">Saldo</th><th class="num">Saldo (qtd.)</th><th></th></tr></thead><tbody>
+          ${D.map(d => `<tr><td style="max-width:320px"><span class="cod-dem">${esc(d.codigo)}</span><br>${esc(d.descricao_objeto)}<span class="sub">${esc(d.categoria||'Sem categoria')}</span></td>
+            <td>${esc(d.sigla_unidade)}</td><td class="num">${fmtV(d.valor_estimado)}</td><td class="num">${fmtV(d.requisitado)}</td>
+            <td class="num"><b>${fmtV(d.saldo)}</b>${barra(d.requisitado, d.valor_estimado)}</td>
+            <td class="num">${d.saldo_quantidade == null ? '—' : fmtN(d.saldo_quantidade) + ' ' + esc(d.unidade_medida||'')}</td>
+            <td style="text-align:right">${Number(d.saldo) > 0 ? `<button class="btn btn-mini" onclick="formRequisicao(null,'${d.id_demanda}')">Requisitar</button>` : ''}</td></tr>`).join('')}
+          </tbody></table>` : '<div class="vazio">Nenhuma demanda homologada neste exercício.</div>'}</div>
+      </div>`;
+  }
+
+  // ── Formulário (nova ou readequação) ──────────────────────────────────────
+  let _form = null;
+  function formRequisicao(idReq, idDemanda) {
+    const r = idReq ? _dados.requisicoes.find(x => x.id_requisicao === idReq) : null;
+    const dems = _dados.demandas.filter(d => Number(d.saldo) > 0 || (r && d.id_demanda === r.id_demanda));
+    if (!dems.length) { alert('Não há demanda homologada com saldo a requisitar neste exercício.'); return; }
+    _form = { r, valorManual: !!r };
+    const idSel = r ? r.id_demanda : (idDemanda || '');
+    abrirModal(r ? `Readequar <span class="cod-req">${esc(r.codigo)}</span>` : 'Nova requisição', `
+      ${r && r.motivo ? `<div class="bad-box" style="margin-bottom:12px"><b>Motivo da devolução:</b> ${esc(r.motivo)}${r.valor_real ? `<br>Valor real informado pelo gestor: <b>${fmtV(r.valor_real)}</b>` : ''}</div>` : ''}
+      <div class="form">
+        <div class="campo largo"><label>Demanda homologada *</label>
+          <select id="fr-dem" onchange="mostrarDemanda()" ${r ? 'disabled' : ''}><option value="">Selecione…</option>
+            ${dems.map(d => `<option value="${d.id_demanda}"${d.id_demanda===idSel?' selected':''}>${esc(d.codigo)} · ${esc(d.descricao_objeto)} · saldo ${fmtV(d.saldo)}</option>`).join('')}</select></div>
+        <div class="campo largo" id="fr-dados"></div>
+        <div class="campo"><label>Quantidade *</label><input type="number" min="0" step="any" id="fr-qtd" value="${r ? r.quantidade : ''}" oninput="recalcular()"></div>
+        <div class="campo"><label>Valor da requisição (R$) *</label><input type="number" min="0" step="0.01" id="fr-valor" value="${r ? r.valor : ''}" oninput="_form.valorManual=true;recalcular()">
+          <span class="hint" id="fr-hint"></span></div>
+        <div class="campo largo"><label>Por onde será atendida *</label>
+          <div class="formas">${Object.entries(FORMAS).map(([k, n]) => `<label class="forma" id="fm-${k}"><input type="radio" name="fr-forma" value="${k}" onchange="mudarForma()"${r && r.forma===k?' checked':''}>
+            <div>${n}<small>${{contrato:'Contrato já firmado', ata:'Ata já registrada e vigente', nova_contratacao:'Ainda não há contrato nem ata', bolsas_editais:'Pagamento de bolsas e editais', diarias:'Pagamento de diárias', outros:'Outras despesas'}[k]}</small></div></label>`).join('')}</div></div>
+        <div class="campo largo" id="fr-inst-box"></div>
+        <div class="campo largo"><label>Observação</label><textarea id="fr-obs" rows="2" placeholder="Local de entrega, urgência, especificação…">${esc(r ? r.observacao || '' : '')}</textarea></div>
+      </div>
+      <div class="rodape">
+        ${r ? `<button class="btn btn-r" style="margin-right:auto" onclick="cancelarRequisicao('${r.id_requisicao}')">Cancelar requisição</button>` : ''}
+        <button class="btn" onclick="fecharModal()">Fechar</button>
+        <button class="btn btn-p" id="fr-enviar" onclick="enviarRequisicao()">${r ? 'Reenviar ao gestor' : 'Enviar ao gestor'}</button></div>`, true);
+    mostrarDemanda(); mudarForma(r ? r.id_instrumento : null);
+  }
+  function demandaSel() { return _dados.demandas.find(d => d.id_demanda === $('fr-dem').value); }
+  // Saldo disponível para esta requisição: o da demanda, mais o que ela própria já segura (na readequação).
+  function saldoPara(d) {
+    const r = _form.r && _form.r.id_demanda === d.id_demanda ? _form.r : null;
+    return { valor: Number(d.saldo) + (r ? Number(r.valor) : 0),
+             qtd: d.saldo_quantidade == null ? null : Number(d.saldo_quantidade) + (r ? Number(r.quantidade) : 0) };
+  }
+  function mostrarDemanda() {
+    const d = demandaSel();
+    if (!d) { $('fr-dados').innerHTML = ''; return; }
+    const s = saldoPara(d);
+    const unit = d.quantidade ? Number(d.valor_estimado) / Number(d.quantidade) : null;
+    $('fr-dados').innerHTML = `<div class="dados-dem">
+      <div class="largo"><span>Objeto</span><b>${esc(d.descricao_objeto)}</b>${d.justificativa ? `<div style="font-size:11.5px;color:#888780;margin-top:2px">${esc(d.justificativa).slice(0, 220)}</div>` : ''}</div>
+      <div><span>Categoria</span><b>${esc(d.categoria || '—')}</b>${d.natureza_despesa ? `<div style="font-size:11px;color:#888780">ND ${esc(d.natureza_despesa)}</div>` : ''}</div>
+      <div><span>Homologado</span><b>${d.quantidade ? fmtN(d.quantidade) + ' ' + esc(d.unidade_medida||'') : '—'}</b><div style="font-size:11px;color:#888780">${fmtV(d.valor_estimado)}</div></div>
+      <div><span>Unitário previsto</span><b>${unit ? fmtV(unit) : '—'}</b></div>
+      <div><span>Já requisitado</span><b>${fmtV(Number(d.requisitado) - (_form.r ? Number(_form.r.valor) : 0))}</b></div>
+      <div><span>Saldo para esta requisição</span><b style="color:#085041">${fmtV(s.valor)}</b><div style="font-size:11px;color:#888780">${s.qtd == null ? '' : fmtN(s.qtd) + ' ' + esc(d.unidade_medida||'')}</div></div>
+    </div>`;
+    if (!_form.r && !$('fr-qtd').value && s.qtd != null) { $('fr-qtd').value = s.qtd; }
+    recalcular();
+  }
+  function recalcular() {
+    const d = demandaSel(); if (!d) return;
+    const s = saldoPara(d);
+    const q = Number($('fr-qtd').value || 0);
+    const unit = d.quantidade ? Number(d.valor_estimado) / Number(d.quantidade) : null;
+    if (!_form.valorManual && unit && q) $('fr-valor').value = Math.min(s.valor, Math.round(q * unit * 100) / 100).toFixed(2);
+    const v = Number($('fr-valor').value || 0);
+    const prob = [];
+    if (s.qtd != null && q > s.qtd + 1e-9) prob.push(`a quantidade passa do saldo (${fmtN(s.qtd)})`);
+    if (v > s.valor + 0.004) prob.push(`o valor passa do saldo (${fmtV(s.valor)})`);
+    $('fr-hint').innerHTML = prob.length ? `<span style="color:#A32D2D">Atenção: ${prob.join(' e ')}.</span>`
+      : unit ? `Previsto: ${fmtN(q)} × ${fmtV(unit)}. Pode ajustar até o saldo.` : '';
+  }
+  function mudarForma(idInst) {
+    const f = (document.querySelector('input[name="fr-forma"]:checked') || {}).value;
+    document.querySelectorAll('.forma').forEach(el => el.classList.toggle('sel', el.id === 'fm-' + f));
+    const box = $('fr-inst-box');
+    if (!f) { box.innerHTML = ''; return; }
+    if (['bolsas_editais','diarias','outros'].includes(f)) {
+      box.innerHTML = '<div class="info">Sem contrato nem ata: a sua própria unidade faz a gestão desta requisição e pede o empenho, pela tela Gestão de pedidos.</div>';
+      return;
+    }
+    const tipo = f === 'nova_contratacao' ? 'processo' : f;
+    const ops = _dados.instrumentos.filter(i => i.tipo === tipo);
+    const atual = idInst || (_form.r && _form.r.forma === f ? _form.r.id_instrumento : '');
+    box.innerHTML = `<label>${f === 'nova_contratacao' ? 'Processo de contratação *' : (f === 'ata' ? 'Ata de registro de preços *' : 'Contrato *')}</label>
+      ${ops.length ? `<select id="fr-inst"><option value="">Selecione…</option>${ops.map(i => `<option value="${i.id_instrumento}"${i.id_instrumento===atual?' selected':''}>${esc(i.numero)} · ${esc(i.objeto)}${i.fornecedor_nome ? ' · ' + esc(i.fornecedor_nome) : ''} · gestão ${esc(i.sigla_gestora)}${i.saldo != null ? ' · saldo ' + fmtV(i.saldo) : ''}</option>`).join('')}</select>`
+        : `<div class="bad-box">Não há ${f === 'nova_contratacao' ? 'processo de contratação em andamento' : (f === 'ata' ? 'ata vigente' : 'contrato vigente')} cadastrado. Peça à Seção de Licitações para cadastrá-lo.</div>`}
+      ${f === 'nova_contratacao' ? `<label class="check" style="margin-top:8px"><input type="checkbox" id="fr-decl"${_form.r && _form.r.declaracao_sem_instrumento ? ' checked' : ''}>
+        <span>Verifiquei que não há contrato nem ata de registro de preços vigente para este objeto. A requisição fica pendente até o processo gerar a ata ou o contrato.</span></label>` : ''}`;
+  }
+  async function enviarRequisicao() {
+    const d = demandaSel();
+    const f = (document.querySelector('input[name="fr-forma"]:checked') || {}).value;
+    if (!d) return erroModal('Escolha a demanda.');
+    if (!(Number($('fr-qtd').value) > 0)) return erroModal('Informe a quantidade.');
+    if (!(Number($('fr-valor').value) > 0)) return erroModal('Informe o valor.');
+    if (!f) return erroModal('Escolha por onde a requisição será atendida.');
+    const inst = $('fr-inst') ? $('fr-inst').value : '';
+    if (['contrato','ata','nova_contratacao'].includes(f) && !inst) return erroModal('Escolha o instrumento.');
+    if (f === 'nova_contratacao' && !($('fr-decl') && $('fr-decl').checked)) return erroModal('Confirme que verificou não haver contrato ou ata vigente para o objeto.');
+    $('fr-enviar').disabled = true;
+    const r = await chamar('req_salvar', { id_requisicao: _form.r ? _form.r.id_requisicao : null, id_demanda: d.id_demanda,
+      quantidade: $('fr-qtd').value, valor: $('fr-valor').value, forma: f, id_instrumento: inst || null,
+      declaracao: !!($('fr-decl') && $('fr-decl').checked), observacao: $('fr-obs').value });
+    $('fr-enviar').disabled = false;
+    if (!r.ok) return erroModal(r.erro);
+    fecharModal();
+    toast((_form.r ? 'Requisição reenviada: ' : 'Requisição enviada: ') + r.codigo + (r.situacao === 'aguardando_contratacao' ? ' (aguarda a contratação)' : ''));
+    carregar();
+  }
+  async function cancelarRequisicao(id) {
+    const motivo = prompt('Motivo do cancelamento:');
+    if (motivo === null) return;
+    const r = await chamar('req_cancelar', { id_requisicao: id, motivo });
+    if (!r.ok) return erroModal(r.erro);
+    fecharModal(); toast('Requisição cancelada.'); carregar();
+  }
+
+  // ── Detalhe ───────────────────────────────────────────────────────────────
+  async function abrirRequisicao(id) {
+    const x = _dados.requisicoes.find(r => r.id_requisicao === id);
+    const editavel = ['pendente','aguardando_gestor','aguardando_contratacao'].includes(x.situacao);
+    abrirModal(`<span class="cod-req">${esc(x.codigo)}</span> ${esc(x.descricao_objeto)}<span class="sub">${esc(x.codigo_demanda)} · ${esc(x.nome_unidade)}</span>`, `
+      <div class="mini-cards">
+        <div class="mini"><span>Quantidade</span><b>${fmtN(x.quantidade)} ${esc(x.unidade_medida||'')}</b></div>
+        <div class="mini"><span>Requisitado</span><b>${fmtV(x.valor)}</b></div>
+        <div class="mini"><span>Valor real</span><b>${x.valor_real ? fmtV(x.valor_real) : '—'}</b></div>
+        <div class="mini"><span>Resíduo</span><b>${Number(x.residuo) ? fmtV(x.residuo) : '—'}</b></div>
+        <div class="mini"><span>Situação</span><b style="font-size:13px;margin-top:4px">${stReq(x.situacao)}</b></div>
+      </div>
+      ${x.motivo ? `<div class="bad-box" style="margin-bottom:14px"><b>Motivo:</b> ${esc(x.motivo)}</div>` : ''}
+      <div class="bloco"><div class="bloco-titulo">Atendimento</div>
+        <div class="dados-dem"><div><span>Forma</span><b>${esc(FORMAS[x.forma]||x.forma)}</b></div>
+          <div><span>Instrumento</span><b>${x.numero_instrumento ? esc(TIPOS_INST[x.tipo_instrumento]||'') + ' ' + esc(x.numero_instrumento) : '—'}</b>${x.fornecedor_nome ? `<div style="font-size:11px;color:#888780">${esc(x.fornecedor_nome)}</div>` : ''}</div>
+          <div><span>Seção gestora</span><b>${esc(x.sigla_gestora)}</b></div>
+          ${x.observacao ? `<div class="largo"><span>Observação</span>${esc(x.observacao)}</div>` : ''}</div></div>
+      <div class="bloco"><div class="bloco-titulo">Histórico</div><div class="caixa hist" id="hist"><div class="carregando">Carregando…</div></div></div>
+      <div class="rodape">${editavel ? `<button class="btn btn-r" style="margin-right:auto" onclick="cancelarRequisicao('${x.id_requisicao}')">Cancelar requisição</button>
+        <button class="btn btn-p" onclick="formRequisicao('${x.id_requisicao}')">${x.situacao === 'pendente' ? 'Readequar e reenviar' : 'Alterar'}</button>` : ''}
+        <button class="btn" onclick="fecharModal()">Fechar</button></div>`, true);
+    const h = await chamar('req_historico', { id_requisicao: id });
+    $('hist').innerHTML = h.ok && h.historico.length ? h.historico.map(e => `<div><b>${fmtDH(e.data_hora)}</b> · ${esc(ACOES_HIST[e.acao]||e.acao)} → ${stReq(e.situacao)}${e.autor ? ' · ' + esc(e.autor) : ''}
+      ${e.valor_real ? ` · real ${fmtV(e.valor_real)}` : (e.valor ? ` · ${fmtV(e.valor)}` : '')}${e.motivo ? `<div style="color:#5F5E5A;margin-top:2px">${esc(e.motivo)}</div>` : ''}</div>`).join('')
+      : '<div class="vazio" style="padding:14px">Sem histórico.</div>';
+  }
+  const ACOES_HIST = { enviada: 'Enviada', reenviada: 'Readequada e reenviada', aprovar: 'Aprovada pelo gestor', devolver: 'Devolvida',
+    desfazer: 'Voltou para análise', cancelada: 'Cancelada', contratacao_concluida: 'Contratação concluída', contratacao_fracassada: 'Contratação fracassada' };
+
+</script>
+</body>
+</html>

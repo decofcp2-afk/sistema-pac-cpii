@@ -1063,6 +1063,149 @@ const ACOES = {
     return error ? { ok: false, erro: _erro(error) } : { ok: true };
   },
 
+  // ─── Requisições, instrumentos e gestão de pedidos (etapa 1 — 04/11/2026) ──
+  // Contexto de quem está logado: o que pode fazer em cada uma das três telas.
+  async req_contexto() {
+    const p = await _meuPerfil();
+    if (!p) return { ok: false, erro: 'Sessão expirada.' };
+    const arv = await _arvore();
+    const adminGlobal = p.papel === 'licitacoes' && !p.id_unidade_fk;
+    const un = p.id_unidade_fk ? arv.porId[p.id_unidade_fk] : null;
+    const requisitaveis = adminGlobal ? arv.lista.map(u => u.id_unidade)
+      : p.papel === 'chefe_secao' && un ? [un.id_unidade]
+      : p.papel === 'chefia' && un ? arv.sub(un.id_unidade) : [];
+    return {
+      ok: true, papel: p.papel, admin_global: adminGlobal,
+      unidade: un ? { id: un.id_unidade, sigla: un.sigla, nome: un.nome } : null,
+      pode_requisitar: requisitaveis.length > 0,
+      pode_gerir: adminGlobal || (['chefe_secao','chefia','ord_despesas','licitacoes'].includes(p.papel) && !!un),
+      pode_cadastrar: p.papel === 'licitacoes',
+      unidades_requisitaveis: requisitaveis,
+      exercicio: await _exercicioAtual(),
+      unidades: arv.lista.map(u => ({ id: u.id_unidade, sigla: u.sigla, nome: u.nome, tipo: u.tipo, pai: u.id_unidade_pai })),
+    };
+  },
+
+  // Tela Requisições: as requisições das unidades que o usuário pode requisitar,
+  // as demandas homologadas com saldo e os instrumentos disponíveis.
+  async req_dados({ exercicio } = {}) {
+    const ctx = await ACOES.req_contexto();
+    if (!ctx.ok) return ctx;
+    const c = await sb();
+    const ex = Number(exercicio || ctx.exercicio);
+    const meu = new Set(ctx.unidades_requisitaveis);
+    const [{ data: reqs, error: e1 }, { data: dems, error: e2 }, { data: inst, error: e3 }] = await Promise.all([
+      c.from('v_requisicoes').select('*').eq('exercicio', ex).order('data_criacao', { ascending: false }),
+      c.from('v_demandas_saldo').select('*').eq('exercicio', ex).order('codigo'),
+      c.from('v_instrumentos').select('*').order('numero'),
+    ]);
+    const erro = e1 || e2 || e3;
+    if (erro) return { ok: false, erro: _erro(erro) };
+    return {
+      ok: true, exercicio: ex,
+      requisicoes: (reqs || []).filter(r => meu.has(r.id_unidade)),
+      demandas: (dems || []).filter(d => meu.has(d.id_unidade_fk)),
+      instrumentos: (inst || []).filter(i => i.disponivel || (i.tipo === 'processo' && i.situacao === 'em_andamento')),
+    };
+  },
+
+  async req_salvar(r) {
+    const c = await sb();
+    const { data, error } = await c.rpc('req_salvar', {
+      p_id: r.id_requisicao || null, p_demanda: r.id_demanda || null,
+      p_quantidade: Number(r.quantidade), p_valor: Number(r.valor), p_forma: r.forma,
+      p_instrumento: r.id_instrumento || null, p_declaracao: !!r.declaracao, p_observacao: r.observacao || '',
+    });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true, ...data };
+  },
+
+  async req_cancelar({ id_requisicao, motivo }) {
+    const c = await sb();
+    const { error } = await c.rpc('req_cancelar', { p_id: id_requisicao, p_motivo: motivo || '' });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  async req_historico({ id_requisicao }) {
+    const c = await sb();
+    const { data, error } = await c.from('requisicao_historico')
+      .select('*, perfis(nome)').eq('id_requisicao', id_requisicao).order('data_hora');
+    if (error) return { ok: false, erro: _erro(error) };
+    return { ok: true, historico: (data || []).map(h => ({ ...h, autor: h.perfis ? h.perfis.nome : '' })) };
+  },
+
+  // Gestão de pedidos: instrumentos e requisições cuja seção gestora é a do usuário.
+  async ped_dados({ exercicio } = {}) {
+    const ctx = await ACOES.req_contexto();
+    if (!ctx.ok) return ctx;
+    const ex = Number(exercicio || ctx.exercicio);
+    if (!ctx.pode_gerir) return { ok: true, instrumentos: [], requisicoes: [], exercicio: ex };
+    const c = await sb();
+    let qi = c.from('v_instrumentos').select('*').order('numero');
+    let qr = c.from('v_requisicoes').select('*').eq('exercicio', ex).neq('situacao', 'cancelada').order('data_situacao');
+    if (!ctx.admin_global) {
+      qi = qi.eq('id_unidade_gestora', ctx.unidade.id);
+      qr = qr.eq('id_unidade_gestora', ctx.unidade.id);
+    }
+    const [{ data: inst, error: e1 }, { data: reqs, error: e2 }] = await Promise.all([qi, qr]);
+    if (e1 || e2) return { ok: false, erro: _erro(e1 || e2) };
+    return { ok: true, exercicio: ex, instrumentos: inst || [], requisicoes: reqs || [], admin_global: ctx.admin_global };
+  },
+
+  async ped_analisar({ id_requisicao, acao, valor_real, motivo }) {
+    const c = await sb();
+    const { data, error } = await c.rpc('req_analisar', {
+      p_id: id_requisicao, p_acao: acao,
+      p_valor_real: valor_real === '' || valor_real == null ? null : Number(valor_real), p_motivo: motivo || null,
+    });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true, ...data };
+  },
+
+  // Cadastro de contratos, atas e processos (Licitações e administrador).
+  async inst_listar() {
+    const c = await sb();
+    const { data, error } = await c.from('v_instrumentos').select('*').order('tipo').order('numero');
+    if (error) return { ok: false, erro: _erro(error) };
+    const { data: reqs } = await c.from('v_requisicoes').select('id_instrumento, situacao').neq('situacao', 'cancelada');
+    const n = {};
+    (reqs || []).forEach(r => { if (r.id_instrumento) n[r.id_instrumento] = (n[r.id_instrumento] || 0) + 1; });
+    return { ok: true, instrumentos: (data || []).map(i => ({ ...i, n_requisicoes: n[i.id_instrumento] || 0 })) };
+  },
+
+  async inst_salvar({ instrumento }) {
+    const c = await sb();
+    const p = await _meuPerfil();
+    const campos = ['tipo','numero','objeto','fornecedor_cnpj','fornecedor_nome','vigencia_inicio','vigencia_fim',
+                    'valor_limite','processo_sei','modalidade','situacao','id_unidade_gestora','id_processo_origem','observacao'];
+    const reg = {};
+    campos.forEach(k => { if (k in instrumento) reg[k] = instrumento[k] === '' ? null : instrumento[k]; });
+    if (reg.valor_limite != null) reg.valor_limite = Number(reg.valor_limite);
+    if (!reg.situacao) reg.situacao = reg.tipo === 'processo' ? 'em_andamento' : 'vigente';
+    let q;
+    if (instrumento.id_instrumento) {
+      q = c.from('instrumentos').update(reg).eq('id_instrumento', instrumento.id_instrumento).select('id_instrumento');
+    } else {
+      reg.criado_por = p && p.id_usuario;
+      q = c.from('instrumentos').insert(reg).select('id_instrumento');
+    }
+    const { data, error } = await q;
+    if (error) {
+      if (/instrumentos_tipo_numero_key|duplicate key/i.test(error.message))
+        return { ok: false, erro: 'Já existe um instrumento deste tipo com este número.' };
+      return { ok: false, erro: _erro(error) };
+    }
+    if (!data || !data.length) return { ok: false, erro: 'Você não tem permissão para esta operação.' };
+    return { ok: true, id_instrumento: data[0].id_instrumento };
+  },
+
+  async inst_excluir({ id_instrumento }) {
+    const c = await sb();
+    const { count } = await c.from('v_requisicoes').select('id_requisicao', { count: 'exact', head: true }).eq('id_instrumento', id_instrumento);
+    if (count) return { ok: false, erro: 'Este instrumento já tem requisições e não pode ser excluído. Marque-o como encerrado.' };
+    const { data, error } = await c.from('instrumentos').delete().eq('id_instrumento', id_instrumento).select('id_instrumento');
+    if (error) return { ok: false, erro: /foreign key|violates/i.test(error.message) ? 'Há contrato ou ata gerado a partir deste processo.' : _erro(error) };
+    return data && data.length ? { ok: true } : { ok: false, erro: 'Você não tem permissão para esta operação.' };
+  },
+
   // ─── Administração de usuários ─────────────────────────────────────────────
   // O embed precisa nomear a FK: existem DUAS relacoes entre perfis e unidades
   // (perfis.id_unidade_fk -> unidades, e unidades.id_ordenador_fk -> perfis).
@@ -1380,8 +1523,50 @@ const PAGE_FILE_MAP = {
   admin: 'Admin.html', aprovacoes: 'Aprovacoes.html', dashboard: 'Dashboard.html',
   demandas: 'Demandas.html', homologacao: 'Homologacao.html', login: 'Login.html',
   orcamento: 'Orcamento.html', prioridades: 'Prioridades.html', monitoramento: 'Monitoramento.html',
+  requisicoes: 'Requisicoes.html', pedidos: 'Pedidos.html', instrumentos: 'Instrumentos.html',
   publico: 'Publico.html', index: 'index.html',
 };
+
+// Menu lateral, igual em todas as páginas (cada página usa PMO_MENUS[papel]).
+const _M = {
+  inicio:       { label: 'Início', page: 'dashboard', icon: 'home' },
+  minhas:       { label: 'Minhas demandas', page: 'demandas', icon: 'list' },
+  todas:        { label: 'Todas as demandas', page: 'demandas', icon: 'list' },
+  aprovar:      { label: 'Aprovar demandas', page: 'aprovacoes', icon: 'check' },
+  aprovacoes:   { label: 'Aprovações', page: 'aprovacoes', icon: 'check' },
+  orcamento:    { label: 'Orçamento', page: 'orcamento', icon: 'dollar' },
+  gut:          { label: 'Prioridades GUT', page: 'prioridades', icon: 'star' },
+  homologar:    { label: 'Homologar plano', page: 'homologacao', icon: 'shield' },
+  usuarios:     { label: 'Usuários', page: 'admin', icon: 'users' },
+  requisicoes:  { label: 'Requisições', page: 'requisicoes', icon: 'cart' },
+  pedidos:      { label: 'Gestão de pedidos', page: 'pedidos', icon: 'inbox' },
+  instrumentos: { label: 'Contratos e atas', page: 'instrumentos', icon: 'briefcase' },
+  execucao:     { label: 'Execução', page: 'monitoramento', icon: 'activity' },
+  monitorar:    { label: 'Monitoramento', page: 'monitoramento', icon: 'activity' },
+};
+const PMO_MENUS = {
+  chefe_secao:   [_M.inicio, _M.minhas, _M.requisicoes, _M.pedidos, _M.execucao],
+  chefia:        [_M.inicio, _M.minhas, _M.aprovar, _M.orcamento, _M.requisicoes, _M.pedidos, _M.execucao],
+  ord_despesas:  [_M.inicio, _M.aprovacoes, _M.orcamento, _M.gut, _M.homologar, _M.pedidos, _M.monitorar],
+  licitacoes:    [_M.inicio, _M.usuarios, _M.todas, _M.orcamento, _M.aprovacoes, _M.gut, _M.homologar,
+                  _M.instrumentos, _M.requisicoes, _M.pedidos, _M.monitorar],
+  monitoramento: [_M.inicio, _M.monitorar],
+};
+const PMO_ICONS = {
+  home: '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+  check: '<path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+  dollar: '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>',
+  star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  users: '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',
+  activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+  cart: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/>',
+  inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>',
+  briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/>',
+};
+window.PMO_MENUS = PMO_MENUS;
+window.PMO_ICONS = PMO_ICONS;
 
 function _pacUrlPagina(page) {
   const limpo = String(page || '').replace(/\.html$/i, '').toLowerCase();

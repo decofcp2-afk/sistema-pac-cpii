@@ -193,19 +193,13 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="api.js?v=202611031500"></script>
+<script src="api.js?v=202611041300"></script>
 <script>
   const token = localStorage.getItem('pac_token') || '';
   let _usuario = null, _ctx = null, _dados = null, _aba = 'painel';
   let _fichaAtual = null, _empenhoAtual = null;
 
-  const MENUS = {
-    chefe_secao:   [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Minhas demandas', page:'demandas', icon:'list' }, { label:'Execução', page:'monitoramento', icon:'activity' }],
-    chefia:        [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Minhas demandas', page:'demandas', icon:'list' }, { label:'Aprovar demandas', page:'aprovacoes', icon:'check' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }, { label:'Execução', page:'monitoramento', icon:'activity' }],
-    ord_despesas:  [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }, { label:'Prioridades GUT', page:'prioridades', icon:'star' }, { label:'Homologar plano', page:'homologacao', icon:'shield' }, { label:'Monitoramento', page:'monitoramento', icon:'activity' }],
-    licitacoes:    [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Usuários', page:'admin', icon:'users' }, { label:'Todas as demandas', page:'demandas', icon:'list' }, { label:'Orçamento', page:'orcamento', icon:'dollar' }, { label:'Aprovações', page:'aprovacoes', icon:'check' }, { label:'Prioridades GUT', page:'prioridades', icon:'star' }, { label:'Homologar plano', page:'homologacao', icon:'shield' }, { label:'Monitoramento', page:'monitoramento', icon:'activity' }],
-    monitoramento: [{ label:'Início', page:'dashboard', icon:'home' }, { label:'Monitoramento', page:'monitoramento', icon:'activity' }],
-  };
+  const MENUS = PMO_MENUS;
   const ICONS = {
     home: '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
     list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>',
@@ -267,7 +261,7 @@
     $('unidade-usuario').textContent = _usuario.unidade || '';
     const menus = MENUS[_usuario.papel] || [];
     $('sidebar').innerHTML = '<div class="nav-titulo" style="margin-top:8px">Menu</div>' + menus.map(m =>
-      `<a class="nav-item${m.page==='monitoramento'?' ativo':''}" href="#" onclick="navegar('${m.page}');return false;"><svg viewBox="0 0 24 24">${ICONS[m.icon]||''}</svg> ${m.label}</a>`).join('');
+      `<a class="nav-item${m.page==='monitoramento'?' ativo':''}" href="#" onclick="navegar('${m.page}');return false;"><svg viewBox="0 0 24 24">${PMO_ICONS[m.icon]||ICONS[m.icon]||''}</svg> ${m.label}</a>`).join('');
 
     _ctx = await chamar('mon_contexto');
     if (!_ctx.ok) { $('conteudo').innerHTML = `<div class="vazio">${esc(_ctx.erro)}</div>`; return; }
