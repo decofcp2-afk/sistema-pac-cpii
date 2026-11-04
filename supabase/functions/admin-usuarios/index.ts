@@ -23,7 +23,7 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
-const PAPEIS = ['ord_despesas', 'chefia', 'chefe_secao', 'licitacoes', 'monitoramento'];
+const PAPEIS = ['ord_despesas', 'chefia', 'chefe_secao', 'licitacoes', 'monitoramento', 'orcamento'];
 
 const resposta = (corpo: unknown, status = 200) =>
   new Response(JSON.stringify(corpo), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });

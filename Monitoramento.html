@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PMO — Monitoramento da Execução</title>
+<title>PMO — Monitoramento</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background: #F1EFE8; color: #2C2C2A; min-height: 100vh; }
@@ -124,13 +124,71 @@
   .linha-cob:last-child { border-bottom: none; }
   .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: #2C2C2A; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 400; display: none; }
   .toast.vis { display: block; }
+
+  .st { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .st-aguardando_contratacao { background: #FAEEDA; color: #633806; }
+  .st-aguardando_gestor { background: #E6F1FB; color: #0C447C; }
+  .st-pendente { background: #FCEBEB; color: #791F1F; }
+  .st-aprovada { background: #E1F5EE; color: #085041; }
+  .st-em_solicitacao, .st-empenhada { background: #EEEDFE; color: #3C3489; }
+  .st-liquidada, .st-paga { background: #D7F0E6; color: #04342A; }
+  .st-cancelada, .st-encerrado, .st-fracassado { background: #F1EFE8; color: #888780; }
+  .st-vigente, .st-em_andamento { background: #E6F1FB; color: #0C447C; }
+  .st-concluido { background: #E1F5EE; color: #085041; }
+  .cod-req { display: inline-block; font-size: 10.5px; font-weight: 700; color: #085041; background: #E1F5EE; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+  .aviso { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; font-size: 13px; color: #791F1F; }
+  .aviso b { color: #A32D2D; }
+  .info { background: #F4F3FE; border: 1px solid #DAD7F7; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; color: #3C3489; }
+  .ok-box { background: #E1F5EE; border: 1px solid #B4E3D2; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; color: #085041; }
+  .bad-box { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; color: #791F1F; }
+  .dados-dem { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 16px; background: #FAFAF8; border-radius: 10px; padding: 12px 14px; font-size: 12.5px; }
+  .dados-dem span { display: block; font-size: 10.5px; color: #888780; text-transform: uppercase; letter-spacing: .3px; }
+  .dados-dem b { font-weight: 600; }
+  .dados-dem .largo { grid-column: 1 / -1; }
+  .formas { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+  .forma { border: 1px solid #D3D1C7; border-radius: 9px; padding: 9px 11px; cursor: pointer; font-size: 12.5px; display: flex; gap: 8px; align-items: flex-start; }
+  .forma:hover { background: #FAFAF8; }
+  .forma input { margin-top: 2px; }
+  .forma.sel { border-color: #534AB7; background: #F4F3FE; }
+  .forma small { display: block; font-size: 11px; color: #888780; }
+  .check { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; background: #FAEEDA; border-radius: 9px; padding: 10px 12px; color: #633806; }
+  .inst-card { border-top: 3px solid #534AB7; }
+  .inst-meta { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: #5F5E5A; }
+  .inst-meta b { color: #2C2C2A; }
+  .hist { font-size: 12.5px; }
+  .hist div { padding: 8px 12px; border-bottom: 1px solid #F8F7F4; }
+  .hist div:last-child { border-bottom: none; }
+  .dias { font-size: 11px; color: #888780; }
+  .btn:disabled, .btn:disabled:hover { opacity: .4; cursor: not-allowed; }
+  .st-sol-elaboracao { background: #FAEEDA; color: #633806; } .st-sol-enviada { background: #E6F1FB; color: #0C447C; }
+  .st-sol-empenhada_parcial { background: #EEEDFE; color: #3C3489; } .st-sol-empenhada { background: #E1F5EE; color: #085041; }
+  .st-sol-devolvida { background: #FCEBEB; color: #791F1F; } .st-sol-cancelada { background: #F1EFE8; color: #888780; }
+
+  .st-sol-elaboracao { background: #FAEEDA; color: #633806; } .st-sol-enviada { background: #E6F1FB; color: #0C447C; }
+  .st-sol-empenhada_parcial { background: #EEEDFE; color: #3C3489; } .st-sol-empenhada { background: #E1F5EE; color: #085041; }
+  .st-sol-devolvida { background: #FCEBEB; color: #791F1F; } .st-sol-cancelada { background: #F1EFE8; color: #888780; }
+  .dm-sem_requisicao { background: #F1EFE8; color: #5F5E5A; } .dm-requisitada { background: #E6F1FB; color: #0C447C; }
+  .dm-aprovada { background: #E1F5EE; color: #085041; } .dm-empenhada { background: #EEEDFE; color: #3C3489; }
+  .dm-em_execucao { background: #FFF4D6; color: #7A4A00; }
+  .dm-liquidada { background: #FAEEDA; color: #633806; } .dm-paga { background: #D7F0E6; color: #04342A; }
+  .dm-encerrada { background: #FCEBEB; color: #791F1F; }
+  .cadeia { display: flex; gap: 0; flex-wrap: wrap; margin-bottom: 18px; }
+  .elo { flex: 1; min-width: 120px; background: #fff; border: 1px solid #D3D1C7; padding: 10px 12px; position: relative; }
+  .elo:first-child { border-radius: 10px 0 0 10px; } .elo:last-child { border-radius: 0 10px 10px 0; }
+  .elo + .elo { border-left: none; }
+  .elo span { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; color: #888780; font-weight: 600; }
+  .elo b { display: block; font-size: 15px; margin-top: 3px; } .elo small { font-size: 11px; color: #888780; }
+  .cob-linha td input[type=number] { width: 130px; padding: 4px 6px; border: 1px solid #D3D1C7; border-radius: 6px; text-align: right; }
+  .alerta-num { color: #A32D2D; font-weight: 700; }
+  .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 16px; font-size: 12.5px; background: #FAFAF8; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+  .kv span { display: block; font-size: 10.5px; color: #888780; text-transform: uppercase; letter-spacing: .3px; }
 </style>
 </head>
 <body>
 
 <div class="topbar">
   <span class="topbar-logo" title="Planejamento e Monitoramento Orçamentário">PMO</span>
-  <span class="topbar-sub">Monitoramento da Execução</span>
+  <span class="topbar-sub">Monitoramento da execução</span>
   <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:4px 10px;">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
     <select id="sel-exercicio" style="background:transparent;border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;outline:none;padding:0 2px;" onchange="trocarExercicio(this.value)"></select>
@@ -151,25 +209,26 @@
   <main class="main">
     <div class="cabecalho">
       <div>
-        <div class="page-title">Monitoramento da Execução</div>
-        <div class="page-sub" id="page-sub">Demandas homologadas — exercício <span id="exercicio-label">…</span></div>
+        <div class="page-title">Monitoramento da execução</div>
+        <div class="page-sub">Demanda → requisição → solicitação → empenho → liquidação → pagamento — exercício <span id="exercicio-label">…</span></div>
       </div>
-      <div class="escopo" id="caixa-escopo" style="display:none">
-        <label for="sel-escopo">Ver</label>
-        <select id="sel-escopo" onchange="carregar()"></select>
+      <div class="escopo">
+        <span class="selo" id="selo-modo" style="display:none"></span>
+        <span id="caixa-escopo" style="display:none">Ver <select id="sel-escopo" onchange="carregar()"></select></span>
       </div>
-      <span class="selo" id="selo-modo" style="display:none"></span>
     </div>
-
     <div class="abas" id="abas">
       <button class="aba ativa" data-aba="painel" onclick="mostrarAba('painel')">Painel</button>
       <button class="aba" data-aba="demandas" onclick="mostrarAba('demandas')">Demandas</button>
+      <button class="aba" data-aba="requisicoes" onclick="mostrarAba('requisicoes')">Requisições</button>
       <button class="aba" data-aba="empenhos" onclick="mostrarAba('empenhos')">Empenhos</button>
+      <button class="aba" data-aba="liquidacoes" onclick="mostrarAba('liquidacoes')">Liquidações e pagamentos</button>
       <button class="aba" data-aba="pendencias" onclick="mostrarAba('pendencias')">Pendências<span class="cnt" id="cnt-pend" style="display:none"></span></button>
-      <button class="aba" data-aba="calendario" onclick="mostrarAba('calendario')">Calendário de marcos</button>
+      <button class="aba" data-aba="calendario" onclick="mostrarAba('calendario')">Calendário</button>
+      <button class="aba" data-aba="residuos" onclick="mostrarAba('residuos')">Resíduos</button>
     </div>
-
     <div id="conteudo"><div class="carregando">Carregando…</div></div>
+
   </main>
 </div>
 
@@ -179,64 +238,49 @@
       <div class="modal-titulo" id="modal-titulo"></div>
       <button class="modal-fechar" onclick="fecharModal()" aria-label="Fechar">×</button>
     </div>
-    <div class="modal-corpo" id="modal-corpo"></div>
-  </div>
-</div>
-<div class="overlay" id="overlay2" onclick="if(event.target===this) fecharModal2()" style="z-index:300">
-  <div class="modal estreito">
-    <div class="modal-header">
-      <div class="modal-titulo" id="modal2-titulo"></div>
-      <button class="modal-fechar" onclick="fecharModal2()" aria-label="Fechar">×</button>
-    </div>
-    <div class="modal-corpo"><div class="msg-erro" id="modal2-erro"></div><div id="modal2-corpo"></div></div>
+    <div class="modal-corpo"><div class="msg-erro" id="modal-erro"></div><div id="modal-corpo"></div></div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="api.js?v=202611041400"></script>
+<script src="api.js?v=202611041700"></script>
 <script>
   const token = localStorage.getItem('pac_token') || '';
-  let _usuario = null, _ctx = null, _dados = null, _aba = 'painel';
-  let _fichaAtual = null, _empenhoAtual = null;
-
-  const MENUS = PMO_MENUS;
-  const ICONS = {
-    home: '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
-    list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>',
-    check: '<path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
-    dollar: '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>',
-    star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
-    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
-    users: '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',
-    activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
-  };
-  const ESTADOS = { vencido: 'Vencido', a_vencer: 'A vencer', no_prazo: 'No prazo', sem_prazo: 'Sem prazo',
-                    cumprido: 'Cumprido', cumprido_atraso: 'Cumprido com atraso', nao_aplica: '—' };
-  const DOCS = { ordem_fornecimento: 'Ordem de fornecimento', ordem_servico: 'Ordem de serviço', requisicao: 'Requisição', outro: 'Outro' };
-  const CANAIS = { sei: 'SEI', email: 'E-mail', telefone: 'Telefone', presencial: 'Presencial', outro: 'Outro' };
-  const TIPOS_EMP = { estimativo: 'Estimativo', global: 'Global', ordinario: 'Ordinário' };
+  let _usuario = null, _ctx = null, _dados = null;
+  const PAGINA_ATUAL = 'monitoramento';
 
   // ── Utilitários ───────────────────────────────────────────────────────────
   const $ = id => document.getElementById(id);
   function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function fmtV(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-  function fmtD(d) { if (!d) return '—'; if (d === 'informado') return 'informado'; const s = String(d).slice(0, 10); return s.slice(8,10) + '/' + s.slice(5,7) + '/' + s.slice(0,4); }
+  function fmtN(v) { return Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 }); }
+  function fmtD(d) { if (!d) return '—'; const s = String(d).slice(0, 10); return s.slice(8,10) + '/' + s.slice(5,7) + '/' + s.slice(0,4); }
   function fmtDH(d) { if (!d) return '—'; try { return new Date(d).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); } catch (e) { return '—'; } }
+  function diasDesde(d) { if (!d) return ''; const n = Math.floor((Date.now() - new Date(d).getTime()) / 864e5); return n <= 0 ? 'hoje' : n === 1 ? 'há 1 dia' : 'há ' + n + ' dias'; }
   function pct(a, b) { return b ? Math.round(a / b * 100) : 0; }
-  function barra(a, b, cls) { const p = Math.min(100, pct(a, b)); return `<div class="barra ${cls||''}" title="${p}%"><div style="width:${p}%"></div></div>`; }
-  function sem(m) {
-    if (!m) return '<span class="sem sem-nao_aplica">—</span>';
-    const dias = m.estado === 'vencido' ? ` há ${-m.dias} d` : m.estado === 'a_vencer' ? ` em ${m.dias} d` : '';
-    return `<span class="sem sem-${m.estado}" title="${esc(m.nome)} — prazo ${fmtD(m.prazo)}">${esc(m.nome)}${m.prazo ? ' · ' + fmtD(m.prazo) : ''}${dias}</span>`;
-  }
-  function sit(d) { return `<span class="sit sit-${d.situacao}">${esc(d.situacao_nome)}${d.empenho_parcial && d.situacao==='empenhada' ? ' (parcial)' : ''}</span>`; }
+  function barra(a, b) { const p = Math.min(100, pct(a, b)); return `<div class="barra" title="${p}%"><div style="width:${p}%"></div></div>`; }
+  function num(v) { const n = parseFloat(String(v).replace(/\./g, '').replace(',', '.')); return isNaN(n) ? 0 : n; }
   function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('vis'); setTimeout(() => t.classList.remove('vis'), 2600); }
   function chamar(acao, params) {
     return new Promise(ok => google.script.run.withSuccessHandler(ok)
       .withFailureHandler(e => ok({ ok: false, erro: e.message })).chamarAcao(token, acao, JSON.stringify(params || {})));
   }
-  const podeEditar = () => _ctx && _ctx.pode_editar;
-  const podeProcesso = () => _usuario && ['monitoramento','chefe_secao','chefia','licitacoes','ord_despesas'].includes(_usuario.papel);
+  const SIT_REQ = { aguardando_contratacao: 'Pendente: aguarda contratação', aguardando_gestor: 'Aguardando o gestor',
+    pendente: 'Pendente: devolvida', aprovada: 'Aprovada', em_solicitacao: 'Em solicitação de empenho',
+    empenhada: 'Empenhada', liquidada: 'Liquidada', paga: 'Paga', cancelada: 'Cancelada' };
+  const FORMAS = { contrato: 'Contrato vigente', ata: 'Ata de registro de preços', nova_contratacao: 'Nova contratação',
+    bolsas_editais: 'Bolsas e editais', diarias: 'Diárias', outros: 'Outros' };
+  const TIPOS_INST = { contrato: 'Contrato', ata: 'Ata de RP', processo: 'Processo de contratação' };
+  const SIT_INST = { vigente: 'Vigente', encerrado: 'Encerrado', em_andamento: 'Em andamento', concluido: 'Concluído', fracassado: 'Fracassado' };
+  function stReq(s) { return `<span class="st st-${s}">${esc(SIT_REQ[s] || s)}</span>`; }
+  function stInst(s) { return `<span class="st st-${s}">${esc(SIT_INST[s] || s)}</span>`; }
+  function abrirModal(titulo, html, largo) {
+    $('modal-titulo').innerHTML = titulo; $('modal-corpo').innerHTML = html;
+    $('modal').classList.toggle('estreito', !largo);
+    $('modal-erro').classList.remove('vis'); $('overlay').classList.add('aberto');
+  }
+  function fecharModal() { $('overlay').classList.remove('aberto'); }
+  function erroModal(m) { const e = $('modal-erro'); e.textContent = m; e.classList.add('vis'); e.scrollIntoView({ block: 'nearest' }); }
 
   // ── Exercício e navegação ─────────────────────────────────────────────────
   function getExercicio() { return sessionStorage.getItem('pac_exercicio') || ''; }
@@ -251,542 +295,462 @@
   function navegar(page) { window.location.href = _pacUrlPagina(page); }
   function fazerLogout() { google.script.run.chamarAcao(token, 'logout', '{}'); try { localStorage.removeItem('pac_token'); } catch (e) {} navegar('login'); }
 
-  // ── Inicialização ─────────────────────────────────────────────────────────
   (async function iniciar() {
     const r = await chamar('dados_usuario');
     if (!r.ok) { navegar('login'); return; }
     _usuario = r.usuario;
     $('av').textContent = _usuario.nome.charAt(0).toUpperCase();
     $('nome-usuario').textContent = _usuario.nome;
-    $('unidade-usuario').textContent = _usuario.unidade || '';
-    const menus = MENUS[_usuario.papel] || [];
+    $('unidade-usuario').textContent = _usuario.sigla || _usuario.unidade || '';
+    const menus = PMO_MENUS[_usuario.papel] || [];
     $('sidebar').innerHTML = '<div class="nav-titulo" style="margin-top:8px">Menu</div>' + menus.map(m =>
-      `<a class="nav-item${m.page==='monitoramento'?' ativo':''}" href="#" onclick="navegar('${m.page}');return false;"><svg viewBox="0 0 24 24">${PMO_ICONS[m.icon]||ICONS[m.icon]||''}</svg> ${m.label}</a>`).join('');
-
+      `<a class="nav-item${m.page===PAGINA_ATUAL?' ativo':''}" href="#" onclick="navegar('${m.page}');return false;"><svg viewBox="0 0 24 24">${PMO_ICONS[m.icon]||''}</svg> ${m.label}</a>`).join('');
     _ctx = await chamar('mon_contexto');
     if (!_ctx.ok) { $('conteudo').innerHTML = `<div class="vazio">${esc(_ctx.erro)}</div>`; return; }
-    if (!podeEditar()) {
-      document.body.classList.add('leitura');
-      $('selo-modo').style.display = '';
-      $('selo-modo').textContent = 'Somente consulta';
-    }
+    popularSeletorExercicios(_ctx.exercicio);
+    iniciarPagina();
+  })();
+  const SIT_SOL = { elaboracao: 'Em elaboração', enviada: 'Enviada ao Orçamento', empenhada_parcial: 'Empenhada em parte',
+    empenhada: 'Empenhada', devolvida: 'Devolvida pelo Orçamento', cancelada: 'Cancelada' };
+  function stSol(s) { return `<span class="st st-sol-${s}">${esc(SIT_SOL[s] || s)}</span>`; }
+
+  let _aba = 'painel', _filtroSit = '', _filtroReqSit = '';
+  const pode = () => _ctx && _ctx.pode_editar;
+  const SIT_DEM = { sem_requisicao: 'Sem requisição', requisitada: 'Requisitada', aprovada: 'Aprovada pelo gestor',
+    empenhada: 'Empenhada', em_execucao: 'Em execução', liquidada: 'Liquidada', paga: 'Paga', encerrada: 'Não será requisitada' };
+  const ESTADOS = { vencido: 'Prazo vencido', a_vencer: 'Vence em até 15 dias', no_prazo: 'No prazo', sem_prazo: 'Sem prazo', nao_aplica: '—' };
+  const CANAIS = { sei: 'SEI', email: 'E-mail', telefone: 'Telefone', presencial: 'Presencial', outro: 'Outro' };
+  function sitDem(d) { return `<span class="st dm-${d.situacao}">${esc(SIT_DEM[d.situacao] || d.situacao)}</span>`; }
+  function semPrazo(d) {
+    if (d.estado_prazo === 'nao_aplica') return '<span class="sem sem-nao_aplica">—</span>';
+    if (d.estado_prazo === 'sem_prazo') return '<span class="sem sem-sem_prazo">sem prazo</span>';
+    const extra = d.estado_prazo === 'vencido' ? ` · há ${-d.dias_prazo} d` : d.estado_prazo === 'a_vencer' ? ` · em ${d.dias_prazo} d` : '';
+    return `<span class="sem sem-${d.estado_prazo}" title="${esc(ESTADOS[d.estado_prazo])} — ${d.prazo_origem === 'proprio' ? 'prazo próprio' : 'calendário: ' + esc(d.prazo_origem)}">${fmtD(d.prazo)}${extra}</span>`;
+  }
+  const soma = (l, k) => l.reduce((t, x) => t + Number(x[k] || 0), 0);
+
+  function iniciarPagina() {
+    if (!pode()) { document.body.classList.add('leitura'); $('selo-modo').style.display = ''; $('selo-modo').textContent = 'Somente consulta'; }
     if (_ctx.opcoes_escopo.length) {
       $('caixa-escopo').style.display = '';
       $('sel-escopo').innerHTML = _ctx.opcoes_escopo.map(o => `<option value="${o.valor}">${esc(o.nome)}</option>`).join('');
     }
-    popularSeletorExercicios(_ctx.exercicio);
     const abaUrl = new URLSearchParams(location.search).get('aba');
     if (abaUrl) _aba = abaUrl;
     carregar();
-  })();
-
+  }
   async function carregar() {
     $('exercicio-label').textContent = getExercicio();
     $('conteudo').innerHTML = '<div class="carregando">Carregando…</div>';
-    const escopo = $('sel-escopo').value || 'todos';
-    const r = await chamar('mon_dados', { exercicio: getExercicio(), escopo });
+    const r = await chamar('mon_dados', { exercicio: getExercicio(), escopo: $('sel-escopo').value || 'todos' });
     if (!r.ok) { $('conteudo').innerHTML = `<div class="vazio">${esc(r.erro)}</div>`; return; }
     _dados = r;
     const n = r.resumo.vencidos;
-    $('cnt-pend').style.display = n ? '' : 'none';
-    $('cnt-pend').textContent = n;
+    $('cnt-pend').style.display = n ? '' : 'none'; $('cnt-pend').textContent = n;
     mostrarAba(_aba);
   }
-
   function mostrarAba(aba) {
     _aba = aba;
     document.querySelectorAll('.aba').forEach(b => b.classList.toggle('ativa', b.dataset.aba === aba));
     if (!_dados) return;
-    ({ painel: renderPainel, demandas: renderDemandas, empenhos: renderEmpenhos,
-       pendencias: renderPendencias, calendario: renderCalendario })[aba]();
+    ({ painel: renderPainel, demandas: renderDemandas, requisicoes: renderRequisicoes, empenhos: renderEmpenhos,
+       liquidacoes: renderLiquidacoes, pendencias: renderPendencias, calendario: renderCalendario, residuos: renderResiduos })[aba]();
   }
 
   // ── Painel ────────────────────────────────────────────────────────────────
   function renderPainel() {
     const s = _dados.resumo;
-    const linhas = (lista, rotulo) => lista.length ? `
-      <table><thead><tr><th>${rotulo}</th><th class="num">Demandas</th><th class="num">Homologado</th><th class="num">Empenhado</th><th>Pedido</th><th class="num">Atrasadas</th></tr></thead><tbody>
-      ${lista.map(x => `<tr>
-        <td>${esc(x.nome)}</td><td class="num">${x.n}</td><td class="num">${fmtV(x.planejado)}</td><td class="num">${fmtV(x.reservado)}</td>
-        <td style="min-width:140px"><div style="display:flex;align-items:center;gap:8px">${barra(x.pedido, x.planejado)}<span style="font-size:11.5px;color:#888780">${pct(x.pedido, x.planejado)}%</span></div></td>
-        <td class="num">${x.atrasadas ? `<span class="sem sem-vencido">${x.atrasadas}</span>` : '—'}</td></tr>`).join('')}
+    const tab = (lista, rotulo) => lista.length ? `<table><thead><tr><th>${rotulo}</th><th class="num">Homologado</th><th class="num">Requisitado</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th>Execução</th><th class="num">Vencidas</th></tr></thead><tbody>
+      ${lista.map(x => `<tr><td>${esc(x.nome)}<span class="sub">${x.n} demanda(s)</span></td><td class="num">${fmtV(x.homologado)}</td><td class="num">${fmtV(x.requisitado)}</td>
+        <td class="num">${fmtV(x.empenhado)}</td><td class="num">${fmtV(x.liquidado)}</td>
+        <td style="min-width:130px"><div style="display:flex;align-items:center;gap:8px">${barra(x.liquidado, x.homologado)}<span style="font-size:11.5px;color:#888780">${pct(x.liquidado, x.homologado)}%</span></div></td>
+        <td class="num">${x.vencidas ? `<span class="sem sem-vencido">${x.vencidas}</span>` : '—'}</td></tr>`).join('')}
       </tbody></table>` : '<div class="vazio">Nenhuma demanda homologada neste filtro.</div>';
-    const sits = ['aguardando','em_contratacao','empenhada','em_execucao','concluida','nao_executada'];
-    const nomes = { aguardando:'Aguardando início', em_contratacao:'Em contratação', empenhada:'Empenhada', em_execucao:'Em execução', concluida:'Concluída', nao_executada:'Não executada' };
     $('conteudo').innerHTML = `
+      <div class="cadeia">
+        <div class="elo"><span>Homologado</span><b>${fmtV(s.homologado)}</b><small>${s.n} demanda(s)</small></div>
+        <div class="elo"><span>Requisitado</span><b>${fmtV(s.requisitado)}</b><small>${pct(s.requisitado, s.homologado)}% · saldo ${fmtV(s.saldo_requisitar)}</small></div>
+        <div class="elo"><span>Aprovado (real)</span><b>${fmtV(s.aprovado)}</b><small>pelos gestores</small></div>
+        <div class="elo"><span>Empenhado</span><b>${fmtV(s.empenhado)}</b><small>${pct(s.empenhado, s.homologado)}% do homologado</small></div>
+        <div class="elo" style="background:#F4F3FE"><span>Liquidado (executado)</span><b>${fmtV(s.liquidado)}</b><small>${pct(s.liquidado, s.homologado)}% de execução</small></div>
+        <div class="elo"><span>Pago</span><b>${fmtV(s.pago)}</b><small>${pct(s.pago, s.liquidado)}% do liquidado</small></div>
+      </div>
       <div class="cards">
-        <div class="card"><div class="card-label">Homologado</div><div class="card-valor">${fmtV(s.planejado)}</div><div class="card-det">${s.n} demanda(s)</div></div>
-        <div class="card"><div class="card-label">Empenhado (reservado)</div><div class="card-valor">${fmtV(s.reservado)}</div><div class="card-det">${pct(s.reservado, s.planejado)}% do homologado</div></div>
-        <div class="card"><div class="card-label">Pedido</div><div class="card-valor">${fmtV(s.pedido)}</div><div class="card-det">${pct(s.pedido, s.planejado)}% do homologado</div></div>
-        <div class="card"><div class="card-label">Pago</div><div class="card-valor">${fmtV(s.pago)}</div><div class="card-det">liquidado ${fmtV(s.liquidado)}</div></div>
-        <div class="card ${s.vencidos?'vermelho':''}"><div class="card-label">Marcos vencidos</div><div class="card-valor">${s.vencidos}</div><div class="card-det">a vencer em 15 dias: ${s.a_vencer}</div></div>
+        <div class="card ${s.vencidos ? 'vermelho' : ''}"><div class="card-label">Prazo para requisitar vencido</div><div class="card-valor">${s.vencidos}</div><div class="card-det">a vencer em 15 dias: ${s.a_vencer}</div></div>
+        <div class="card"><div class="card-label">Resíduos para redistribuição</div><div class="card-valor">${fmtV(s.residuos)}</div><div class="card-det">${_dados.residuos.length} registro(s)</div></div>
+        <div class="card ${Math.abs(_dados.conciliacao.total.sem_vinculo) > 0.005 ? 'vermelho' : ''}"><div class="card-label">Empenho sem vínculo</div><div class="card-valor">${fmtV(_dados.conciliacao.total.sem_vinculo)}</div><div class="card-det">deve ser zero</div></div>
+        <div class="card"><div class="card-label">A empenhar</div><div class="card-valor">${fmtV(_dados.conciliacao.total.a_empenhar)}</div><div class="card-det">solicitado e ainda não empenhado</div></div>
       </div>
       <div class="secao"><div class="secao-header"><span class="secao-titulo">Situação das demandas</span></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;padding:14px 18px">
-          ${sits.map(k => `<button class="btn" onclick="_filtroSit='${k}';mostrarAba('demandas')"><span class="sit sit-${k}">${nomes[k]}</span> <b style="margin-left:4px">${s.por_situacao[k]||0}</b></button>`).join('')}
+          ${Object.keys(SIT_DEM).map(k => `<button class="btn" onclick="_filtroSit='${k}';mostrarAba('demandas')"><span class="st dm-${k}">${SIT_DEM[k]}</span> <b style="margin-left:4px">${s.por_situacao[k] || 0}</b></button>`).join('')}
         </div></div>
       <div class="grade2">
-        <div class="secao"><div class="secao-header"><span class="secao-titulo">Por unidade</span></div><div class="tabela-scroll">${linhas(s.por_unidade, 'Unidade')}</div></div>
-        <div class="secao"><div class="secao-header"><span class="secao-titulo">Por categoria de despesa</span></div><div class="tabela-scroll">${linhas(s.por_categoria, 'Categoria')}</div></div>
+        <div class="secao"><div class="secao-header"><span class="secao-titulo">Por unidade</span></div><div class="tabela-scroll">${tab(s.por_unidade, 'Unidade')}</div></div>
+        <div class="secao"><div class="secao-header"><span class="secao-titulo">Por categoria de despesa</span></div><div class="tabela-scroll">${tab(s.por_categoria, 'Categoria')}</div></div>
       </div>`;
   }
 
   // ── Demandas ──────────────────────────────────────────────────────────────
-  let _filtroSit = '', _filtroSem = '', _busca = '';
   function renderDemandas() {
-    const lista = _dados.demandas.filter(d =>
-      (!_filtroSit || d.situacao === _filtroSit) &&
-      (!_filtroSem || d.pior_estado === _filtroSem) &&
-      (!_busca || [d.codigo, d.descricao_objeto, d.sigla_unidade, d.categoria].some(v => String(v||'').toLowerCase().includes(_busca.toLowerCase()))));
-    const opt = (o, v) => Object.entries(o).map(([k, n]) => `<option value="${k}"${k===v?' selected':''}>${n}</option>`).join('');
-    $('conteudo').innerHTML = `
-      <div class="secao">
-        <div class="secao-header">
-          <span class="secao-titulo">${lista.length} de ${_dados.demandas.length} demanda(s) homologada(s)</span>
-          <div class="filtros">
-            <select onchange="_filtroSit=this.value;renderDemandas()"><option value="">Todas as situações</option>${opt({aguardando:'Aguardando início',em_contratacao:'Em contratação',empenhada:'Empenhada',em_execucao:'Em execução',concluida:'Concluída',nao_executada:'Não executada'}, _filtroSit)}</select>
-            <select onchange="_filtroSem=this.value;renderDemandas()"><option value="">Todos os prazos</option>${opt({vencido:'Com marco vencido',a_vencer:'Com marco a vencer',no_prazo:'No prazo',sem_prazo:'Sem prazo definido'}, _filtroSem)}</select>
-            <input type="search" placeholder="ID, objeto, unidade…" value="${esc(_busca)}" oninput="_busca=this.value;clearTimeout(window._tb);window._tb=setTimeout(renderDemandas,250)">
-          </div>
-        </div>
-        <div class="tabela-scroll">${lista.length ? `
-        <table><thead><tr><th>Demanda</th><th>Unidade</th><th class="num">Homologado</th><th class="num">Empenhado</th><th class="num">Pedido</th><th>Execução</th><th>Situação</th><th>Próximo marco</th></tr></thead><tbody>
-        ${lista.map(d => `<tr class="clicavel" onclick="abrirFicha('${d.id_demanda}')">
-          <td style="max-width:280px"><span class="cod-dem">${esc(d.codigo)}</span><br>${esc(d.descricao_objeto)}<span class="sub">${esc(d.categoria||'Sem categoria')}</span></td>
-          <td>${esc(d.sigla_unidade)}</td>
-          <td class="num">${fmtV(d.valor_estimado)}</td><td class="num">${fmtV(d.reservado)}</td><td class="num">${fmtV(d.pedido)}</td>
-          <td style="min-width:90px">${barra(d.pedido, d.valor_estimado)}<span class="sub">${d.pct_execucao}%</span></td>
-          <td>${sit(d)}</td>
-          <td>${sem(d.proximo_marco)}</td></tr>`).join('')}
-        </tbody></table>` : '<div class="vazio">Nenhuma demanda neste filtro.</div>'}</div>
-      </div>`;
+    const unidades = [...new Set(_dados.demandas.map(d => d.sigla_unidade))].sort();
+    $('conteudo').innerHTML = `<div class="secao"><div class="secao-header"><span class="secao-titulo">Demandas homologadas</span>
+      <div class="filtros">
+        <select id="fd-sit" onchange="_filtroSit=this.value;filtrarDem()"><option value="">Todas as situações</option>${Object.keys(SIT_DEM).map(k => `<option value="${k}"${_filtroSit===k?' selected':''}>${SIT_DEM[k]}</option>`).join('')}</select>
+        <select id="fd-un" onchange="filtrarDem()"><option value="">Todas as unidades</option>${unidades.map(u => `<option>${esc(u)}</option>`).join('')}</select>
+        <select id="fd-prazo" onchange="filtrarDem()"><option value="">Qualquer prazo</option>${['vencido','a_vencer','no_prazo','sem_prazo'].map(k => `<option value="${k}">${ESTADOS[k]}</option>`).join('')}</select>
+        <input id="fd-busca" placeholder="Código ou objeto" oninput="filtrarDem()">
+      </div></div><div class="tabela-scroll" id="tab-dem"></div></div>`;
+    filtrarDem();
+  }
+  function filtrarDem() {
+    const sit = $('fd-sit').value, un = $('fd-un').value, pr = $('fd-prazo').value, b = $('fd-busca').value.toLowerCase();
+    const L = _dados.demandas.filter(d => (!sit || d.situacao === sit) && (!un || d.sigla_unidade === un) && (!pr || d.estado_prazo === pr)
+      && (!b || (d.codigo + ' ' + d.descricao_objeto).toLowerCase().includes(b)));
+    $('tab-dem').innerHTML = L.length ? `<table><thead><tr><th>Demanda</th><th>Unidade</th><th class="num">Homologado</th><th class="num">A requisitar</th><th class="num">Requisitado</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th>Execução</th><th>Prazo p/ requisitar</th><th>Situação</th></tr></thead><tbody>
+      ${L.map(d => `<tr class="clicavel" onclick="abrirFicha('${d.id_demanda}')">
+        <td><span class="cod-dem">${esc(d.codigo)}</span><span class="sub" style="max-width:260px">${esc(d.descricao_objeto)}</span></td>
+        <td>${esc(d.sigla_unidade)}<span class="sub">${esc(d.categoria||'')}</span></td>
+        <td class="num">${fmtV(d.valor_estimado)}</td><td class="num">${d.encerrada ? '—' : fmtV(d.saldo)}</td>
+        <td class="num">${fmtV(d.requisitado)}<span class="sub">${d.n_requisicoes} req.</span></td>
+        <td class="num">${fmtV(d.empenhado)}</td><td class="num">${fmtV(d.liquidado)}</td>
+        <td style="min-width:110px"><div style="display:flex;align-items:center;gap:6px">${barra(d.liquidado, d.valor_estimado)}<span style="font-size:11px;color:#888780">${d.pct_execucao}%</span></div></td>
+        <td>${semPrazo(d)}</td><td>${sitDem(d)}</td></tr>`).join('')}
+      <tr><td colspan="2"><b>Total (${L.length})</b></td><td class="num"><b>${fmtV(soma(L,'valor_estimado'))}</b></td><td class="num"><b>${fmtV(soma(L.filter(d=>!d.encerrada),'saldo'))}</b></td>
+        <td class="num"><b>${fmtV(soma(L,'requisitado'))}</b></td><td class="num"><b>${fmtV(soma(L,'empenhado'))}</b></td><td class="num"><b>${fmtV(soma(L,'liquidado'))}</b></td><td colspan="3"></td></tr>
+      </tbody></table>` : '<div class="vazio">Nenhuma demanda neste filtro.</div>';
   }
 
-  // ── Ficha da demanda ──────────────────────────────────────────────────────
   async function abrirFicha(id) {
-    abrirModal('Carregando…', '<div class="carregando">Carregando…</div>');
+    abrirModal('Demanda', '<div class="carregando">Carregando…</div>', true);
     const r = await chamar('mon_ficha', { id_demanda: id });
-    if (!r.ok) { $('modal-corpo').innerHTML = `<div class="vazio">${esc(r.erro)}</div>`; return; }
-    _fichaAtual = r;
-    const d = r.demanda;
-    $('modal-titulo').innerHTML = `<span class="cod-dem">${esc(d.codigo)}</span> ${esc(d.descricao_objeto)}<span class="sub">${esc(d.nome_unidade)} · ${esc(d.categoria||'Sem categoria')}${d.natureza_despesa ? ' · ND ' + esc(d.natureza_despesa) : ''}</span>`;
-    const ed = podeEditar(), proc = podeProcesso() && !d.encerramento;
+    if (!r.ok) return erroModal(r.erro);
+    const d = r.demanda, R = r.requisicoes;
+    $('modal-titulo').innerHTML = `<span class="cod-dem">${esc(d.codigo)}</span> ${esc(d.descricao_objeto)}<span class="sub">${esc(d.nome_unidade)} · ${esc(d.categoria||'')} ${sitDem(d)}</span>`;
     $('modal-corpo').innerHTML = `
-      <div class="mini-cards">
-        <div class="mini"><span>Homologado</span><b>${fmtV(d.valor_estimado)}</b></div>
-        <div class="mini"><span>Empenhado (reservado)</span><b>${fmtV(d.reservado)}</b></div>
-        <div class="mini"><span>Pedido</span><b>${fmtV(d.pedido)}</b></div>
-        <div class="mini"><span>Pago</span><b>${fmtV(d.pago)}</b></div>
-        <div class="mini"><span>Situação</span><b style="font-size:13px;margin-top:4px">${sit(d)}</b></div>
+      <div class="cadeia">
+        <div class="elo"><span>Homologado</span><b>${fmtV(d.valor_estimado)}</b><small>${fmtN(d.quantidade)} ${esc(d.unidade_medida||'')}</small></div>
+        <div class="elo"><span>Requisitado</span><b>${fmtV(d.requisitado)}</b><small>saldo ${fmtV(d.saldo)}</small></div>
+        <div class="elo"><span>Aprovado</span><b>${fmtV(d.aprovado)}</b><small>resíduo ${fmtV(d.residuo)}</small></div>
+        <div class="elo"><span>Empenhado</span><b>${fmtV(d.empenhado)}</b></div>
+        <div class="elo"><span>Liquidado</span><b>${fmtV(d.liquidado)}</b><small>${d.pct_execucao}% de execução</small></div>
+        <div class="elo"><span>Pago</span><b>${fmtV(d.pago)}</b></div>
       </div>
-
-      <div class="bloco"><div class="bloco-titulo">Processo</div>
-        <div class="form">
-          <div class="campo"><label>Processo SEI</label><input id="fx-sei" value="${esc(d.processo_sei||'')}" ${proc?'':'disabled'} placeholder="23040.000000/2026-00"></div>
-          <div class="campo"><label>Abertura do processo</label><input type="date" id="fx-abert" value="${esc(d.data_abertura_processo||'')}" ${proc?'':'disabled'}></div>
-          <div class="campo"><label>Envio para contratação</label><input type="date" id="fx-envio" value="${esc(d.data_envio_processo||'')}" ${proc?'':'disabled'}></div>
-          ${proc ? `<div class="campo" style="justify-content:flex-end"><button class="btn btn-p" onclick="salvarProcesso()">Salvar processo</button></div>` : ''}
+      ${d.encerrada ? `<div class="aviso"><b>Não será requisitada</b> desde ${fmtD(d.data_encerramento)}: ${esc(d.motivo_encerramento)}</div>` : ''}
+      <div class="bloco"><div class="bloco-titulo">Cadeia de execução</div><div class="caixa tabela-scroll"><table>
+        <thead><tr><th>Requisição</th><th>Atendimento</th><th class="num">Requisitado</th><th class="num">Real</th><th>Solicitação</th><th>Empenhos</th><th>Liquidações</th><th>Situação</th></tr></thead><tbody>
+        ${R.map(x => `<tr><td><span class="cod-req">${esc(x.codigo)}</span><span class="sub">${fmtD(x.data_criacao)}</span></td>
+          <td>${esc(FORMAS[x.forma]||x.forma)}${x.numero_instrumento ? `<span class="sub">${esc(x.numero_instrumento)} · ${esc(x.sigla_gestora)}</span>` : ''}</td>
+          <td class="num">${fmtV(x.valor)}</td><td class="num">${x.valor_real ? fmtV(x.valor_real) : '—'}</td>
+          <td>${x.codigo_solicitacao ? `${esc(x.codigo_solicitacao)}<span class="sub">${esc(SIT_SOL[x.situacao_solicitacao]||'')}</span>` : '—'}</td>
+          <td>${x.empenhos.map(e => `${esc(e.numero)} <span class="sub" style="display:inline">${fmtV(e.valor)}</span>`).join('<br>') || '—'}</td>
+          <td>${x.liquidacoes.map(l => `${esc(l.documento)} · ${fmtD(l.data)} <span class="sub" style="display:inline">${fmtV(l.valor)}</span>`).join('<br>') || '—'}</td>
+          <td>${stReq(x.situacao)}${x.motivo && ['pendente','cancelada'].includes(x.situacao) ? `<span class="sub">${esc(x.motivo)}</span>` : ''}</td></tr>`).join('')
+          || '<tr><td colspan="8" class="vazio" style="padding:14px">Nenhuma requisição ainda.</td></tr>'}
+        </tbody></table></div></div>
+      <div class="grade2">
+        <div class="bloco"><div class="bloco-titulo">Prazo para requisitar</div>
+          <div style="font-size:13px;margin-bottom:8px">${semPrazo(d)} ${d.prazo && d.estado_prazo !== 'nao_aplica' ? `<span class="sub">${d.prazo_origem === 'proprio' ? 'Prazo próprio desta demanda' + (d.prazo_motivo ? ': ' + esc(d.prazo_motivo) : '') : 'Do calendário (' + esc(d.prazo_origem) + ')'}</span>` : ''}</div>
+          <div class="form so-editor"><div class="campo"><label>Prazo próprio</label><input type="date" id="fp-data" value="${r.prazo_proprio ? r.prazo_proprio.data_limite : ''}"></div>
+            <div class="campo"><label>Motivo</label><input id="fp-motivo" value="${esc(r.prazo_proprio ? r.prazo_proprio.motivo || '' : '')}"></div></div>
+          <div class="rodape so-editor" style="margin-top:8px">${r.prazo_proprio ? `<button class="btn btn-mini" onclick="salvarPrazoDem('${d.id_demanda}', true)">Voltar ao calendário</button>` : ''}
+            <button class="btn btn-mini" onclick="salvarPrazoDem('${d.id_demanda}', false)">Salvar prazo</button></div>
+          <div class="so-editor" style="margin-top:14px">${d.encerrada
+            ? `<button class="btn btn-mini" onclick="encerrar('${d.id_demanda}', true)">Desfazer "não será requisitada"</button>`
+            : d.saldo > 0.005 ? `<div class="campo"><label>Marcar o saldo (${fmtV(d.saldo)}) como "não será requisitado"</label><input id="fe-motivo" placeholder="Motivo"></div>
+               <div class="rodape" style="margin-top:6px"><button class="btn btn-mini btn-r" onclick="encerrar('${d.id_demanda}', false)">Não será requisitada</button></div>` : ''}</div>
         </div>
-        <div class="msg-erro" id="fx-erro" style="margin-top:10px"></div>
+        <div class="bloco"><div class="bloco-titulo">Cobranças</div>
+          <div class="caixa hist">${r.cobrancas.map(c => `<div><b>${esc(CANAIS[c.canal]||c.canal)}</b> · ${fmtDH(c.data_cobranca)} · ${esc(c.autor)}<span class="sub">${esc(c.registro)}</span>
+            ${c.resposta ? `<span class="sub" style="color:#085041">Resposta (${fmtD(c.data_resposta)}): ${esc(c.resposta)}</span>` : pode() ? `<button class="btn btn-mini" style="margin-top:4px" onclick="responder('${c.id_cobranca}','${d.id_demanda}')">Registrar resposta</button>` : ''}</div>`).join('') || '<div>Nenhuma cobrança.</div>'}</div>
+          <div class="form so-editor" style="margin-top:10px">
+            <div class="campo"><label>Canal</label><select id="fc-canal">${Object.keys(CANAIS).map(k => `<option value="${k}">${CANAIS[k]}</option>`).join('')}</select></div>
+            <div class="campo largo"><label>Registro</label><textarea id="fc-reg" rows="2" placeholder="Ex.: Ofício SEI nº … cobrando a requisição do saldo"></textarea></div></div>
+          <div class="rodape so-editor" style="margin-top:6px"><button class="btn btn-mini" onclick="cobrar('${d.id_demanda}')">Registrar cobrança</button></div>
+        </div>
       </div>
-
-      <div class="bloco"><div class="bloco-titulo">Marcos e prazos</div>
-        <div class="caixa"><table><thead><tr><th>Marco</th><th>Prazo</th><th>Cumprido em</th><th>Situação</th>${ed?'<th></th>':''}</tr></thead><tbody>
-        ${d.marcos.map(m => `<tr><td>${esc(m.nome)}</td>
-          <td>${fmtD(m.prazo)}${m.prazo_proprio ? ' <span class="sub" style="display:inline">(próprio)</span>' : ''}</td>
-          <td>${fmtD(m.cumprido_em)}</td><td>${sem({ ...m, nome: ESTADOS[m.estado], prazo: null })}</td>
-          ${ed ? `<td style="text-align:right"><button class="btn btn-mini" onclick="editarPrazo('${m.tipo}')">Prazo</button>
-                 ${['vencido','a_vencer'].includes(m.estado) ? `<button class="btn btn-mini" onclick="registrarCobranca('${d.id_demanda}','${m.tipo}')">Cobrar</button>` : ''}</td>` : ''}
-        </tr>`).join('')}</tbody></table></div>
-      </div>
-
-      <div class="bloco"><div class="bloco-titulo">Empenhos e pedidos ${ed && !d.encerramento ? `<button class="btn btn-mini" onclick="novaReservaDaFicha()">+ Reservar em empenho</button>` : ''}</div>
-        ${r.vinculos.length ? r.vinculos.map(v => `
-          <div class="caixa" style="margin-bottom:10px">
-            <div style="display:flex;gap:10px;align-items:center;padding:10px 12px;background:#FAFAF8;flex-wrap:wrap">
-              <b>${esc(v.empenho.numero)}</b><span class="sub" style="display:inline;margin:0">${fmtD(v.empenho.data_emissao)} · ${esc(v.empenho.favorecido_nome||'')}</span>
-              <span style="margin-left:auto;font-size:12.5px">Reservado <b>${fmtV(v.valor_reservado)}</b> · pedido <b>${fmtV(v.pedido)}</b> · saldo <b>${fmtV(v.saldo_reserva)}</b></span>
-              ${ed ? `<button class="btn btn-mini" onclick="novoPedido('${v.id_vinculo}', ${v.saldo_reserva})">+ Pedido</button>` : ''}
-            </div>
-            ${v.execucoes.length ? `<table><thead><tr><th>Data</th><th>Documento</th><th class="num">Valor</th><th>Nota fiscal</th><th class="num">Liquidado</th><th class="num">Pago</th>${ed?'<th></th>':''}</tr></thead><tbody>
-              ${v.execucoes.map(x => `<tr><td>${fmtD(x.data_pedido)}</td><td>${esc(DOCS[x.tipo_documento]||'')} ${esc(x.numero_documento||'')}<span class="sub">${esc(x.descricao||'')}</span></td>
-                <td class="num">${fmtV(x.valor)}</td><td>${esc(x.nota_fiscal||'—')}</td>
-                <td class="num">${fmtV(x.valor_liquidado)}<span class="sub">${fmtD(x.data_liquidacao)}</span></td>
-                <td class="num">${fmtV(x.valor_pago)}<span class="sub">${fmtD(x.data_pagamento)}</span></td>
-                ${ed ? `<td style="text-align:right;white-space:nowrap"><button class="btn btn-mini" onclick='editarPedido(${JSON.stringify(x).replace(/'/g,"&#39;")})'>Editar</button></td>` : ''}</tr>`).join('')}
-            </tbody></table>` : '<div class="vazio" style="padding:14px">Nenhum pedido lançado nesta reserva.</div>'}
-          </div>`).join('') : '<div class="caixa"><div class="vazio" style="padding:16px">Nenhum empenho vinculado ainda.</div></div>'}
-      </div>
-
-      <div class="bloco"><div class="bloco-titulo">Cobranças ${ed ? `<button class="btn btn-mini" onclick="registrarCobranca('${d.id_demanda}','')">+ Registrar cobrança</button>` : ''}</div>
-        <div class="caixa">${r.cobrancas.length ? r.cobrancas.map(c => `<div class="linha-cob">
-          <b>${fmtDH(c.data_cobranca)}</b> · ${esc(CANAIS[c.canal]||c.canal)}${c.tipo_marco ? ' · ' + esc(c.tipo_nome) : ''}${c.autor ? ' · ' + esc(c.autor) : ''}<br>${esc(c.registro)}
-          ${c.resposta ? `<div style="margin-top:4px;color:#085041">Resposta (${fmtD(c.data_resposta)}): ${esc(c.resposta)}</div>`
-                       : (ed ? `<div style="margin-top:4px"><button class="btn btn-mini" onclick="registrarResposta('${c.id_cobranca}')">Registrar resposta</button></div>` : '')}
-          </div>`).join('') : '<div class="vazio" style="padding:14px">Nenhuma cobrança registrada.</div>'}</div>
-      </div>
-
-      ${ed ? `<div class="bloco"><div class="bloco-titulo">Encerramento</div>
-        ${d.encerramento ? `<div style="font-size:13px">${d.encerramento === 'concluida' ? 'Execução concluída' : 'Não executada'} em ${fmtD(d.data_encerramento)}${d.justificativa_encerramento ? ' — ' + esc(d.justificativa_encerramento) : ''}
-            <button class="btn btn-mini" style="margin-left:8px" onclick="reabrir()">Reabrir</button></div>`
-          : `<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-v" onclick="encerrar('concluida')">Marcar como concluída</button>
-             <button class="btn btn-r" onclick="encerrar('nao_executada')">Marcar como não executada</button></div>`}
-      </div>` : (d.encerramento ? `<div class="bloco"><div class="bloco-titulo">Encerramento</div><div style="font-size:13px">${d.encerramento === 'concluida' ? 'Execução concluída' : 'Não executada'} em ${fmtD(d.data_encerramento)}${d.justificativa_encerramento ? ' — ' + esc(d.justificativa_encerramento) : ''}</div></div>` : '')}
-    `;
+      <div class="rodape"><button class="btn" onclick="fecharModal()">Fechar</button></div>`;
   }
-  async function recarregarFicha() { if (_fichaAtual) await abrirFicha(_fichaAtual.demanda.id_demanda); carregarSilencioso(); }
-  async function carregarSilencioso() {
-    const r = await chamar('mon_dados', { exercicio: getExercicio(), escopo: $('sel-escopo').value || 'todos' });
-    if (r.ok) { _dados = r; $('cnt-pend').style.display = r.resumo.vencidos ? '' : 'none'; $('cnt-pend').textContent = r.resumo.vencidos; mostrarAba(_aba); }
+  async function salvarPrazoDem(id, limpar) {
+    const r = await chamar('mon_prazo_demanda', { id_demanda: id, data_limite: limpar ? '' : $('fp-data').value, motivo: $('fp-motivo').value });
+    if (!r.ok) return erroModal(r.erro);
+    toast('Prazo atualizado.'); await carregar(); abrirFicha(id);
+  }
+  async function encerrar(id, desfazer) {
+    const motivo = desfazer ? '' : $('fe-motivo').value.trim();
+    if (!desfazer && motivo.length < 5) return erroModal('Escreva o motivo.');
+    const r = await chamar('mon_encerrar', { id_demanda: id, motivo });
+    if (!r.ok) return erroModal(r.erro);
+    toast(desfazer ? 'Demanda voltou às pendências.' : 'Saldo marcado como não requisitado.'); await carregar(); abrirFicha(id);
+  }
+  async function cobrar(id) {
+    const r = await chamar('mon_cobrar', { id_demanda: id, canal: $('fc-canal').value, registro: $('fc-reg').value });
+    if (!r.ok) return erroModal(r.erro);
+    toast('Cobrança registrada.'); await carregar(); abrirFicha(id);
+  }
+  async function responder(idCob, idDem) {
+    const resp = prompt('Resposta da unidade:');
+    if (!resp) return;
+    const r = await chamar('mon_resposta_cobranca', { id_cobranca: idCob, resposta: resp });
+    if (!r.ok) return erroModal(r.erro);
+    abrirFicha(idDem);
   }
 
-  async function salvarProcesso() {
-    const d = _fichaAtual.demanda;
-    const r = await chamar('mon_salvar_execucao', { id_demanda: d.id_demanda, processo_sei: $('fx-sei').value.trim(),
-      data_abertura_processo: $('fx-abert').value, data_envio_processo: $('fx-envio').value });
-    if (!r.ok) { $('fx-erro').textContent = r.erro; $('fx-erro').classList.add('vis'); return; }
-    toast('Processo salvo.'); recarregarFicha();
+  // ── Requisições ───────────────────────────────────────────────────────────
+  function renderRequisicoes() {
+    const R = _dados.requisicoes;
+    const un = [...new Set(R.map(x => x.sigla_unidade))].sort(), gest = [...new Set(R.map(x => x.sigla_gestora))].sort();
+    const inst = [...new Set(R.filter(x => x.numero_instrumento).map(x => x.numero_instrumento))].sort();
+    $('conteudo').innerHTML = `<div class="secao"><div class="secao-header"><span class="secao-titulo">Requisições</span>
+      <div class="filtros">
+        <select id="fr-sit" onchange="_filtroReqSit=this.value;filtrarReq()"><option value="">Todas as situações</option>${Object.keys(SIT_REQ).filter(k => k !== 'cancelada').map(k => `<option value="${k}"${_filtroReqSit===k?' selected':''}>${SIT_REQ[k]}</option>`).join('')}</select>
+        <select id="fr-un" onchange="filtrarReq()"><option value="">Unidade requerente</option>${un.map(u => `<option>${esc(u)}</option>`).join('')}</select>
+        <select id="fr-gest" onchange="filtrarReq()"><option value="">Seção gestora</option>${gest.map(u => `<option>${esc(u)}</option>`).join('')}</select>
+        <select id="fr-inst" onchange="filtrarReq()"><option value="">Instrumento</option>${inst.map(u => `<option>${esc(u)}</option>`).join('')}</select>
+      </div></div><div class="tabela-scroll" id="tab-req"></div></div>`;
+    filtrarReq();
+  }
+  function filtrarReq() {
+    const sit = $('fr-sit').value, un = $('fr-un').value, g = $('fr-gest').value, i = $('fr-inst').value;
+    const L = _dados.requisicoes.filter(x => (!sit || x.situacao === sit) && (!un || x.sigla_unidade === un) && (!g || x.sigla_gestora === g) && (!i || x.numero_instrumento === i))
+      .sort((a, b) => b.dias_situacao - a.dias_situacao);
+    $('tab-req').innerHTML = L.length ? `<table><thead><tr><th>Requisição</th><th>Unidade</th><th>Atendimento</th><th class="num">Requisitado</th><th class="num">Real</th><th class="num">Empenhado</th><th class="num">Liquidado</th><th>Situação</th><th class="num">Dias na situação</th></tr></thead><tbody>
+      ${L.map(x => `<tr class="clicavel" onclick="abrirFicha('${x.id_demanda}')">
+        <td><span class="cod-req">${esc(x.codigo)}</span><span class="sub">${esc(x.codigo_demanda)}</span></td>
+        <td>${esc(x.sigla_unidade)}</td>
+        <td>${esc(FORMAS[x.forma]||x.forma)}<span class="sub">${esc(x.numero_instrumento||'')} · gestão ${esc(x.sigla_gestora)}</span></td>
+        <td class="num">${fmtV(x.valor)}</td><td class="num">${x.valor_real ? fmtV(x.valor_real) : '—'}</td>
+        <td class="num">${fmtV(x.empenhado)}</td><td class="num">${fmtV(x.liquidado)}</td>
+        <td>${stReq(x.situacao)}${x.codigo_solicitacao ? `<span class="sub">${esc(x.codigo_solicitacao)}</span>` : ''}</td>
+        <td class="num">${x.dias_situacao > 30 && !['liquidada','paga'].includes(x.situacao) ? `<b style="color:#A32D2D">${x.dias_situacao}</b>` : x.dias_situacao}</td></tr>`).join('')}
+      </tbody></table>` : '<div class="vazio">Nenhuma requisição neste filtro.</div>';
   }
 
-  function editarPrazo(tipo) {
-    const m = _fichaAtual.demanda.marcos.find(x => x.tipo === tipo);
-    abrirModal2('Prazo — ' + m.nome, `
-      <div class="form">
-        <div class="campo"><label>Data limite para esta demanda</label><input type="date" id="pz-data" value="${m.prazo_proprio ? esc(m.prazo) : ''}">
-          <span class="hint">Em branco = usa o calendário do exercício${m.prazo && !m.prazo_proprio ? ' (' + fmtD(m.prazo) + ')' : ''}</span></div>
-        <div class="campo largo"><label>Motivo</label><input id="pz-motivo" placeholder="Ex.: contrato vigente vence em 15/03"></div>
-      </div>
-      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarPrazo('${tipo}')">Salvar</button></div>`);
-  }
-  async function salvarPrazo(tipo) {
-    const r = await chamar('mon_prazo_demanda', { id_demanda: _fichaAtual.demanda.id_demanda, tipo, data_limite: $('pz-data').value, motivo: $('pz-motivo').value });
-    if (!r.ok) return erro2(r.erro);
-    fecharModal2(); toast('Prazo salvo.'); recarregarFicha();
-  }
-
-  function registrarCobranca(idDemanda, tipo) {
-    const marcos = (_dados.demandas.find(d => d.id_demanda === idDemanda) || (_fichaAtual && _fichaAtual.demanda) || {}).marcos || [];
-    abrirModal2('Registrar cobrança', `
-      <div class="form">
-        <div class="campo"><label>Marco</label><select id="cb-marco"><option value="">Geral</option>${marcos.map(m => `<option value="${m.tipo}"${m.tipo===tipo?' selected':''}>${esc(m.nome)}</option>`).join('')}</select></div>
-        <div class="campo"><label>Canal</label><select id="cb-canal">${Object.entries(CANAIS).map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select></div>
-        <div class="campo largo"><label>Registro</label><textarea id="cb-reg" rows="3" placeholder="Ex.: Ofício nº 12/2026 enviado pelo SEI à chefia da unidade"></textarea></div>
-      </div>
-      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarCobranca('${idDemanda}')">Registrar</button></div>`);
-  }
-  async function salvarCobranca(idDemanda) {
-    const r = await chamar('mon_cobrar', { id_demanda: idDemanda, tipo_marco: $('cb-marco').value, canal: $('cb-canal').value, registro: $('cb-reg').value });
-    if (!r.ok) return erro2(r.erro);
-    fecharModal2(); toast('Cobrança registrada.');
-    if ($('overlay').classList.contains('aberto') && _fichaAtual) recarregarFicha(); else carregarSilencioso();
-  }
-  function registrarResposta(id) {
-    abrirModal2('Resposta da unidade', `
-      <div class="form"><div class="campo"><label>Data</label><input type="date" id="rp-data" value="${new Date().toISOString().slice(0,10)}"></div>
-      <div class="campo largo"><label>Resposta</label><textarea id="rp-txt" rows="3"></textarea></div></div>
-      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarResposta('${id}')">Salvar</button></div>`);
-  }
-  async function salvarResposta(id) {
-    const r = await chamar('mon_resposta_cobranca', { id_cobranca: id, resposta: $('rp-txt').value, data_resposta: $('rp-data').value });
-    if (!r.ok) return erro2(r.erro);
-    fecharModal2(); recarregarFicha();
-  }
-
-  function encerrar(tipo) {
-    abrirModal2(tipo === 'concluida' ? 'Concluir execução' : 'Demanda não executada', `
-      <div class="form"><div class="campo"><label>Data</label><input type="date" id="en-data" value="${new Date().toISOString().slice(0,10)}"></div>
-      <div class="campo largo"><label>${tipo === 'concluida' ? 'Observação (opcional)' : 'Justificativa'}</label><textarea id="en-just" rows="3" placeholder="${tipo === 'concluida' ? '' : 'Ex.: licitação deserta; necessidade superada'}"></textarea></div></div>
-      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn ${tipo==='concluida'?'btn-v':'btn-r'}" onclick="salvarEncerramento('${tipo}')">Confirmar</button></div>`);
-  }
-  async function salvarEncerramento(tipo) {
-    const r = await chamar('mon_salvar_execucao', { id_demanda: _fichaAtual.demanda.id_demanda, encerramento: tipo,
-      data_encerramento: $('en-data').value, justificativa_encerramento: $('en-just').value });
-    if (!r.ok) return erro2(r.erro);
-    fecharModal2(); toast('Execução encerrada.'); recarregarFicha();
-  }
-  async function reabrir() {
-    if (!confirm('Reabrir a execução desta demanda?')) return;
-    const r = await chamar('mon_salvar_execucao', { id_demanda: _fichaAtual.demanda.id_demanda, encerramento: '', data_encerramento: '', justificativa_encerramento: '' });
-    if (!r.ok) { alert(r.erro); return; }
-    recarregarFicha();
-  }
-
-  // ── Reservas e pedidos ────────────────────────────────────────────────────
-  function novaReservaDaFicha() {
-    const d = _fichaAtual.demanda;
-    const ja = new Set(_fichaAtual.vinculos.map(v => v.id_empenho));
-    const emps = _dados.empenhos.filter(e => e.saldo_a_reservar > 0 && !ja.has(e.id_empenho));
-    if (!emps.length) { alert('Não há empenho do exercício com saldo para reservar. Cadastre o empenho na aba Empenhos.'); return; }
-    const falta = Math.max(0, d.valor_estimado - d.reservado);
-    abrirModal2('Reservar em empenho — ' + d.codigo, `
-      <div class="form">
-        <div class="campo largo"><label>Empenho</label><select id="rv-emp">${emps.map(e => `<option value="${e.id_empenho}">${esc(e.numero)} · ${esc(e.favorecido_nome||'')} · disponível ${fmtV(e.saldo_a_reservar)}</option>`).join('')}</select></div>
-        <div class="campo"><label>Valor a reservar (R$)</label><input type="number" step="0.01" min="0" id="rv-valor" value="${falta.toFixed(2)}"></div>
-      </div>
-      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarReserva('${d.id_demanda}')">Reservar</button></div>`);
-  }
-  async function salvarReserva(idDemanda) {
-    const r = await chamar('mon_vincular', { id_empenho: $('rv-emp').value, id_demanda: idDemanda, valor_reservado: $('rv-valor').value });
-    if (!r.ok) return erro2(r.erro);
-    fecharModal2(); toast('Reserva registrada.'); recarregarFicha();
-  }
-
-  function formPedido(x) {
-    return `<div class="form">
-      <div class="campo"><label>Data do pedido</label><input type="date" id="pd-data" value="${esc(x.data_pedido || new Date().toISOString().slice(0,10))}"></div>
-      <div class="campo"><label>Valor (R$)</label><input type="number" step="0.01" min="0" id="pd-valor" value="${x.valor || ''}"></div>
-      <div class="campo"><label>Documento</label><select id="pd-tipo">${Object.entries(DOCS).map(([k, n]) => `<option value="${k}"${k===(x.tipo_documento||'ordem_fornecimento')?' selected':''}>${n}</option>`).join('')}</select></div>
-      <div class="campo"><label>Número</label><input id="pd-num" value="${esc(x.numero_documento||'')}"></div>
-      <div class="campo largo"><label>Descrição</label><input id="pd-desc" value="${esc(x.descricao||'')}" placeholder="O que foi pedido"></div>
-      <div class="campo"><label>Nota fiscal</label><input id="pd-nf" value="${esc(x.nota_fiscal||'')}"></div>
-      <div class="campo"><label>Data da liquidação</label><input type="date" id="pd-dliq" value="${esc(x.data_liquidacao||'')}"></div>
-      <div class="campo"><label>Valor liquidado (R$)</label><input type="number" step="0.01" min="0" id="pd-vliq" value="${x.valor_liquidado || ''}"></div>
-      <div class="campo"><label>Data do pagamento</label><input type="date" id="pd-dpag" value="${esc(x.data_pagamento||'')}"></div>
-      <div class="campo"><label>Valor pago (R$)</label><input type="number" step="0.01" min="0" id="pd-vpag" value="${x.valor_pago || ''}"></div>
-    </div>`;
-  }
-  function coletarPedido() {
-    return { data_pedido: $('pd-data').value, valor: $('pd-valor').value, tipo_documento: $('pd-tipo').value, numero_documento: $('pd-num').value,
-             descricao: $('pd-desc').value, nota_fiscal: $('pd-nf').value, data_liquidacao: $('pd-dliq').value, valor_liquidado: $('pd-vliq').value || 0,
-             data_pagamento: $('pd-dpag').value, valor_pago: $('pd-vpag').value || 0 };
-  }
-  function novoPedido(idVinculo, saldo, depois) {
-    abrirModal2('Novo pedido de execução', `<div class="sub" style="margin:-6px 0 12px">Saldo da reserva: <b>${fmtV(saldo)}</b></div>${formPedido({})}
-      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarPedido({id_vinculo:'${idVinculo}'}, '${depois||'ficha'}')">Lançar pedido</button></div>`);
-  }
-  function editarPedido(x, depois) {
-    abrirModal2('Pedido de execução', `${formPedido(x)}
-      <div class="rodape"><button class="btn btn-r" style="margin-right:auto" onclick="excluirPedido('${x.id_execucao}', '${depois||'ficha'}')">Excluir</button>
-      <button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarPedido({id_execucao:'${x.id_execucao}', id_vinculo:'${x.id_vinculo}'}, '${depois||'ficha'}')">Salvar</button></div>`);
-  }
-  async function salvarPedido(base, depois) {
-    const r = await chamar('mon_pedido', { ...base, ...coletarPedido() });
-    if (!r.ok) return erro2(r.erro);
-    fecharModal2(); toast('Pedido salvo.');
-    depois === 'empenho' ? recarregarEmpenho() : recarregarFicha();
-  }
-  async function excluirPedido(id, depois) {
-    if (!confirm('Excluir este pedido?')) return;
-    const r = await chamar('mon_excluir_pedido', { id_execucao: id });
-    if (!r.ok) return erro2(r.erro);
-    fecharModal2(); depois === 'empenho' ? recarregarEmpenho() : recarregarFicha();
-  }
-
-  // ── Empenhos ──────────────────────────────────────────────────────────────
+  // ── Empenhos (só leitura) ─────────────────────────────────────────────────
   function renderEmpenhos() {
-    const l = _dados.empenhos;
+    const E = _dados.empenhos;
+    $('conteudo').innerHTML = `<div class="secao"><div class="secao-header"><span class="secao-titulo">Empenhos registrados pela Seção de Orçamento</span><span class="selo">só leitura</span></div>
+      <div class="tabela-scroll">${E.length ? `<table><thead><tr><th>Empenho</th><th>Ação / natureza</th><th>Fonte</th><th>Favorecido</th><th class="num">Valor atual</th><th class="num">Coberto</th><th class="num">Sem vínculo</th><th>Solicitações</th></tr></thead><tbody>
+        ${E.map(e => `<tr><td><b>${esc(e.numero)}</b><span class="sub">${fmtD(e.data_emissao)}</span></td>
+          <td>${esc(e.acao_governo||'—')}<span class="sub">${esc(e.natureza_despesa||'')}</span></td><td>${esc(e.fonte_codigo||'—')}</td>
+          <td>${esc(e.favorecido_nome||'—')}</td><td class="num">${fmtV(e.valor_atual)}</td><td class="num">${fmtV(e.coberto)}</td>
+          <td class="num">${Math.abs(e.sem_vinculo) > 0.005 ? `<span class="alerta-num">${fmtV(e.sem_vinculo)}</span>` : '—'}</td><td>${esc(e.solicitacoes||'—')}</td></tr>`).join('')}
+        </tbody></table>` : '<div class="vazio">Nenhum empenho neste filtro.</div>'}</div></div>
+      <h3 style="font-size:15px;margin:22px 0 12px">Conciliação pedido × empenho</h3>
+      ${htmlConciliacao(_dados.conciliacao)}`;
+  }
+
+  // ── Liquidações e pagamentos ──────────────────────────────────────────────
+  function renderLiquidacoes() {
+    const L = _dados.liquidacoes;
+    const aLiquidar = _dados.requisicoes.filter(x => x.empenhado - x.liquidado > 0.005);
     $('conteudo').innerHTML = `
-      <div class="secao">
-        <div class="secao-header"><span class="secao-titulo">${l.length} empenho(s) no exercício</span>
-          <button class="btn btn-p so-editor" onclick="formEmpenho({})">+ Novo empenho</button></div>
-        <div class="tabela-scroll">${l.length ? `
-        <table><thead><tr><th>Empenho</th><th>Favorecido</th><th>Gestora</th><th class="num">Valor atual</th><th class="num">Reservado</th><th class="num">Pedido</th><th class="num">Saldo do empenho</th><th class="num">Demandas</th></tr></thead><tbody>
-        ${l.map(e => `<tr class="clicavel" onclick="abrirEmpenho('${e.id_empenho}')">
-          <td><b>${esc(e.numero)}</b><span class="sub">${fmtD(e.data_emissao)} · ${esc(TIPOS_EMP[e.tipo]||'')}${e.natureza_despesa ? ' · ND ' + esc(e.natureza_despesa) : ''}</span></td>
-          <td>${esc(e.favorecido_nome||'—')}<span class="sub">${esc(e.favorecido_cnpj||'')}</span></td>
-          <td>${esc(e.sigla_gestora)}</td>
-          <td class="num">${fmtV(e.valor_atual)}</td><td class="num">${fmtV(e.reservado)}</td><td class="num">${fmtV(e.pedido)}</td>
-          <td class="num"><b>${fmtV(e.saldo_empenho)}</b>${barra(e.pedido, e.valor_atual)}</td><td class="num">${e.n_demandas}</td></tr>`).join('')}
-        </tbody></table>` : '<div class="vazio">Nenhum empenho cadastrado neste exercício.</div>'}</div>
-      </div>`;
-  }
-
-  function formEmpenho(e) {
-    const uns = _ctx.unidades.filter(u => ['reitoria','campus','pro_reitoria'].includes(u.tipo) || (_ctx.unidade && u.id === _ctx.unidade.id));
-    const gest = e.id_unidade_gestora_fk || (_ctx.unidade ? _ctx.unidade.id : '');
-    abrirModal2(e.id_empenho ? 'Editar empenho' : 'Novo empenho', `
-      <div class="form">
-        <div class="campo"><label>Número do empenho *</label><input id="em-num" value="${esc(e.numero||'')}" placeholder="2026NE000123"></div>
-        <div class="campo"><label>Data de emissão *</label><input type="date" id="em-data" value="${esc(e.data_emissao||'')}"></div>
-        <div class="campo"><label>Valor empenhado (R$) *</label><input type="number" step="0.01" min="0" id="em-valor" value="${e.valor_empenhado||''}"></div>
-        <div class="campo"><label>Tipo</label><select id="em-tipo">${Object.entries(TIPOS_EMP).map(([k, n]) => `<option value="${k}"${k===(e.tipo||'estimativo')?' selected':''}>${n}</option>`).join('')}</select></div>
-        <div class="campo"><label>Unidade gestora *</label><select id="em-gest">${uns.map(u => `<option value="${u.id}"${u.id===gest?' selected':''}>${esc(u.sigla)}</option>`).join('')}</select></div>
-        <div class="campo"><label>Código da UG (SIAFI)</label><input id="em-ug" value="${esc(e.ug_codigo||'')}"></div>
-        <div class="campo"><label>Favorecido — CNPJ/CPF</label><input id="em-cnpj" value="${esc(e.favorecido_cnpj||'')}"></div>
-        <div class="campo"><label>Favorecido — nome</label><input id="em-fav" value="${esc(e.favorecido_nome||'')}"></div>
-        <div class="campo"><label>Natureza de despesa</label><input id="em-nd" value="${esc(e.natureza_despesa||'')}" placeholder="3.3.90.30"></div>
-        <div class="campo"><label>Fonte</label><input id="em-fonte" value="${esc(e.fonte_codigo||'')}" placeholder="1000" maxlength="4"></div>
-        <div class="campo"><label>Processo SEI</label><input id="em-sei" value="${esc(e.processo_sei||'')}"></div>
-        <div class="campo largo"><label>Observação</label><input id="em-obs" value="${esc(e.observacao||'')}"></div>
+      <div class="cards">
+        <div class="card"><div class="card-label">Empenhado a liquidar</div><div class="card-valor">${fmtV(aLiquidar.reduce((t, x) => t + x.empenhado - x.liquidado, 0))}</div><div class="card-det">${aLiquidar.length} requisição(ões)</div></div>
+        <div class="card"><div class="card-label">Liquidado</div><div class="card-valor">${fmtV(soma(L, 'valor'))}</div><div class="card-det">${L.length} liquidação(ões)</div></div>
+        <div class="card"><div class="card-label">Pago</div><div class="card-valor">${fmtV(soma(L, 'pago'))}</div><div class="card-det">a pagar ${fmtV(soma(L, 'a_pagar'))}</div></div>
       </div>
-      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarEmpenho('${e.id_empenho||''}')">Salvar empenho</button></div>`);
+      <div class="secao"><div class="secao-header"><span class="secao-titulo">Liquidações</span>
+        <button class="btn btn-p btn-mini so-editor" onclick="formLiquidacao(null)">+ Lançar liquidação</button></div>
+      <div class="tabela-scroll">${L.length ? `<table><thead><tr><th>Documento</th><th>Data</th><th>Requisições</th><th class="num">Valor</th><th class="num">Sem vínculo</th><th class="num">Pago</th><th class="num">A pagar</th></tr></thead><tbody>
+        ${L.map(l => `<tr class="clicavel" onclick="verLiquidacao('${l.id_liquidacao}')"><td><b>${esc(l.documento)}</b>${l.observacao ? `<span class="sub">${esc(l.observacao)}</span>` : ''}</td>
+          <td>${fmtD(l.data)}</td><td style="max-width:260px">${esc(l.requisicoes||'—')}</td><td class="num">${fmtV(l.valor)}</td>
+          <td class="num">${Math.abs(l.sem_vinculo) > 0.005 ? `<span class="alerta-num">${fmtV(l.sem_vinculo)}</span>` : '—'}</td>
+          <td class="num">${fmtV(l.pago)}${l.ultimo_pagamento ? `<span class="sub">${fmtD(l.ultimo_pagamento)}</span>` : ''}</td>
+          <td class="num">${l.a_pagar > 0.005 ? `<b>${fmtV(l.a_pagar)}</b>` : '—'}</td></tr>`).join('')}
+        </tbody></table>` : '<div class="vazio">Nenhuma liquidação lançada neste filtro.</div>'}</div></div>`;
   }
-  async function salvarEmpenho(id) {
-    const empenho = { id_empenho: id || undefined, numero: $('em-num').value, data_emissao: $('em-data').value, valor_empenhado: $('em-valor').value,
-      tipo: $('em-tipo').value, id_unidade_gestora_fk: $('em-gest').value, ug_codigo: $('em-ug').value, favorecido_cnpj: $('em-cnpj').value,
-      favorecido_nome: $('em-fav').value, natureza_despesa: $('em-nd').value, fonte_codigo: $('em-fonte').value.trim(),
-      processo_sei: $('em-sei').value, observacao: $('em-obs').value };
-    const r = await chamar('mon_salvar_empenho', { empenho });
-    if (!r.ok) return erro2(r.erro);
-    fecharModal2(); toast('Empenho salvo.');
-    await carregarSilencioso();
-    abrirEmpenho(r.id_empenho);
+  async function formLiquidacao(id) {
+    let l = {}, itens = [];
+    if (id) { const r = await chamar('liq_detalhe', { id_liquidacao: id }); if (!r.ok) return toast(r.erro); l = r.liquidacao; itens = r.itens; }
+    const R = _dados.requisicoes;
+    const daqui = i => (itens.find(x => x.id_requisicao === i.id_requisicao) || {}).valor || 0;
+    const cand = R.filter(x => x.empenhado - x.liquidado + daqui(x) > 0.005);
+    window._liq = cand.map(x => { const v = daqui(x); return { x, max: x.empenhado - x.liquidado + v, valor: v || (x.empenhado - x.liquidado), marcado: !!v }; });
+    abrirModal(id ? `Editar liquidação ${esc(l.documento)}` : 'Lançar liquidação', `
+      <div class="form">
+        <div class="campo"><label>Nota fiscal ou documento *</label><input id="l-doc" value="${esc(l.documento||'')}" placeholder="NF 1234"></div>
+        <div class="campo"><label>Data da liquidação *</label><input type="date" id="l-data" value="${l.data || new Date().toISOString().slice(0,10)}"></div>
+        <div class="campo"><label>Valor liquidado (R$) *</label><input type="number" step="0.01" min="0" id="l-valor" value="${l.valor || ''}" oninput="somarLiq()"></div>
+        <div class="campo largo"><label>Observação</label><input id="l-obs" value="${esc(l.observacao||'')}"></div>
+      </div>
+      <div class="bloco" style="margin-top:16px"><div class="bloco-titulo">Requisições que esta liquidação cobre <input id="l-busca" class="btn" style="margin-left:auto;text-align:left" placeholder="Filtrar…" oninput="desenharLiq()"></div>
+        <div class="caixa tabela-scroll" style="max-height:340px;overflow-y:auto"><table><thead><tr><th></th><th>Requisição</th><th>Unidade</th><th>Instrumento</th><th class="num">Empenhado</th><th class="num">A liquidar</th><th class="num">Valor</th></tr></thead>
+          <tbody id="liq-corpo"></tbody></table></div><div id="liq-soma" style="margin-top:8px"></div></div>
+      <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button>
+        <button class="btn btn-p" onclick="salvarLiquidacao('${id || ''}')">Salvar liquidação</button></div>`, true);
+    desenharLiq();
   }
-
-  async function abrirEmpenho(id) {
-    abrirModal('Carregando…', '<div class="carregando">Carregando…</div>');
-    const r = await chamar('mon_empenho', { id_empenho: id });
-    if (!r.ok) { $('modal-corpo').innerHTML = `<div class="vazio">${esc(r.erro)}</div>`; return; }
-    _empenhoAtual = r; _fichaAtual = null;
-    const e = r.empenho, ed = podeEditar();
-    $('modal-titulo').innerHTML = `Empenho ${esc(e.numero)}<span class="sub">${esc(e.favorecido_nome||'')} ${e.favorecido_cnpj ? '· ' + esc(e.favorecido_cnpj) : ''} · ${esc(TIPOS_EMP[e.tipo]||'')} · emitido em ${fmtD(e.data_emissao)} · gestora ${esc(e.sigla_gestora)}${e.natureza_despesa ? ' · ND ' + esc(e.natureza_despesa) : ''}${e.fonte_codigo ? ' · fonte ' + esc(e.fonte_codigo) : ''}</span>`;
+  function desenharLiq() {
+    const b = ($('l-busca').value || '').toLowerCase();
+    $('liq-corpo').innerHTML = window._liq.map((l, i) => ({ l, i })).filter(({ l }) => l.marcado || !b ||
+      [l.x.codigo, l.x.codigo_demanda, l.x.sigla_unidade, l.x.numero_instrumento, l.x.descricao_objeto].some(v => String(v||'').toLowerCase().includes(b)))
+      .map(({ l, i }) => `<tr class="cob-linha"><td><input type="checkbox" ${l.marcado ? 'checked' : ''} onchange="window._liq[${i}].marcado=this.checked;somarLiq()"></td>
+        <td><span class="cod-req">${esc(l.x.codigo)}</span><span class="sub">${esc(l.x.descricao_objeto)}</span></td><td>${esc(l.x.sigla_unidade)}</td>
+        <td>${esc(l.x.numero_instrumento || FORMAS[l.x.forma] || '')}<span class="sub">${esc(l.x.fornecedor_nome||'')}</span></td>
+        <td class="num">${fmtV(l.x.empenhado)}</td><td class="num">${fmtV(l.max)}</td>
+        <td class="num"><input type="number" step="0.01" min="0" value="${Number(l.valor).toFixed(2)}" oninput="window._liq[${i}].valor=Number(this.value||0);somarLiq()"></td></tr>`).join('')
+      || '<tr><td colspan="7" class="vazio" style="padding:14px">Nenhuma requisição empenhada com saldo a liquidar.</td></tr>';
+    somarLiq();
+  }
+  function somarLiq() {
+    const m = window._liq.filter(l => l.marcado);
+    const tot = m.reduce((t, l) => t + Number(l.valor || 0), 0), v = Number($('l-valor').value || 0);
+    const acima = m.find(l => l.valor > l.max + 0.004);
+    $('liq-soma').innerHTML = !m.length ? '<div class="info">Marque as requisições que esta nota cobre.</div>'
+      : acima ? `<div class="bad-box">${esc(acima.x.codigo)}: o valor passa do que falta liquidar (${fmtV(acima.max)}).</div>`
+      : Math.abs(v - tot) < 0.005 ? `<div class="ok-box">A liquidação cobre ${fmtV(tot)} em ${m.length} requisição(ões).</div>`
+      : v > tot ? `<div class="bad-box">Faltam ${fmtV(v - tot)} para distribuir entre as requisições.</div>`
+      : `<div class="bad-box">As requisições somam ${fmtV(tot)}, acima do valor da liquidação.</div>`;
+  }
+  async function salvarLiquidacao(id) {
+    const itens = window._liq.filter(l => l.marcado && l.valor > 0).map(l => ({ id_requisicao: l.x.id_requisicao, valor: l.valor }));
+    const r = await chamar('liq_salvar', { liquidacao: { id_liquidacao: id || null, documento: $('l-doc').value.trim(), data: $('l-data').value,
+      valor: $('l-valor').value, observacao: $('l-obs').value, itens } });
+    if (!r.ok) return erroModal(r.erro);
+    fecharModal(); toast('Liquidação salva.'); await carregar(); verLiquidacao(r.id_liquidacao);
+  }
+  async function verLiquidacao(id) {
+    abrirModal('Liquidação', '<div class="carregando">Carregando…</div>', true);
+    const r = await chamar('liq_detalhe', { id_liquidacao: id });
+    if (!r.ok) return erroModal(r.erro);
+    const l = r.liquidacao;
+    const reqPor = idr => _dados.requisicoes.find(x => x.id_requisicao === idr) || {};
+    $('modal-titulo').innerHTML = `Liquidação <b>${esc(l.documento)}</b> · ${fmtD(l.data)}`;
     $('modal-corpo').innerHTML = `
-      <div class="mini-cards">
-        <div class="mini"><span>Valor atual</span><b>${fmtV(e.valor_atual)}</b></div>
-        <div class="mini"><span>Reservado para demandas</span><b>${fmtV(e.reservado)}</b></div>
-        <div class="mini"><span>Disponível para reservar</span><b>${fmtV(e.saldo_a_reservar)}</b></div>
-        <div class="mini"><span>Pedido</span><b>${fmtV(e.pedido)}</b></div>
-        <div class="mini"><span>Saldo do empenho</span><b style="color:#085041">${fmtV(e.saldo_empenho)}</b></div>
-      </div>
-      <div class="bloco"><div class="bloco-titulo">Quem pediu o quê ${ed ? `<button class="btn btn-mini" onclick="reservarNoEmpenho()">+ Reservar para demanda</button>` : ''}</div>
-        <div class="caixa tabela-scroll">${r.vinculos.length ? `<table><thead><tr><th>Demanda</th><th>Unidade</th><th class="num">Reservado</th><th class="num">Pedido</th><th class="num">Pago</th><th class="num">Saldo da reserva</th><th>Último pedido</th>${ed?'<th></th>':''}</tr></thead><tbody>
-          ${r.vinculos.map(v => `<tr><td style="max-width:260px"><span class="cod-dem">${esc(v.codigo)}</span><br>${esc(v.descricao_objeto)}</td><td>${esc(v.sigla_unidade)}</td>
-            <td class="num">${fmtV(v.valor_reservado)}</td><td class="num">${fmtV(v.pedido)}</td><td class="num">${fmtV(v.pago)}</td><td class="num"><b>${fmtV(v.saldo_reserva)}</b></td><td>${fmtD(v.ultimo_pedido)}</td>
-            ${ed ? `<td style="text-align:right;white-space:nowrap"><button class="btn btn-mini" onclick="novoPedido('${v.id_vinculo}', ${v.saldo_reserva}, 'empenho')">+ Pedido</button>
-              <button class="btn btn-mini" onclick="editarReserva('${v.id_vinculo}', ${v.valor_reservado}, ${v.pedido})">Reserva</button></td>` : ''}</tr>
-            ${v.execucoes.map(x => `<tr><td colspan="2" style="padding-left:28px;font-size:12px;color:#5F5E5A">↳ ${fmtD(x.data_pedido)} · ${esc(DOCS[x.tipo_documento]||'')} ${esc(x.numero_documento||'')} ${x.descricao ? '· ' + esc(x.descricao) : ''}</td>
-              <td></td><td class="num" style="font-size:12px">${fmtV(x.valor)}</td><td class="num" style="font-size:12px">${fmtV(x.valor_pago)}</td><td></td><td style="font-size:12px">${esc(x.nota_fiscal || '')}</td>
-              ${ed ? `<td style="text-align:right"><button class="btn btn-mini" onclick='editarPedido(${JSON.stringify(x).replace(/'/g,"&#39;")}, "empenho")'>Editar</button></td>` : ''}</tr>`).join('')}`).join('')}
-          </tbody></table>` : '<div class="vazio" style="padding:16px">Nenhuma demanda reservada neste empenho.</div>'}</div>
-      </div>
-      <div class="bloco"><div class="bloco-titulo">Reforços e anulações ${ed ? `<button class="btn btn-mini" onclick="novoMovimento()">+ Lançar</button>` : ''}</div>
-        <div class="caixa">${r.movimentos.length ? `<table><thead><tr><th>Data</th><th>Tipo</th><th class="num">Valor</th><th>Documento</th>${ed?'<th></th>':''}</tr></thead><tbody>
-          ${r.movimentos.map(m => `<tr><td>${fmtD(m.data)}</td><td>${m.tipo === 'reforco' ? 'Reforço' : 'Anulação'}</td><td class="num">${m.tipo === 'anulacao' ? '−' : '+'} ${fmtV(m.valor)}</td><td>${esc(m.documento||'—')}</td>
-            ${ed ? `<td style="text-align:right"><button class="btn btn-mini btn-r" onclick="excluirMovimento('${m.id_movimento}')">Excluir</button></td>` : ''}</tr>`).join('')}
-          </tbody></table>` : '<div class="vazio" style="padding:14px">Sem reforços ou anulações.</div>'}</div>
-      </div>
-      ${ed ? `<div class="rodape" style="justify-content:flex-start"><button class="btn" onclick='formEmpenho(${JSON.stringify(e).replace(/'/g,"&#39;")})'>Editar dados do empenho</button></div>` : ''}`;
+      <div class="mini-cards"><div class="mini"><span>Valor</span><b>${fmtV(l.valor)}</b></div><div class="mini"><span>Coberto</span><b>${fmtV(l.coberto)}</b></div>
+        <div class="mini"><span>Pago</span><b>${fmtV(l.pago)}</b></div><div class="mini"><span>A pagar</span><b>${fmtV(l.a_pagar)}</b></div></div>
+      ${l.observacao ? `<div style="font-size:13px;margin-bottom:12px">${esc(l.observacao)}</div>` : ''}
+      <div class="bloco"><div class="bloco-titulo">Requisições</div><div class="caixa tabela-scroll"><table><thead><tr><th>Requisição</th><th>Unidade</th><th>Objeto</th><th class="num">Valor</th></tr></thead><tbody>
+        ${r.itens.map(i => { const x = reqPor(i.id_requisicao); return `<tr><td><span class="cod-req">${esc(x.codigo||'')}</span><span class="sub">${esc(x.codigo_demanda||'')}</span></td><td>${esc(x.sigla_unidade||'')}</td><td>${esc(x.descricao_objeto||'')}</td><td class="num">${fmtV(i.valor)}</td></tr>`; }).join('')}
+      </tbody></table></div></div>
+      <div class="bloco"><div class="bloco-titulo">Pagamentos</div><div class="caixa hist">
+        ${r.pagamentos.map(p => `<div><b>${fmtV(p.valor)}</b> · ${fmtD(p.data)}${p.ordem_bancaria ? ' · OB ' + esc(p.ordem_bancaria) : ''}${p.observacao ? `<span class="sub">${esc(p.observacao)}</span>` : ''}
+          <button class="btn btn-mini btn-r so-editor" style="float:right" onclick="excluirPag('${p.id_pagamento}','${l.id_liquidacao}')">Excluir</button></div>`).join('') || '<div>Nenhum pagamento lançado.</div>'}</div>
+        <div class="form so-editor" style="margin-top:10px">
+          <div class="campo"><label>Data do pagamento</label><input type="date" id="p-data" value="${new Date().toISOString().slice(0,10)}"></div>
+          <div class="campo"><label>Valor (R$)</label><input type="number" step="0.01" min="0" id="p-valor" value="${l.a_pagar > 0 ? l.a_pagar.toFixed(2) : ''}"></div>
+          <div class="campo"><label>Ordem bancária</label><input id="p-ob" placeholder="2026OB000123"></div>
+          <div class="campo" style="justify-content:flex-end"><button class="btn" onclick="lancarPag('${l.id_liquidacao}')">Lançar pagamento</button></div></div></div>
+      <div class="rodape"><button class="btn btn-r so-editor" style="margin-right:auto" onclick="excluirLiq('${l.id_liquidacao}')">Excluir liquidação</button>
+        <button class="btn" onclick="fecharModal()">Fechar</button>
+        <button class="btn btn-p so-editor" onclick="formLiquidacao('${l.id_liquidacao}')">Editar</button></div>`;
   }
-  async function recarregarEmpenho() { if (_empenhoAtual) await abrirEmpenho(_empenhoAtual.empenho.id_empenho); carregarSilencioso(); }
-
-  function reservarNoEmpenho() {
-    const e = _empenhoAtual.empenho;
-    const ja = new Set(_empenhoAtual.vinculos.map(v => v.id_demanda));
-    const dems = _dados.demandas.filter(d => !ja.has(d.id_demanda) && !d.encerramento);
-    abrirModal2('Reservar no empenho ' + e.numero, `
-      <div class="sub" style="margin:-6px 0 12px">Disponível para reservar: <b>${fmtV(e.saldo_a_reservar)}</b></div>
-      <div class="form">
-        <div class="campo largo"><label>Demanda homologada</label>
-          <input list="lista-dem" id="rs-dem" placeholder="Digite o ID (DEM-2026-0001) ou parte do objeto">
-          <datalist id="lista-dem">${dems.map(d => `<option value="${esc(d.codigo)}">${esc(d.sigla_unidade)} · ${esc(d.descricao_objeto)} · homologado ${fmtV(d.valor_estimado)}</option>`).join('')}</datalist></div>
-        <div class="campo"><label>Valor a reservar (R$)</label><input type="number" step="0.01" min="0" id="rs-valor"></div>
-      </div>
-      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarReservaEmpenho()">Reservar</button></div>`);
+  async function lancarPag(id) {
+    const r = await chamar('pag_salvar', { pagamento: { id_liquidacao: id, data: $('p-data').value, valor: $('p-valor').value, ordem_bancaria: $('p-ob').value } });
+    if (!r.ok) return erroModal(r.erro);
+    toast('Pagamento lançado.'); await carregar(); verLiquidacao(id);
   }
-  async function salvarReservaEmpenho() {
-    const r = await chamar('mon_vincular', { id_empenho: _empenhoAtual.empenho.id_empenho, codigo: $('rs-dem').value.trim(), valor_reservado: $('rs-valor').value });
-    if (!r.ok) return erro2(r.erro);
-    fecharModal2(); toast('Reserva registrada.'); recarregarEmpenho();
+  async function excluirPag(idPag, id) {
+    const r = await chamar('pag_excluir', { id_pagamento: idPag });
+    if (!r.ok) return erroModal(r.erro);
+    await carregar(); verLiquidacao(id);
   }
-  function editarReserva(id, valor, pedido) {
-    abrirModal2('Alterar reserva', `
-      <div class="form"><div class="campo"><label>Valor reservado (R$)</label><input type="number" step="0.01" min="0" id="er-valor" value="${valor}">
-        <span class="hint">Mínimo: o já pedido (${fmtV(pedido)})</span></div></div>
-      <div class="rodape">${pedido ? '' : `<button class="btn btn-r" style="margin-right:auto" onclick="excluirReserva('${id}')">Excluir reserva</button>`}
-        <button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarEdicaoReserva('${id}')">Salvar</button></div>`);
-  }
-  async function salvarEdicaoReserva(id) {
-    const r = await chamar('mon_editar_vinculo', { id_vinculo: id, valor_reservado: $('er-valor').value });
-    if (!r.ok) return erro2(r.erro);
-    fecharModal2(); recarregarEmpenho();
-  }
-  async function excluirReserva(id) {
-    if (!confirm('Excluir esta reserva?')) return;
-    const r = await chamar('mon_excluir_vinculo', { id_vinculo: id });
-    if (!r.ok) return erro2(r.erro);
-    fecharModal2(); recarregarEmpenho();
-  }
-  function novoMovimento() {
-    abrirModal2('Reforço ou anulação', `
-      <div class="form">
-        <div class="campo"><label>Tipo</label><select id="mv-tipo"><option value="reforco">Reforço</option><option value="anulacao">Anulação</option></select></div>
-        <div class="campo"><label>Data</label><input type="date" id="mv-data" value="${new Date().toISOString().slice(0,10)}"></div>
-        <div class="campo"><label>Valor (R$)</label><input type="number" step="0.01" min="0" id="mv-valor"></div>
-        <div class="campo"><label>Documento</label><input id="mv-doc" placeholder="Nº do empenho de reforço/anulação"></div>
-      </div>
-      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarMovimento()">Lançar</button></div>`);
-  }
-  async function salvarMovimento() {
-    const r = await chamar('mon_movimento', { id_empenho: _empenhoAtual.empenho.id_empenho, tipo: $('mv-tipo').value, data: $('mv-data').value,
-      valor: $('mv-valor').value, documento: $('mv-doc').value });
-    if (!r.ok) return erro2(r.erro);
-    fecharModal2(); recarregarEmpenho();
-  }
-  async function excluirMovimento(id) {
-    if (!confirm('Excluir este lançamento?')) return;
-    const r = await chamar('mon_excluir_movimento', { id_movimento: id });
-    if (!r.ok) { alert(r.erro); return; }
-    recarregarEmpenho();
+  async function excluirLiq(id) {
+    if (!confirm('Excluir esta liquidação?')) return;
+    const r = await chamar('liq_excluir', { id_liquidacao: id });
+    if (!r.ok) return erroModal(r.erro);
+    fecharModal(); toast('Liquidação excluída.'); carregar();
   }
 
   // ── Pendências ────────────────────────────────────────────────────────────
   function renderPendencias() {
-    const l = _dados.pendencias;
-    if (!l.length) { $('conteudo').innerHTML = '<div class="secao"><div class="vazio">Nenhum marco vencido ou a vencer nos próximos 15 dias.</div></div>'; return; }
-    const grupos = {};
-    l.forEach(p => (grupos[p.sigla_unidade] = grupos[p.sigla_unidade] || []).push(p));
-    $('conteudo').innerHTML = `<div class="secao">
-      <div class="secao-header"><span class="secao-titulo">${l.filter(p=>p.estado==='vencido').length} vencido(s) · ${l.filter(p=>p.estado==='a_vencer').length} a vencer em até 15 dias</span></div>
-      ${Object.keys(grupos).sort().map(u => `<div class="grupo-un">${esc(u)}</div>
-        <table><tbody>${grupos[u].map(p => `<tr>
-          <td style="width:42%"><span class="cod-dem">${esc(p.codigo)}</span><br>${esc(p.descricao_objeto)}</td>
-          <td>${sem(p)}</td>
-          <td style="font-size:12px;color:#888780">${p.ultima_cobranca ? 'Última cobrança: ' + fmtDH(p.ultima_cobranca) : 'Sem cobrança'}</td>
-          <td style="text-align:right;white-space:nowrap"><button class="btn btn-mini" onclick="abrirFicha('${p.id_demanda}')">Abrir</button>
-            <button class="btn btn-mini so-editor" onclick="registrarCobranca('${p.id_demanda}','${p.tipo}')">Cobrar</button></td></tr>`).join('')}</tbody></table>`).join('')}
-    </div>`;
+    const P = _dados.pendencias;
+    $('conteudo').innerHTML = `<div class="secao"><div class="secao-header"><span class="secao-titulo">Demandas com saldo a requisitar e prazo vencido ou a vencer em 15 dias</span></div>
+      <div class="tabela-scroll">${P.length ? `<table><thead><tr><th>Demanda</th><th>Unidade</th><th class="num">Saldo a requisitar</th><th>Prazo</th><th>Cobranças</th><th></th></tr></thead><tbody>
+        ${P.map(d => `<tr><td><span class="cod-dem">${esc(d.codigo)}</span><span class="sub">${esc(d.descricao_objeto)}</span></td>
+          <td>${esc(d.sigla_unidade)}</td><td class="num">${fmtV(d.saldo)}</td><td>${semPrazo(d)}</td>
+          <td>${d.n_cobrancas ? `${d.n_cobrancas}<span class="sub">última ${fmtD(d.ultima_cobranca)}</span>` : '—'}</td>
+          <td style="text-align:right"><button class="btn btn-mini" onclick="abrirFicha('${d.id_demanda}')">${pode() ? 'Cobrar / ficha' : 'Ficha'}</button></td></tr>`).join('')}
+        </tbody></table>` : '<div class="vazio">Nenhuma pendência: todas as demandas com saldo estão no prazo ou sem prazo definido.</div>'}</div></div>
+      <div class="info">O prazo de cada demanda vem do calendário (por unidade e, se houver, por categoria) ou de um prazo próprio definido na ficha. Demandas marcadas como "não será requisitada" saem desta lista.</div>`;
   }
 
-  // ── Calendário ────────────────────────────────────────────────────────────
+  // ── Calendário de prazos para requisitar ──────────────────────────────────
+  function opcoesEscopo() {
+    const U = _ctx.unidades, raiz = _ctx.raiz;
+    const meu = _ctx.unidade ? _ctx.unidade.id : null;
+    const sub = new Set(); if (meu) { const f = [meu]; while (f.length) { const x = f.shift(); if (sub.has(x)) continue; sub.add(x); U.filter(u => u.pai === x).forEach(u => f.push(u.id)); } }
+    const lista = U.filter(u => raiz || sub.has(u.id)).filter(u => ['reitoria','pro_reitoria','campus','diretoria_adm','diretoria_ped','coordenacao'].includes(u.tipo) || u.id === meu)
+      .sort((a, b) => String(a.sigla||a.nome).localeCompare(String(b.sigla||b.nome)));
+    return (raiz ? '<option value="">Toda a instituição</option>' : '') + lista.map(u => `<option value="${u.id}">${esc(u.sigla||'')} — ${esc(u.nome)}</option>`).join('');
+  }
   function renderCalendario() {
-    const l = _dados.calendario;
-    $('conteudo').innerHTML = `<div class="secao">
-      <div class="secao-header"><span class="secao-titulo">Marcos do exercício ${esc(getExercicio())}</span>
-        <button class="btn btn-p so-editor" onclick="formMarco({})">+ Novo marco</button></div>
-      <div class="sub" style="padding:10px 18px 0">Cada demanda usa o marco do escopo mais próximo da sua unidade; sem marco próprio do campus, vale o da instituição. A ficha da demanda permite um prazo específico.</div>
-      ${l.length ? `<table style="margin-top:8px"><thead><tr><th>Data limite</th><th>Marco</th><th>Vale para</th><th>Descrição</th><th class="so-editor"></th></tr></thead><tbody>
-        ${l.map(m => `<tr><td><b>${fmtD(m.data_limite)}</b></td><td>${esc(m.tipo_nome)}</td><td>${esc(m.escopo_nome)}</td><td>${esc(m.descricao||'')}</td>
-          <td class="so-editor" style="text-align:right;white-space:nowrap">${m.editavel ? `<button class="btn btn-mini" onclick='formMarco(${JSON.stringify(m).replace(/'/g,"&#39;")})'>Editar</button>
-          <button class="btn btn-mini btn-r" onclick="excluirMarco('${m.id_marco}')">Excluir</button>` : '<span class="sub" style="display:inline">definido pela Reitoria</span>'}</td></tr>`).join('')}
-      </tbody></table>` : '<div class="vazio">Nenhum marco definido para este exercício.</div>'}
-    </div>`;
+    const C = _dados.calendario;
+    $('conteudo').innerHTML = `<div class="secao"><div class="secao-header"><span class="secao-titulo">Prazos para requisitar — exercício ${_dados.exercicio}</span></div>
+      <div class="tabela-scroll">${C.length ? `<table><thead><tr><th>Data limite</th><th>Escopo</th><th>Categoria</th><th>Descrição</th><th class="num">Demandas</th><th></th></tr></thead><tbody>
+        ${C.map(m => `<tr><td><b>${fmtD(m.data_limite)}</b></td><td>${esc(m.escopo_nome)}</td><td>${esc(m.categoria_nome)}</td><td>${esc(m.descricao||'')}</td><td class="num">${m.n_demandas}</td>
+          <td style="text-align:right">${m.editavel ? `<button class="btn btn-mini btn-r" onclick="excluirPrazo('${m.id_prazo}')">Excluir</button>` : ''}</td></tr>`).join('')}
+        </tbody></table>` : '<div class="vazio">Nenhum prazo definido para este exercício.</div>'}</div></div>
+      <div class="secao so-editor"><div class="secao-header"><span class="secao-titulo">Novo prazo</span></div><div style="padding:14px 18px">
+        <div class="form">
+          <div class="campo"><label>Escopo</label><select id="c-escopo">${opcoesEscopo()}</select></div>
+          <div class="campo"><label>Categoria de despesa</label><select id="c-cat"><option value="">Todas as categorias</option>${(_ctx.categorias||[]).map(c => `<option value="${c.id_categoria}">${esc(c.nome)}</option>`).join('')}</select></div>
+          <div class="campo"><label>Data limite para requisitar</label><input type="date" id="c-data"></div>
+          <div class="campo"><label>Descrição</label><input id="c-desc" placeholder="Ex.: material de consumo"></div>
+        </div>
+        <div class="rodape"><button class="btn btn-p" onclick="salvarPrazo()">Salvar prazo</button></div>
+        <div class="info" style="margin-top:10px">Vale o prazo mais específico: o próprio da demanda; depois o da unidade mais próxima na estrutura (com categoria antes do geral); por fim o de toda a instituição.</div>
+      </div></div>`;
   }
-  function formMarco(m) {
-    const ops = [];
-    if (_ctx.raiz) ops.push(['', 'Toda a instituição']);
-    const minhaSub = _ctx.unidade ? _ctx.unidades.filter(u => { let x = u.id, i = 0; while (x && i++ < 30) { if (x === _ctx.unidade.id) return true; x = (_ctx.unidades.find(z => z.id === x) || {}).pai; } return false; }) : _ctx.unidades;
-    minhaSub.filter(u => ['campus','pro_reitoria','reitoria'].includes(u.tipo) || (_ctx.unidade && u.id === _ctx.unidade.id))
-      .filter(u => !(_ctx.raiz && u.tipo === 'reitoria'))
-      .forEach(u => ops.push([u.id, u.sigla + ' — ' + u.nome.replace(/^[^–]*–\s*/, '')]));
-    abrirModal2(m.id_marco ? 'Editar marco' : 'Novo marco', `
-      <div class="form">
-        <div class="campo"><label>Marco</label><select id="mc-tipo">${_ctx.tipos_marco.map(t => `<option value="${t.valor}"${t.valor===m.tipo?' selected':''}>${t.nome}</option>`).join('')}</select></div>
-        <div class="campo"><label>Data limite</label><input type="date" id="mc-data" value="${esc(m.data_limite||'')}"></div>
-        <div class="campo largo"><label>Vale para</label><select id="mc-esc">${ops.map(([v, n]) => `<option value="${v}"${(m.id_unidade_escopo||'')===v?' selected':''}>${esc(n)}</option>`).join('')}</select></div>
-        <div class="campo largo"><label>Descrição</label><input id="mc-desc" value="${esc(m.descricao||'')}" placeholder="Ex.: prazo para envio dos processos à licitação"></div>
-      </div>
-      <div class="rodape"><button class="btn" onclick="fecharModal2()">Cancelar</button><button class="btn btn-p" onclick="salvarMarco('${m.id_marco||''}')">Salvar</button></div>`);
+  async function salvarPrazo() {
+    const r = await chamar('mon_salvar_prazo', { prazo: { exercicio: _dados.exercicio, id_unidade_escopo: $('c-escopo').value,
+      id_categoria: $('c-cat').value, data_limite: $('c-data').value, descricao: $('c-desc').value } });
+    if (!r.ok) return toast(r.erro);
+    toast('Prazo salvo.'); carregar();
   }
-  async function salvarMarco(id) {
-    const r = await chamar('mon_salvar_marco', { id_marco: id || undefined, exercicio: getExercicio(), tipo: $('mc-tipo').value,
-      data_limite: $('mc-data').value, id_unidade_escopo: $('mc-esc').value, descricao: $('mc-desc').value });
-    if (!r.ok) return erro2(r.erro);
-    fecharModal2(); toast('Marco salvo.'); carregarSilencioso();
-  }
-  async function excluirMarco(id) {
-    if (!confirm('Excluir este marco?')) return;
-    const r = await chamar('mon_excluir_marco', { id_marco: id });
-    if (!r.ok) { alert(r.erro); return; }
-    carregarSilencioso();
+  async function excluirPrazo(id) {
+    if (!confirm('Excluir este prazo?')) return;
+    const r = await chamar('mon_excluir_prazo', { id_prazo: id });
+    if (!r.ok) return toast(r.erro);
+    carregar();
   }
 
-  // ── Modais ────────────────────────────────────────────────────────────────
-  function abrirModal(titulo, html) { $('modal-titulo').innerHTML = titulo; $('modal-corpo').innerHTML = html; $('overlay').classList.add('aberto'); }
-  function fecharModal() { $('overlay').classList.remove('aberto'); _fichaAtual = null; _empenhoAtual = null; }
-  function abrirModal2(titulo, html) { $('modal2-titulo').textContent = titulo; $('modal2-corpo').innerHTML = html; $('modal2-erro').classList.remove('vis'); $('overlay2').classList.add('aberto'); }
-  function fecharModal2() { $('overlay2').classList.remove('aberto'); }
-  function erro2(msg) { $('modal2-erro').textContent = msg; $('modal2-erro').classList.add('vis'); }
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') { if ($('overlay2').classList.contains('aberto')) fecharModal2(); else fecharModal(); } });
+  // ── Resíduos para redistribuição ──────────────────────────────────────────
+  function renderResiduos() {
+    const X = _dados.residuos;
+    const agrupa = k => { const g = {}; X.forEach(x => { const c = x[k] || '—'; g[c] = (g[c] || 0) + x.valor; }); return Object.entries(g).sort((a, b) => b[1] - a[1]); };
+    const mini = (titulo, l) => `<div class="secao"><div class="secao-header"><span class="secao-titulo">${titulo}</span></div><table><tbody>
+      ${l.map(([n, v]) => `<tr><td>${esc(n)}</td><td class="num">${fmtV(v)}</td></tr>`).join('') || '<tr><td class="vazio">—</td></tr>'}</tbody></table></div>`;
+    $('conteudo').innerHTML = `
+      <div class="info" style="margin-bottom:18px">Resíduo é a diferença entre o requisitado e o valor real aprovado pelo gestor, mais o saldo das demandas marcadas como "não será requisitada". Ele só é sinalizado: a redistribuição é decidida pela gestão, fora do sistema.</div>
+      <div class="cards"><div class="card"><div class="card-label">Total para redistribuição</div><div class="card-valor">${fmtV(X.reduce((t, x) => t + x.valor, 0))}</div><div class="card-det">${X.length} registro(s)</div></div></div>
+      <div class="grade2">${mini('Por unidade', agrupa('sigla_unidade'))}${mini('Por categoria', agrupa('categoria'))}</div>
+      <div class="secao"><div class="secao-header"><span class="secao-titulo">Detalhe</span></div><div class="tabela-scroll">${X.length ? `<table><thead><tr><th>Origem</th><th>Demanda</th><th>Unidade</th><th>Categoria</th><th>Instrumento</th><th class="num">Valor</th></tr></thead><tbody>
+        ${X.map(x => `<tr class="clicavel" onclick="abrirFicha('${x.id_demanda}')"><td>${x.tipo === 'residuo' ? `Resíduo de <span class="cod-req">${esc(x.codigo)}</span>` : `Saldo não requisitado<span class="sub">${esc(x.motivo||'')}</span>`}</td>
+          <td><span class="cod-dem">${esc(x.codigo_demanda)}</span><span class="sub">${esc(x.descricao_objeto)}</span></td><td>${esc(x.sigla_unidade)}</td><td>${esc(x.categoria||'—')}</td><td>${esc(x.instrumento)}</td><td class="num"><b>${fmtV(x.valor)}</b></td></tr>`).join('')}
+        </tbody></table>` : '<div class="vazio">Nenhum resíduo neste filtro.</div>'}</div></div>`;
+  }
+  // ── Conciliação pedido × empenho (mesma conta no Orçamento e no Monitoramento) ──
+  function htmlConciliacao(cc) {
+    const t = cc.total;
+    const tab = (lista, rotulo) => lista.length ? `<table><thead><tr><th>${rotulo}</th><th class="num">Aprovado (real)</th><th class="num">Solicitado</th><th class="num">Empenhado</th><th class="num">A empenhar</th><th class="num">Liquidado</th><th></th></tr></thead><tbody>
+      ${lista.map(x => `<tr><td>${esc(x.nome)}<span class="sub">${x.n} requisição(ões)</span></td>
+        <td class="num">${fmtV(x.aprovado)}</td><td class="num">${fmtV(x.solicitado)}</td><td class="num">${fmtV(x.empenhado)}</td>
+        <td class="num">${x.a_empenhar > 0.005 ? `<b style="color:#7A4A00">${fmtV(x.a_empenhar)}</b>` : '—'}</td>
+        <td class="num">${fmtV(x.liquidado)}</td>
+        <td style="min-width:90px">${barra(x.empenhado, x.aprovado)}</td></tr>`).join('')}
+      <tr><td><b>Total</b></td><td class="num"><b>${fmtV(lista.reduce((s, x) => s + x.aprovado, 0))}</b></td><td class="num"><b>${fmtV(lista.reduce((s, x) => s + x.solicitado, 0))}</b></td>
+        <td class="num"><b>${fmtV(lista.reduce((s, x) => s + x.empenhado, 0))}</b></td><td class="num"><b>${fmtV(lista.reduce((s, x) => s + x.a_empenhar, 0))}</b></td>
+        <td class="num"><b>${fmtV(lista.reduce((s, x) => s + x.liquidado, 0))}</b></td><td></td></tr>
+      </tbody></table>` : '<div class="vazio">Nenhuma requisição aprovada neste filtro.</div>';
+    const bate = Math.abs(t.sem_vinculo) < 0.005;
+    return `
+      <div class="cadeia">
+        <div class="elo"><span>Aprovado (real)</span><b>${fmtV(t.aprovado)}</b><small>requisições aprovadas</small></div>
+        <div class="elo"><span>Solicitado</span><b>${fmtV(t.solicitado)}</b><small>em solicitação enviada</small></div>
+        <div class="elo"><span>Empenhado</span><b>${fmtV(t.empenhado)}</b><small>o que os empenhos cobrem</small></div>
+        <div class="elo"><span>A empenhar</span><b>${fmtV(t.a_empenhar)}</b><small>solicitado − empenhado</small></div>
+        <div class="elo" style="${bate ? '' : 'background:#FCEBEB'}"><span>Empenho sem vínculo</span><b class="${bate ? '' : 'alerta-num'}">${fmtV(t.sem_vinculo)}</b><small>${bate ? 'empenhos totalmente vinculados' : 'valor dos empenhos − o que cobrem'}</small></div>
+      </div>
+      ${!bate ? `<div class="aviso"><b>Há empenho sem vínculo.</b> A soma dos empenhos (${fmtV(t.empenhos)}) não bate com a soma do que eles cobrem (${fmtV(t.empenhado)}).
+        ${cc.sem_vinculo.map(e => `<span class="cod-dem" style="margin-left:6px">${esc(e.numero)}: ${fmtV(e.sem_vinculo)}</span>`).join('')}</div>`
+        : `<div class="ok-box" style="margin-bottom:18px">A soma dos empenhos é igual à soma do que eles cobrem nas requisições.</div>`}
+      <div class="secao"><div class="secao-header"><span class="secao-titulo">Por contrato, ata ou forma de atendimento</span></div><div class="tabela-scroll">${tab(cc.por_instrumento, 'Instrumento')}</div></div>
+      <div class="secao"><div class="secao-header"><span class="secao-titulo">Por unidade requerente</span></div><div class="tabela-scroll">${tab(cc.por_unidade, 'Unidade')}</div></div>`;
+  }
+
+
 </script>
 </body>
 </html>

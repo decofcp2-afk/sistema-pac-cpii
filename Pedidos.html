@@ -160,6 +160,9 @@
   .hist div:last-child { border-bottom: none; }
   .dias { font-size: 11px; color: #888780; }
   .btn:disabled, .btn:disabled:hover { opacity: .4; cursor: not-allowed; }
+  .st-sol-elaboracao { background: #FAEEDA; color: #633806; } .st-sol-enviada { background: #E6F1FB; color: #0C447C; }
+  .st-sol-empenhada_parcial { background: #EEEDFE; color: #3C3489; } .st-sol-empenhada { background: #E1F5EE; color: #085041; }
+  .st-sol-devolvida { background: #FCEBEB; color: #791F1F; } .st-sol-cancelada { background: #F1EFE8; color: #888780; }
 </style>
 </head>
 <body>
@@ -206,7 +209,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="api.js?v=202611041400"></script>
+<script src="api.js?v=202611041700"></script>
 <script>
   const token = localStorage.getItem('pac_token') || '';
   let _usuario = null, _ctx = null, _dados = null;
@@ -287,10 +290,17 @@
     _dados = r; render();
   }
   const ORDEM = { aguardando_gestor: 0, aprovada: 1, pendente: 2, aguardando_contratacao: 3, em_solicitacao: 4, empenhada: 5, liquidada: 6, paga: 7 };
-  function linhas(lista) {
+  const SIT_SOL = { elaboracao: 'Em elaboração', enviada: 'Enviada ao Orçamento', empenhada_parcial: 'Empenhada em parte',
+    empenhada: 'Empenhada', devolvida: 'Devolvida pelo Orçamento', cancelada: 'Cancelada' };
+  function stSol(s) { return `<span class="st st-sol-${s}">${esc(SIT_SOL[s] || s)}</span>`; }
+  let _sel = {};   // grupo → Set de requisições marcadas
+  function grupoDe(x) { return x.id_instrumento || ('forma:' + x.forma); }
+  function linhas(lista, grupo) {
     lista = lista.slice().sort((a, b) => (ORDEM[a.situacao] - ORDEM[b.situacao]) || String(a.data_situacao).localeCompare(String(b.data_situacao)));
-    return `<table><thead><tr><th>Requisição</th><th>Unidade</th><th>Objeto</th><th class="num">Qtd.</th><th class="num">Requisitado</th><th class="num">Valor real</th><th class="num">Resíduo</th><th>Situação</th><th></th></tr></thead><tbody>
+    const marcavel = lista.some(x => x.situacao === 'aprovada' && !x.id_solicitacao);
+    return `<table><thead><tr>${marcavel ? '<th style="width:28px"></th>' : ''}<th>Requisição</th><th>Unidade</th><th>Objeto</th><th class="num">Qtd.</th><th class="num">Requisitado</th><th class="num">Valor real</th><th class="num">Resíduo</th><th>Situação</th><th></th></tr></thead><tbody>
       ${lista.map(x => `<tr>
+        ${marcavel ? `<td>${x.situacao === 'aprovada' && !x.id_solicitacao ? `<input type="checkbox" title="Incluir na solicitação de empenho" ${(_sel[grupo] && _sel[grupo].has(x.id_requisicao)) ? 'checked' : ''} onchange="marcar('${grupo}','${x.id_requisicao}',this.checked)">` : ''}</td>` : ''}
         <td><span class="cod-req">${esc(x.codigo)}</span><span class="sub">${esc(x.codigo_demanda)}</span></td>
         <td>${esc(x.sigla_unidade)}</td>
         <td style="max-width:240px">${esc(x.descricao_objeto)}${x.observacao ? `<span class="sub">${esc(x.observacao)}</span>` : ''}</td>
@@ -298,43 +308,225 @@
         <td class="num">${fmtV(x.valor)}</td>
         <td class="num">${x.valor_real ? fmtV(x.valor_real) : '—'}</td>
         <td class="num">${Number(x.residuo) ? `<b style="color:#085041">${fmtV(x.residuo)}</b>` : '—'}</td>
-        <td>${stReq(x.situacao)}<span class="dias">${diasDesde(x.data_situacao)}</span></td>
+        <td>${stReq(x.situacao)}${x.codigo_solicitacao ? `<span class="sub"><a href="#" onclick="verSolicitacao('${x.id_solicitacao}');return false;">${esc(x.codigo_solicitacao)}</a></span>` : `<span class="dias">${diasDesde(x.data_situacao)}</span>`}</td>
         <td style="text-align:right;white-space:nowrap">${x.situacao === 'aguardando_gestor' ? `<button class="btn btn-p btn-mini" onclick="analisar('${x.id_requisicao}')">Analisar</button>`
           : x.situacao === 'aprovada' ? `<button class="btn btn-mini" onclick="analisar('${x.id_requisicao}')">Rever</button>`
           : `<button class="btn btn-mini" onclick="analisar('${x.id_requisicao}')">Ver</button>`}</td></tr>`).join('')}
       </tbody></table>`;
   }
+  function marcar(grupo, id, on) {
+    _sel[grupo] = _sel[grupo] || new Set();
+    on ? _sel[grupo].add(id) : _sel[grupo].delete(id);
+    const n = _sel[grupo].size, b = document.querySelector(`[data-gerar="${grupo}"]`);
+    if (b) { b.disabled = !n; b.textContent = n ? `Gerar solicitação de empenho (${n})` : 'Gerar solicitação de empenho'; }
+  }
+  function botaoGerar(grupo, lista) {
+    if (!lista.some(x => x.situacao === 'aprovada' && !x.id_solicitacao)) return '';
+    const n = _sel[grupo] ? _sel[grupo].size : 0;
+    return `<button class="btn btn-p btn-mini" data-gerar="${grupo}" ${n ? '' : 'disabled'} onclick="gerarSolicitacao('${grupo}')">${n ? `Gerar solicitação de empenho (${n})` : 'Gerar solicitação de empenho'}</button>`;
+  }
+  function tabelaSolicitacoes(S) {
+    if (!S.length) return '<div class="vazio" style="padding:16px">Nenhuma solicitação de empenho neste exercício. Marque requisições aprovadas de um mesmo contrato ou ata e clique em <b>Gerar solicitação de empenho</b>.</div>';
+    return `<table><thead><tr><th>Solicitação</th><th>Instrumento</th><th class="num">Requisições</th><th class="num">Valor real</th><th class="num">Empenhado</th><th>Situação</th><th></th></tr></thead><tbody>
+      ${S.map(s => `<tr class="clicavel" onclick="verSolicitacao('${s.id_solicitacao}')">
+        <td><span class="cod-dem">${esc(s.codigo)}</span><span class="sub">${fmtDH(s.data_criacao)}</span></td>
+        <td>${s.numero_instrumento ? `${esc(TIPOS_INST[s.tipo_instrumento]||'')} ${esc(s.numero_instrumento)}<span class="sub">${esc(s.fornecedor_nome||'')}</span>` : esc(FORMAS[s.forma]||s.forma)}${_dados.admin_global ? `<span class="sub">Gestão ${esc(s.sigla_gestora)}</span>` : ''}</td>
+        <td class="num">${s.n_requisicoes}</td><td class="num">${fmtV(s.total_real)}</td>
+        <td class="num">${fmtV(s.empenhado)}<div style="max-width:110px;margin-left:auto;margin-top:3px">${barra(s.empenhado, s.total_real)}</div></td>
+        <td>${stSol(s.situacao_exibicao)}${s.situacao === 'devolvida' ? `<span class="sub" style="color:#A32D2D">${esc(s.motivo||'')}</span>` : ''}</td>
+        <td style="text-align:right"><button class="btn btn-mini" onclick="event.stopPropagation();verSolicitacao('${s.id_solicitacao}')">Abrir</button></td></tr>`).join('')}
+      </tbody></table>`;
+  }
   function render() {
-    const R = _dados.requisicoes, I = _dados.instrumentos;
+    const R = _dados.requisicoes, I = _dados.instrumentos, S = _dados.solicitacoes || [];
     const soma = (l, k) => l.reduce((t, x) => t + Number(x[k] || 0), 0);
     const ag = R.filter(x => x.situacao === 'aguardando_gestor'), ap = R.filter(x => x.situacao === 'aprovada');
     const pe = R.filter(x => x.situacao === 'pendente' || x.situacao === 'aguardando_contratacao');
     const res = R.filter(x => Number(x.residuo));
+    const devolvidas = S.filter(s => s.situacao === 'devolvida'), elab = S.filter(s => s.situacao === 'elaboracao');
     const porInst = {}; R.filter(x => x.id_instrumento).forEach(x => (porInst[x.id_instrumento] = porInst[x.id_instrumento] || []).push(x));
-    const diretas = R.filter(x => !x.id_instrumento);
+    const porForma = {}; R.filter(x => !x.id_instrumento).forEach(x => (porForma[x.forma] = porForma[x.forma] || []).push(x));
     const insts = I.filter(i => porInst[i.id_instrumento] || i.disponivel || (i.tipo === 'processo' && i.situacao === 'em_andamento'));
     $('conteudo').innerHTML = `
       <div class="cards">
         <div class="card ${ag.length?'amarelo':''}"><div class="card-label">Aguardando análise</div><div class="card-valor">${ag.length}</div><div class="card-det">${fmtV(soma(ag, 'valor'))} requisitados</div></div>
         <div class="card"><div class="card-label">Aprovadas</div><div class="card-valor">${fmtV(soma(ap, 'valor_real'))}</div><div class="card-det">${ap.length} aguardando solicitação de empenho</div></div>
         <div class="card"><div class="card-label">Pendentes</div><div class="card-valor">${pe.length}</div><div class="card-det">devolvidas ou aguardando contratação</div></div>
+        <div class="card ${devolvidas.length?'vermelho':''}"><div class="card-label">Solicitações de empenho</div><div class="card-valor">${S.length}</div><div class="card-det">${elab.length} em elaboração · ${devolvidas.length} devolvida(s)</div></div>
         <div class="card"><div class="card-label">Resíduo</div><div class="card-valor">${fmtV(soma(res, 'residuo'))}</div><div class="card-det">requisitado − real, em ${res.length} requisição(ões)</div></div>
       </div>
-      ${ap.length ? '<div class="info" style="margin-bottom:18px">As requisições aprovadas seguem para a solicitação de empenho, que entra na próxima etapa do sistema.</div>' : ''}
+      ${devolvidas.length ? `<div class="aviso"><b>${devolvidas.length} solicitação(ões) devolvida(s) pelo Orçamento.</b> Abra, corrija (retire requisições, se for o caso) e reenvie ou cancele.</div>` : ''}
+      ${elab.length ? `<div class="info" style="margin-bottom:18px">${elab.length} solicitação(ões) em elaboração: confira o relatório e clique em <b>Enviar ao Orçamento</b>.</div>` : ''}
+      <div class="secao"><div class="secao-header"><span class="secao-titulo">Solicitações de empenho</span></div>
+        <div class="tabela-scroll">${tabelaSolicitacoes(S)}</div></div>
       ${insts.map(i => {
         const l = porInst[i.id_instrumento] || [];
         return `<div class="secao inst-card"><div class="secao-header" style="display:block">
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="secao-titulo">${esc(TIPOS_INST[i.tipo])} ${esc(i.numero)} — ${esc(i.objeto)}</span>${stInst(i.situacao)}</div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="secao-titulo">${esc(TIPOS_INST[i.tipo])} ${esc(i.numero)} — ${esc(i.objeto)}</span>${stInst(i.situacao)}${botaoGerar(i.id_instrumento, l)}</div>
           <div class="inst-meta" style="margin-top:6px">${i.fornecedor_nome ? `<span>Fornecedor <b>${esc(i.fornecedor_nome)}</b></span>` : ''}
             ${i.vigencia_fim ? `<span>Vigência até <b>${fmtD(i.vigencia_fim)}</b></span>` : ''}
             ${_dados.admin_global ? `<span>Gestão <b>${esc(i.sigla_gestora)}</b></span>` : ''}
             ${i.valor_limite != null ? `<span>Limite <b>${fmtV(i.valor_limite)}</b></span><span>Aprovado <b>${fmtV(i.consumido)}</b></span><span>Saldo <b style="color:#085041">${fmtV(i.saldo)}</b></span>` : ''}</div>
           ${i.valor_limite != null ? `<div style="max-width:320px;margin-top:6px">${barra(i.consumido, i.valor_limite)}</div>` : ''}</div>
-          <div class="tabela-scroll">${l.length ? linhas(l) : '<div class="vazio" style="padding:16px">Nenhuma requisição para este instrumento.</div>'}</div></div>`;
+          <div class="tabela-scroll">${l.length ? linhas(l, i.id_instrumento) : '<div class="vazio" style="padding:16px">Nenhuma requisição para este instrumento.</div>'}</div></div>`;
       }).join('')}
-      ${diretas.length ? `<div class="secao"><div class="secao-header"><span class="secao-titulo">Atendimento direto — bolsas, editais, diárias e outros</span></div>
-        <div class="tabela-scroll">${linhas(diretas)}</div></div>` : ''}
-      ${!insts.length && !diretas.length ? '<div class="secao"><div class="vazio">Sua seção não é gestora de nenhum contrato ou ata e não recebeu requisições neste exercício.</div></div>' : ''}`;
+      ${Object.keys(porForma).map(f => `<div class="secao"><div class="secao-header"><span class="secao-titulo">Atendimento direto — ${esc(FORMAS[f]||f)}</span>${botaoGerar('forma:' + f, porForma[f])}</div>
+        <div class="tabela-scroll">${linhas(porForma[f], 'forma:' + f)}</div></div>`).join('')}
+      ${!insts.length && !Object.keys(porForma).length ? '<div class="secao"><div class="vazio">Sua seção não é gestora de nenhum contrato ou ata e não recebeu requisições neste exercício.</div></div>' : ''}`;
+  }
+
+  // ── Solicitação de empenho ────────────────────────────────────────────────
+  function gerarSolicitacao(grupo) {
+    const ids = [...(_sel[grupo] || [])];
+    const lista = _dados.requisicoes.filter(r => ids.includes(r.id_requisicao));
+    if (!lista.length) return;
+    const tot = lista.reduce((t, r) => t + Number(r.valor_real || 0), 0);
+    const inst = lista[0].id_instrumento ? _dados.instrumentos.find(i => i.id_instrumento === lista[0].id_instrumento) : null;
+    abrirModal('Gerar solicitação de empenho', `
+      <div class="dados-dem" style="margin-bottom:14px">
+        <div><span>${inst ? esc(TIPOS_INST[inst.tipo]) : 'Atendimento'}</span><b>${inst ? esc(inst.numero) : esc(FORMAS[lista[0].forma]||'')}</b></div>
+        ${inst && inst.fornecedor_nome ? `<div><span>Fornecedor</span><b>${esc(inst.fornecedor_nome)}</b></div>` : ''}
+        <div><span>Requisições</span><b>${lista.length}</b></div>
+        <div><span>Valor real total</span><b>${fmtV(tot)}</b></div>
+        <div class="largo"><span>Requisições incluídas</span>${lista.map(r => `<span class="cod-req" style="margin-right:4px">${esc(r.codigo)}</span>`).join('')}</div>
+      </div>
+      <div class="campo"><label>Observação (opcional, sai no relatório)</label><textarea id="sol-obs" rows="2"></textarea></div>
+      <div class="info" style="margin-top:12px">A solicitação fica <b>em elaboração</b>: confira o relatório e depois clique em <b>Enviar ao Orçamento</b>.</div>
+      <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button>
+        <button class="btn btn-p" onclick="confirmarGerar('${grupo}')">Gerar solicitação</button></div>`);
+  }
+  async function confirmarGerar(grupo) {
+    const r = await chamar('sol_gerar', { ids_requisicoes: [...(_sel[grupo] || [])], observacao: $('sol-obs').value });
+    if (!r.ok) return erroModal(r.erro);
+    _sel[grupo] = new Set();
+    toast('Solicitação ' + r.codigo + ' gerada.');
+    await carregar();
+    verSolicitacao(r.id_solicitacao);
+  }
+  async function verSolicitacao(id) {
+    abrirModal('Solicitação de empenho', '<div class="carregando">Carregando…</div>', true);
+    const r = await chamar('sol_detalhe', { id_solicitacao: id });
+    if (!r.ok) return erroModal(r.erro);
+    window._sol = r;
+    const s = r.solicitacao, R = r.requisicoes;
+    const editavel = ['elaboracao', 'devolvida'].includes(s.situacao);
+    const semEmpenho = R.every(x => !x.empenhado);
+    $('modal-titulo').innerHTML = `<span class="cod-dem">${esc(s.codigo)}</span> ${s.numero_instrumento ? esc(TIPOS_INST[s.tipo_instrumento]||'') + ' ' + esc(s.numero_instrumento) : esc(FORMAS[s.forma]||'')} ${stSol(s.situacao_exibicao)}`;
+    $('modal-corpo').innerHTML = `
+      ${s.situacao === 'devolvida' ? `<div class="aviso"><b>Devolvida pelo Orçamento:</b> ${esc(s.motivo||'')}</div>` : ''}
+      <div class="mini-cards">
+        <div class="mini"><span>Requisições</span><b>${s.n_requisicoes}</b></div>
+        <div class="mini"><span>Valor previsto</span><b>${fmtV(s.total_previsto)}</b></div>
+        <div class="mini"><span>Valor real</span><b>${fmtV(s.total_real)}</b></div>
+        <div class="mini"><span>Empenhado</span><b>${fmtV(s.empenhado)}</b></div>
+        <div class="mini"><span>A empenhar</span><b>${fmtV(s.a_empenhar)}</b></div>
+      </div>
+      <div class="bloco"><div class="bloco-titulo">Requisições</div><div class="caixa tabela-scroll"><table>
+        <thead><tr><th>Requisição</th><th>Unidade</th><th>Objeto</th><th class="num">Qtd.</th><th class="num">Previsto</th><th class="num">Real</th><th class="num">Empenhado</th><th></th></tr></thead><tbody>
+        ${R.map(x => `<tr><td><span class="cod-req">${esc(x.codigo)}</span><span class="sub">${esc(x.codigo_demanda)}</span></td>
+          <td>${esc(x.sigla_unidade)}</td><td style="max-width:220px">${esc(x.descricao_objeto)}</td>
+          <td class="num">${fmtN(x.quantidade)} <span class="sub">${esc(x.unidade_medida||'')}</span></td>
+          <td class="num">${fmtV(x.valor)}</td><td class="num">${fmtV(x.valor_real)}</td>
+          <td class="num">${fmtV(x.empenhado)}${x.empenhos.length ? `<span class="sub">${x.empenhos.map(e => esc(e.numero)).join(', ')}</span>` : ''}</td>
+          <td style="text-align:right">${editavel && !x.empenhado ? `<button class="btn btn-mini btn-r" onclick="retirar('${s.id_solicitacao}','${x.id_requisicao}')">Retirar</button>` : ''}</td></tr>`).join('')}
+        </tbody></table></div></div>
+      ${s.observacao ? `<div class="bloco"><div class="bloco-titulo">Observação</div><div style="font-size:13px">${esc(s.observacao)}</div></div>` : ''}
+      <div class="bloco"><div class="bloco-titulo">Histórico</div><div class="caixa hist">
+        ${r.historico.map(h => `<div><b>${esc(({gerada:'Gerada',enviar:'Enviada ao Orçamento',devolver:'Devolvida pelo Orçamento',cancelar:'Cancelada',retirar:'Requisição retirada'})[h.acao]||h.acao)}</b> · ${fmtDH(h.data_hora)} · ${esc(h.autor)}${h.motivo ? `<span class="sub">${esc(h.motivo)}</span>` : ''}</div>`).join('') || '<div>—</div>'}
+      </div></div>
+      <div class="rodape">
+        ${s.situacao !== 'cancelada' && semEmpenho ? `<button class="btn btn-r" style="margin-right:auto" onclick="cancelarSol('${s.id_solicitacao}')">Cancelar solicitação</button>` : ''}
+        <button class="btn" onclick="relatorioSolicitacao()">Relatório (PDF)</button>
+        <button class="btn" onclick="fecharModal()">Fechar</button>
+        ${editavel ? `<button class="btn btn-p" onclick="enviarSol('${s.id_solicitacao}')">${s.situacao === 'devolvida' ? 'Reenviar ao Orçamento' : 'Enviar ao Orçamento'}</button>` : ''}
+      </div>`;
+  }
+  async function enviarSol(id) {
+    const r = await chamar('sol_acao', { id_solicitacao: id, acao: 'enviar' });
+    if (!r.ok) return erroModal(r.erro);
+    fecharModal(); toast('Solicitação enviada ao Orçamento.'); carregar();
+  }
+  async function cancelarSol(id) {
+    if (!confirm('Cancelar a solicitação? As requisições voltam para "aprovada".')) return;
+    const r = await chamar('sol_acao', { id_solicitacao: id, acao: 'cancelar', motivo: '' });
+    if (!r.ok) return erroModal(r.erro);
+    fecharModal(); toast('Solicitação cancelada.'); carregar();
+  }
+  async function retirar(idSol, idReq) {
+    const r = await chamar('sol_acao', { id_solicitacao: idSol, acao: 'retirar', id_requisicao: idReq });
+    if (!r.ok) return erroModal(r.erro);
+    await carregar();
+    if (r.situacao === 'cancelada') { fecharModal(); toast('Era a última requisição: a solicitação foi cancelada.'); return; }
+    verSolicitacao(idSol);
+  }
+
+  // Relatório da solicitação (abre em nova aba, pronto para imprimir ou salvar em PDF).
+  const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  function relatorioSolicitacao() {
+    const { solicitacao: s, requisicoes: R } = window._sol;
+    const hoje = new Date();
+    const instTxt = s.numero_instrumento ? `${s.tipo_instrumento === 'ata' ? 'na Ata de Registro de Preços' : 'no Contrato'} nº ${esc(s.numero_instrumento)}` : `em ${esc((FORMAS[s.forma]||'').toLowerCase())} (atendimento direto)`;
+    const porND = {};
+    R.forEach(x => { const k = x.natureza_despesa || 'Não informada'; porND[k] = (porND[k] || 0) + Number(x.valor_real || 0); });
+    const saldoDepois = s.saldo_instrumento, saldoAntes = s.saldo_instrumento != null ? s.saldo_instrumento + (s.situacao === 'cancelada' ? 0 : s.total_real) : null;
+    const assinante = s.nome_envio || s.nome_criador || (_usuario && _usuario.nome) || '';
+    const siape = s.nome_envio ? s.siape_envio : s.siape_criador;
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>${esc(s.codigo)} — Solicitação de empenho</title>
+    <style>
+      *{box-sizing:border-box} body{font-family:Calibri,Carlito,'Segoe UI',Arial,sans-serif;font-size:11.5pt;color:#111;margin:0;background:#e9e9e9}
+      .folha{background:#fff;max-width:210mm;margin:16px auto;padding:20mm 20mm 18mm;line-height:1.45}
+      .barra{max-width:210mm;margin:16px auto 0;display:flex;justify-content:flex-end}
+      .barra button{font:inherit;font-size:10pt;padding:7px 14px;border-radius:6px;border:1px solid #1F4E79;background:#1F4E79;color:#fff;cursor:pointer}
+      .cab{text-align:center} .cab p{margin:0;font-size:10.5pt} .cab .b{font-weight:bold}
+      .data{text-align:right;margin:18px 0 22px}
+      h1{color:#1F4E79;font-size:14pt;text-align:center;margin:0 0 4px} .subt{color:#2E75B6;text-align:center;font-weight:bold;margin:0 0 22px}
+      h2{color:#1F4E79;font-size:12pt;margin:22px 0 8px} p{margin:0 0 9px;text-align:justify}
+      table{width:100%;border-collapse:collapse;font-size:10pt;margin:6px 0 10px}
+      th{background:#DDEBF7;border:1px solid #9DC3E6;padding:4px 6px;text-align:left} td{border:1px solid #BDD7EE;padding:3px 6px;vertical-align:top}
+      td.v,th.v{text-align:right;white-space:nowrap} tr.tot td{font-weight:bold;background:#F3F8FC}
+      .ass{margin-top:46px;text-align:center} .ass .linha{border-top:1px solid #333;width:300px;margin:0 auto 4px}
+      .rodape{margin-top:30px;font-size:9pt;color:#555;border-top:1px solid #ccc;padding-top:8px}
+      @media print{ body{background:#fff} .barra{display:none} .folha{margin:0;padding:0;max-width:none} @page{size:A4;margin:18mm 18mm 16mm} }
+    </style></head><body>
+    <div class="barra"><button onclick="window.print()">Imprimir / salvar em PDF</button></div>
+    <div class="folha">
+      <div class="cab"><p class="b">MINISTÉRIO DA EDUCAÇÃO</p><p class="b">COLÉGIO PEDRO II</p><p>${esc(s.nome_gestora||'').toUpperCase()}</p></div>
+      <p class="data">Em ${hoje.getDate()} de ${MESES[hoje.getMonth()]} de ${hoje.getFullYear()}.</p>
+      <h1>SOLICITAÇÃO DE EMISSÃO DE NOTA DE EMPENHO</h1>
+      <p class="subt">${esc(s.codigo)} · exercício ${s.exercicio}</p>
+      <p>À Seção de Orçamento,</p>
+      <p>Solicito a emissão de nota de empenho para atendimento das requisições abaixo, amparadas ${instTxt}, no valor total de <b>${fmtV(s.total_real)}</b>.</p>
+      ${s.observacao ? `<p><b>Observação:</b> ${esc(s.observacao)}</p>` : ''}
+      <h2>1. INSTRUMENTO</h2>
+      <table>
+        ${s.numero_instrumento ? `
+        <tr><th style="width:34%">Tipo e número</th><td>${esc(TIPOS_INST[s.tipo_instrumento]||'')} nº ${esc(s.numero_instrumento)}</td></tr>
+        <tr><th>Objeto</th><td>${esc(s.objeto_instrumento||'')}</td></tr>
+        <tr><th>Fornecedor</th><td>${esc(s.fornecedor_nome||'—')}${s.fornecedor_cnpj ? ' — CNPJ ' + esc(s.fornecedor_cnpj) : ''}</td></tr>
+        <tr><th>Vigência</th><td>${s.vigencia_inicio ? fmtD(s.vigencia_inicio) + ' a ' : 'até '}${fmtD(s.vigencia_fim)}</td></tr>
+        <tr><th>Processo SEI</th><td>${esc(s.processo_sei_instrumento||'—')}</td></tr>
+        ${s.valor_limite != null ? `<tr><th>Valor do instrumento</th><td>${fmtV(s.valor_limite)}</td></tr>
+        <tr><th>Saldo antes desta solicitação</th><td>${fmtV(saldoAntes)}</td></tr>
+        <tr><th>Saldo depois desta solicitação</th><td>${fmtV(saldoDepois)}</td></tr>` : ''}`
+        : `<tr><th style="width:34%">Forma de atendimento</th><td>${esc(FORMAS[s.forma]||s.forma)} — atendimento direto, sem contrato ou ata</td></tr>`}
+      </table>
+      <h2>2. REQUISIÇÕES</h2>
+      <table><thead><tr><th>Requisição / demanda</th><th>Unidade requerente</th><th>Objeto</th><th class="v">Qtd.</th><th class="v">Previsto</th><th class="v">Real</th><th class="v">Resíduo</th></tr></thead><tbody>
+        ${R.map(x => `<tr><td>${esc(x.codigo)}<br><small>${esc(x.codigo_demanda)}</small></td><td>${esc(x.sigla_unidade)}</td><td>${esc(x.descricao_objeto)}</td>
+          <td class="v">${fmtN(x.quantidade)} ${esc(x.unidade_medida||'')}</td><td class="v">${fmtV(x.valor)}</td><td class="v">${fmtV(x.valor_real)}</td><td class="v">${fmtV(x.residuo)}</td></tr>`).join('')}
+        <tr class="tot"><td colspan="4">Total</td><td class="v">${fmtV(s.total_previsto)}</td><td class="v">${fmtV(s.total_real)}</td><td class="v">${fmtV(s.total_previsto - s.total_real)}</td></tr>
+      </tbody></table>
+      <h2>3. TOTAIS POR NATUREZA DE DESPESA</h2>
+      <table><thead><tr><th>Natureza de despesa</th><th class="v">Valor</th></tr></thead><tbody>
+        ${Object.keys(porND).sort().map(k => `<tr><td>${esc(k)}</td><td class="v">${fmtV(porND[k])}</td></tr>`).join('')}
+        <tr class="tot"><td>Total geral</td><td class="v">${fmtV(s.total_real)}</td></tr>
+      </tbody></table>
+      <div class="ass"><div class="linha"></div><b>${esc(assinante)}</b><br>${siape ? 'SIAPE ' + esc(siape) + '<br>' : ''}${esc(s.sigla_gestora||'')} — seção gestora</div>
+      <p class="rodape">Documento gerado em ${hoje.toLocaleString('pt-BR')} pelo sistema Planejamento e Monitoramento Orçamentário do Colégio Pedro II. Situação da solicitação: ${esc(SIT_SOL[s.situacao_exibicao]||s.situacao_exibicao)}.</p>
+    </div></body></html>`;
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
   function analisar(id) {

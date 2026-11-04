@@ -149,6 +149,7 @@
         <option value="chefia">Chefia Intermediária</option>
         <option value="chefe_secao">Chefe de Seção</option>
         <option value="monitoramento">Monitoramento</option>
+        <option value="orcamento">Seção de Orçamento</option>
       </select>
     </div>
     <div class="campo">
@@ -171,7 +172,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202611041400"></script>
+<script src="api.js?v=202611041700"></script>
 <script>
   const token  = localStorage.getItem('pac_token') || '';
   const appUrl = APPS_SCRIPT_URL;
@@ -497,7 +498,7 @@
   function mostrarErro(msg) { const el = document.getElementById('erro-usuario'); el.textContent = msg; el.classList.add('vis'); }
   function mostrarOk(msg)   { const el = document.getElementById('ok-usuario');   el.textContent = msg; el.classList.add('vis'); }
   function rotularPapel(p) {
-    return { ord_despesas:'Ordenador de Despesas', chefia:'Chefia Intermediária', chefe_secao:'Chefe de Seção', licitacoes:'Seção de Licitações', monitoramento:'Monitoramento' }[p] || p;
+    return { ord_despesas:'Ordenador de Despesas', chefia:'Chefia Intermediária', chefe_secao:'Chefe de Seção', licitacoes:'Seção de Licitações', monitoramento:'Monitoramento', orcamento:'Seção de Orçamento' }[p] || p;
   }
   function nomeUnidade(id) {
     const u = _unidades.find(x => x.id_unidade === id);

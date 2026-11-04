@@ -105,6 +105,22 @@
   #obs-tip .t-passo b { font-weight: 600; }
   #obs-tip .t-passo .t-data { color: #888780; font-size: 10px; }
   .grafico-wrap { height: 220px; }
+  .exec-topo { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+  .exec-topo .grafico-titulo { flex: 1; margin-bottom: 10px; }
+  .exec-nivel { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #5F5E5A; }
+  .exec-nivel select { padding: 5px 8px; border: 1px solid #D3D1C7; border-radius: 7px; font-size: 12px; background: #fff; }
+  .exec-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 6px 0 16px; }
+  .exec-cards div { background: #FAFAF8; border-radius: 9px; padding: 9px 12px; font-size: 11px; color: #888780; }
+  .exec-cards b { display: block; font-size: 14px; color: #2C2C2A; margin-top: 2px; }
+  .exec-legenda { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: #5F5E5A; margin-bottom: 8px; }
+  .exec-legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .sn { display: inline-block; padding: 1px 7px; border-radius: 99px; font-size: 10.5px; font-weight: 600; }
+  .sn-sim { background: #E1F5EE; color: #085041; } .sn-parte { background: #FAEEDA; color: #633806; } .sn-nao { background: #F1EFE8; color: #888780; }
+  #exec-tabela table { width: 100%; border-collapse: collapse; }
+  #exec-tabela th { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: #888780; padding: 8px 10px; text-align: left; background: #FAFAF8; border-bottom: 1px solid #F1EFE8; }
+  #exec-tabela td { font-size: 12.5px; padding: 8px 10px; border-bottom: 1px solid #F8F7F4; }
+  #exec-tabela .num { text-align: right; white-space: nowrap; }
+
 
   .tabela-card { background: #fff; border: 1px solid #D3D1C7; border-radius: 12px; overflow: hidden; }
   .tabela-header { padding: 14px 20px; border-bottom: 1px solid #F1EFE8; display: flex; align-items: center; justify-content: space-between; }
@@ -313,6 +329,26 @@
       <div class="grafico-conf" id="grafico-conf"></div>
     </div>
 
+    <div class="grafico-card" id="exec-card">
+      <div class="exec-topo">
+        <div class="grafico-titulo" id="exec-titulo">Execução</div>
+        <label class="exec-nivel">Nível
+          <select id="exec-nivel" onchange="renderExecucao()">
+            <option value="campus">Reitoria e campi</option>
+            <option value="pro_reitoria">Pró-reitorias</option>
+            <option value="diretoria">Direções</option>
+            <option value="coordenacao">Coordenações</option>
+            <option value="secao">Seções e setores</option>
+          </select></label>
+      </div>
+      <div class="grafico-sub" id="exec-sub">Quanto do que foi aprovado no plano já virou requisição, empenho e liquidação.</div>
+      <div class="exec-cards" id="exec-cards"></div>
+      <div class="exec-legenda"><span><i style="background:#3C3489"></i>Aprovado no plano</span><span><i style="background:#7F77DD"></i>Requisitado</span><span><i style="background:#EF9F27"></i>Empenhado</span><span><i style="background:#1D9E75"></i>Liquidado (executado)</span></div>
+      <div class="grafico-wrap" id="exec-wrap"><canvas id="exec-grafico" role="img" aria-label="Gráfico de barras com aprovado, requisitado, empenhado e liquidado por unidade"></canvas></div>
+      <div id="exec-vazio" class="grafico-sub" style="display:none;margin:8px 0 0"></div>
+      <div class="tabela-scroll" id="exec-tabela" style="margin-top:16px"></div>
+    </div>
+
     <div class="tabela-card">
       <div class="tabela-header">
         <div class="tabela-titulo" id="tabela-titulo">Demandas</div>
@@ -328,7 +364,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202611041400"></script>
+<script src="api.js?v=202611041700"></script>
 <script>
   const APP_URL = APPS_SCRIPT_URL;
   const _di     = {};
@@ -498,7 +534,7 @@
           return;
         }
         _dados = resp;
-        renderResumo(); renderGrafico(); renderTabela();
+        renderResumo(); renderGrafico(); renderExecucao(); renderTabela();
       })
       .withFailureHandler(function(err) {
         document.getElementById('corpo-tabela').innerHTML = '<div class="vazio">Erro: ' + err.message + '</div>';
@@ -645,6 +681,115 @@
     } catch(err) { console.error('renderGrafico erro:', err); }
   }
 
+
+  // ── Execução (etapa 4): aprovado → requisitado → empenhado → liquidado ─────
+  // Só valores e situações: número do empenho, fornecedor e nota fiscal ficam fora.
+  let _chartExec = null;
+  const NIVEIS = { campus: ['reitoria','campus'], pro_reitoria: ['pro_reitoria'], diretoria: ['diretoria_adm','diretoria_ped'],
+                   coordenacao: ['coordenacao'], secao: ['secao'] };
+  const SIT_REQ_PUB = { aguardando_contratacao: 'Aguardando contratação', aguardando_gestor: 'Em análise pelo gestor', pendente: 'Pendente',
+    aprovada: 'Aprovada', em_solicitacao: 'Em solicitação de empenho', empenhada: 'Empenhada', liquidada: 'Liquidada', paga: 'Paga' };
+  function execHomologadas() { return (_dados.demandas || []).filter(d => d.status === 'homologada' && d.execucao); }
+  function simParte(a, b) { return a <= 0.005 ? '<span class="sn sn-nao">não</span>' : a >= b - 0.005 ? '<span class="sn sn-sim">sim</span>' : '<span class="sn sn-parte">em parte</span>'; }
+  function pctN(a, b) { return b ? Math.round(a / b * 100) : 0; }
+  function renderExecucao() {
+    const card = document.getElementById('exec-card');
+    if (_chartExec) { _chartExec.destroy(); _chartExec = null; }
+    const dem = execHomologadas();
+    card.style.display = 'block';
+    const U = _dados.unidades_arvore || [];
+    const porId = Object.fromEntries(U.map(u => [u.id, u]));
+    const filhos = {}; U.forEach(u => (filhos[u.pai] = filhos[u.pai] || []).push(u.id));
+    const sub = r => { const out = new Set(), f = [r]; while (f.length) { const x = f.shift(); if (out.has(x)) continue; out.add(x); (filhos[x] || []).forEach(y => f.push(y)); } return out; };
+    const raiz = _dados.raiz_execucao;
+    const tot = dem.reduce((a, d) => { a.aprovado += Number(d.valor_estimado || 0); ['requisitado','empenhado','liquidado'].forEach(k => a[k] += d.execucao[k]); return a; },
+      { aprovado: 0, requisitado: 0, empenhado: 0, liquidado: 0 });
+    const nomeRaiz = raiz && porId[raiz] ? (porId[raiz].sigla || porId[raiz].nome) : '';
+    document.getElementById('exec-titulo').textContent = 'Execução' + (nomeRaiz ? ' — ' + nomeRaiz : '');
+    document.getElementById('exec-cards').innerHTML = `
+      <div>Aprovado no plano<b>R$ ${fmtV(tot.aprovado)}</b></div>
+      <div>Requisitado<b>R$ ${fmtV(tot.requisitado)}</b>${pctN(tot.requisitado, tot.aprovado)}%</div>
+      <div>Empenhado<b>R$ ${fmtV(tot.empenhado)}</b>${pctN(tot.empenhado, tot.aprovado)}%</div>
+      <div>Liquidado (executado)<b>R$ ${fmtV(tot.liquidado)}</b>${pctN(tot.liquidado, tot.aprovado)}% de execução</div>`;
+
+    // Unidades do nível escolhido dentro da unidade selecionada; cada uma soma a sua subárvore.
+    const tipos = NIVEIS[document.getElementById('exec-nivel').value] || [];
+    const dentro = raiz ? sub(raiz) : new Set(U.map(u => u.id));
+    const linhas = U.filter(u => tipos.includes(u.tipo) && dentro.has(u.id)).map(u => {
+      const s = sub(u.id);
+      const ds = dem.filter(d => s.has(d.id_unidade));
+      return { u, aprovado: ds.reduce((t, d) => t + Number(d.valor_estimado || 0), 0),
+               requisitado: ds.reduce((t, d) => t + d.execucao.requisitado, 0),
+               empenhado: ds.reduce((t, d) => t + d.execucao.empenhado, 0),
+               liquidado: ds.reduce((t, d) => t + d.execucao.liquidado, 0) };
+    }).filter(x => x.aprovado > 0.004).sort((a, b) => b.aprovado - a.aprovado);
+    const wrap = document.getElementById('exec-wrap'), vazio = document.getElementById('exec-vazio');
+    if (!linhas.length) {
+      wrap.style.display = 'none'; vazio.style.display = 'block';
+      vazio.textContent = dem.length ? 'Nenhuma unidade deste nível com demandas homologadas na estrutura selecionada. Escolha outro nível.' : 'Não há demandas homologadas neste filtro.';
+    } else {
+      vazio.style.display = 'none'; wrap.style.display = 'block';
+      wrap.style.height = Math.max(160, linhas.length * 74 + 50) + 'px';
+      const pctTxt = {
+        id: 'pctExec',
+        afterDatasetsDraw(chart) {
+          const { ctx } = chart; ctx.save();
+          ctx.font = '700 11px system-ui, -apple-system, Segoe UI, sans-serif'; ctx.fillStyle = '#085041'; ctx.textBaseline = 'middle';
+          const m0 = chart.getDatasetMeta(0), m3 = chart.getDatasetMeta(3);
+          m0.data.forEach((bar, i) => {
+            const x = Math.max(bar.x, m3.data[i].x) + 6, y = (bar.y + m3.data[i].y) / 2;
+            const t = pctN(linhas[i].liquidado, linhas[i].aprovado) + '% executado';
+            ctx.textAlign = x + ctx.measureText(t).width > chart.chartArea.right ? 'right' : 'left';
+            ctx.fillText(t, ctx.textAlign === 'right' ? chart.chartArea.right : x, y);
+          });
+          ctx.restore();
+        }
+      };
+      _chartExec = new Chart(document.getElementById('exec-grafico').getContext('2d'), {
+        type: 'bar',
+        data: { labels: linhas.map(x => x.u.sigla || x.u.nome), datasets: [
+          { label: 'Aprovado', data: linhas.map(x => x.aprovado), backgroundColor: '#3C3489' },
+          { label: 'Requisitado', data: linhas.map(x => x.requisitado), backgroundColor: '#7F77DD' },
+          { label: 'Empenhado', data: linhas.map(x => x.empenhado), backgroundColor: '#EF9F27' },
+          { label: 'Liquidado', data: linhas.map(x => x.liquidado), backgroundColor: '#1D9E75' },
+        ].map(d => ({ ...d, borderRadius: 3, barPercentage: 0.9, categoryPercentage: 0.82 })) },
+        plugins: [pctTxt],
+        options: {
+          indexAxis: 'y', responsive: true, maintainAspectRatio: false, layout: { padding: { right: 96 } },
+          plugins: { legend: { display: false },
+            tooltip: { callbacks: { title: it => { const u = linhas[it[0].dataIndex].u; return (u.sigla ? u.sigla + ' — ' : '') + u.nome; },
+              label: it => it.dataset.label + ': R$ ' + fmtV(it.raw) + (it.datasetIndex ? ' (' + pctN(it.raw, linhas[it.dataIndex].aprovado) + '% do aprovado)' : '') } } },
+          scales: { x: { beginAtZero: true, grid: { color: '#F1EFE8' }, border: { display: false }, ticks: { callback: v => 'R$ ' + fmtK(v), color: '#888780', font: { size: 10 } } },
+                    y: { grid: { display: false }, border: { display: false }, ticks: { color: '#2C2C2A', font: { size: 11 } } } }
+        }
+      });
+    }
+
+    // Tabela: uma linha por demanda aprovada; o mouse sobre a demanda mostra as requisições.
+    document.getElementById('exec-tabela').innerHTML = dem.length ? `<table><thead><tr><th>Demanda</th><th>Unidade</th><th class="num">Aprovado</th><th class="num">Requisitado</th><th>Empenhada</th><th>Liquidada</th><th class="num">Execução</th></tr></thead><tbody>
+      ${dem.map(d => { const e = d.execucao, i = _dados.demandas.indexOf(d); return `<tr>
+        <td><div class="obs-cell" data-i="${i}" tabindex="0" onmouseenter="mostrarReqs(this)" onmouseleave="esconderObs()" onfocus="mostrarReqs(this)" onblur="esconderObs()"><span class="cod-dem">${escHtml(d.codigo||'')}</span><br>${escHtml(truncar(d.descricao_objeto, 50))}</div></td>
+        <td style="font-size:11px;color:#888780">${escHtml(d.sigla_unidade||'')}</td>
+        <td class="num">R$ ${fmtV(d.valor_estimado)}</td>
+        <td class="num">R$ ${fmtV(e.requisitado)}<br><span style="font-size:10.5px;color:#888780">${e.n_req} requisição(ões)</span></td>
+        <td>${simParte(e.empenhado, e.aprovado)}</td><td>${simParte(e.liquidado, e.empenhado || e.aprovado)}</td>
+        <td class="num"><b>${pctN(e.liquidado, Number(d.valor_estimado))}%</b></td></tr>`; }).join('')}
+      </tbody></table>` : '';
+  }
+  function mostrarReqs(el) {
+    const d = _dados && _dados.demandas[Number(el.dataset.i)];
+    if (!d || !d.execucao) return;
+    const tip = document.getElementById('obs-tip');
+    const R = d.execucao.requisicoes;
+    tip.innerHTML = `<div class="t-tit">Requisições de ${escHtml(d.codigo||'')}</div>` + (R.length
+      ? R.map(r => `<div class="t-passo"><b>${escHtml(r.codigo)}</b> · R$ ${fmtV(r.requisitado)}<br>${escHtml(SIT_REQ_PUB[r.situacao] || r.situacao)}</div>`).join('')
+      : 'Nenhuma requisição ainda.');
+    tip.classList.add('vis');
+    const rc = el.getBoundingClientRect(), t = tip.getBoundingClientRect();
+    let y = rc.bottom + 8; if (y + t.height > window.innerHeight - 8) y = Math.max(8, rc.top - t.height - 8);
+    tip.style.left = Math.max(8, Math.min(rc.left, window.innerWidth - t.width - 12)) + 'px'; tip.style.top = y + 'px';
+  }
+
   // ── Observação: justificativas de aprovação/reprovação ─────────────────────
   const ROT_ACAO  = { aprovacao: 'Aprovação', de_acordo: 'De acordo', priorizacao: 'Priorização (GUT)',
                       homologacao: 'Homologação', reprovacao: 'Reprovação' };
@@ -776,6 +921,9 @@
       'De acordo': d.ass_de_acordo?.nome||'', 'SIAPE Acordo': d.ass_de_acordo?.siape||'', 'Data Acordo': fmtD(d.ass_de_acordo?.data),
       'Priorizador': d.ass_priorizacao?.nome||'', 'SIAPE Prior.': d.ass_priorizacao?.siape||'', 'Data Prior.': fmtD(d.ass_priorizacao?.data),
       'Homologador': d.ass_homologacao?.nome||'', 'SIAPE Homol.': d.ass_homologacao?.siape||'', 'Data Homol.': fmtD(d.ass_homologacao?.data),
+      'Requisições': d.execucao ? d.execucao.n_req : '', 'Requisitado': d.execucao ? d.execucao.requisitado : '',
+      'Empenhado': d.execucao ? d.execucao.empenhado : '', 'Liquidado': d.execucao ? d.execucao.liquidado : '',
+      'Execução (%)': d.execucao ? pctN(d.execucao.liquidado, Number(d.valor_estimado || 0)) : '',
     }));
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(linhas);
@@ -943,10 +1091,28 @@
     <h2>6. DEMANDAS REPROVADAS</h2>
     ${relReprovadas(todas, reprovadas)}
 
+    <h2>7. EXECUÇÃO DAS DEMANDAS HOMOLOGADAS</h2>
+    ${relExecucao(homologadas)}
+
     <p class="rodape">Relatório gerado em ${new Date().toLocaleString('pt-BR')} a partir do Painel Público do sistema Planejamento e Monitoramento Orçamentário do Colégio Pedro II.
     Os nomes dos servidores responsáveis por cada manifestação não são exibidos neste relatório público; os registros completos
     constam do sistema Planejamento e Monitoramento Orçamentário.</p>
     </div></body></html>`;
+  }
+
+  function relExecucao(homologadas) {
+    const l = homologadas.filter(d => d.execucao);
+    if (!l.length) return '<p class="nada">Não há demandas homologadas neste filtro.</p>';
+    const t = l.reduce((a, d) => { a.ap += Number(d.valor_estimado || 0); a.rq += d.execucao.requisitado; a.em += d.execucao.empenhado; a.lq += d.execucao.liquidado; return a; }, { ap: 0, rq: 0, em: 0, lq: 0 });
+    const sn = (a, b) => a <= 0.005 ? 'não' : a >= b - 0.005 ? 'sim' : 'em parte';
+    return `<p>Das demandas homologadas (${rs(t.ap)}), já foram requisitados ${rs(t.rq)} (${pct(t.rq, t.ap)}), empenhados ${rs(t.em)} (${pct(t.em, t.ap)})
+      e liquidados ${rs(t.lq)}, o que corresponde a <b>${pct(t.lq, t.ap)} de execução</b>.</p>
+      <table class="orc"><thead><tr><th>Demanda</th><th>Unidade</th><th>Aprovado</th><th>Requisitado</th><th>Empenhada</th><th>Liquidada</th><th>Execução</th></tr></thead><tbody>
+      ${l.map(d => `<tr><td>${escHtml(d.codigo||'')} — ${escHtml(truncar(d.descricao_objeto, 60))}</td><td>${escHtml(d.sigla_unidade||'')}</td>
+        <td class="v">${rs(d.valor_estimado)}</td><td class="v">${rs(d.execucao.requisitado)} (${d.execucao.n_req})</td>
+        <td>${sn(d.execucao.empenhado, d.execucao.aprovado)}</td><td>${sn(d.execucao.liquidado, d.execucao.empenhado || d.execucao.aprovado)}</td>
+        <td class="v">${pct(d.execucao.liquidado, Number(d.valor_estimado || 0))}</td></tr>`).join('')}
+      </tbody></table>`;
   }
 
   function relOrcamento(d) {

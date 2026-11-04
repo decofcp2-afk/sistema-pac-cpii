@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PMO — Empenhos</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #F1EFE8; color: #2C2C2A; min-height: 100vh; }
+  .topbar { background: #3C3489; height: 56px; display: flex; align-items: center; padding: 0 24px; gap: 16px; position: sticky; top: 0; z-index: 100; }
+  .topbar-logo { font-size: 15px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .topbar-sub  { font-size: 12px; color: rgba(255,255,255,0.55); border-left: 1px solid rgba(255,255,255,0.2); padding-left: 14px; }
+  .topbar-spacer { flex: 1; }
+  .topbar-usuario { display: flex; align-items: center; gap: 10px; font-size: 13px; color: rgba(255,255,255,0.85); }
+  .avatar { width: 32px; height: 32px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #fff; flex-shrink: 0; }
+  .btn-logout { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 5px 12px; font-size: 12px; color: rgba(255,255,255,0.85); cursor: pointer; }
+  .layout { display: flex; min-height: calc(100vh - 56px); }
+  .sidebar { width: 220px; background: #fff; border-right: 1px solid #D3D1C7; padding: 20px 0; flex-shrink: 0; }
+  .nav-titulo { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: #B4B2A9; padding: 0 18px 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 18px; font-size: 13px; color: #5F5E5A; text-decoration: none; border-left: 3px solid transparent; cursor: pointer; }
+  .nav-item:hover { background: #F1EFE8; color: #2C2C2A; }
+  .nav-item.ativo { background: #EEEDFE; color: #3C3489; border-left-color: #3C3489; font-weight: 500; }
+  .nav-item svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
+  .main { flex: 1; padding: 28px 32px; max-width: 1240px; min-width: 0; }
+  .cabecalho { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+  .page-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .page-sub { font-size: 13px; color: #888780; }
+  .escopo { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #5F5E5A; }
+  .escopo select { padding: 7px 10px; border: 1px solid #D3D1C7; border-radius: 7px; font-size: 13px; background: #fff; min-width: 240px; }
+  .selo { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: #F1EFE8; color: #5F5E5A; }
+
+  .abas { display: flex; gap: 4px; border-bottom: 1px solid #D3D1C7; margin-bottom: 18px; flex-wrap: wrap; }
+  .aba { background: none; border: none; border-bottom: 2px solid transparent; padding: 9px 14px; font-size: 13px; color: #5F5E5A; cursor: pointer; margin-bottom: -1px; }
+  .aba:hover { color: #2C2C2A; }
+  .aba.ativa { color: #3C3489; border-bottom-color: #3C3489; font-weight: 600; }
+  .aba .cnt { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 99px; font-size: 10.5px; font-weight: 700; background: #FCEBEB; color: #A32D2D; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .card { background: #fff; border: 1px solid #D3D1C7; border-radius: 12px; padding: 14px 16px; }
+  .card-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: #888780; margin-bottom: 6px; }
+  .card-valor { font-size: 19px; font-weight: 600; }
+  .card-det { font-size: 11.5px; color: #888780; margin-top: 3px; }
+  .card.vermelho .card-valor { color: #A32D2D; } .card.amarelo .card-valor { color: #7A4A00; }
+
+  .secao { background: #fff; border: 1px solid #D3D1C7; border-radius: 12px; overflow: hidden; margin-bottom: 18px; }
+  .secao-header { padding: 13px 18px; border-bottom: 1px solid #F1EFE8; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .secao-titulo { font-size: 14px; font-weight: 600; flex: 1; }
+  .grade2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 1100px) { .grade2 { grid-template-columns: 1fr; } }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: #888780; padding: 9px 12px; text-align: left; background: #FAFAF8; border-bottom: 1px solid #F1EFE8; white-space: nowrap; }
+  th.num, td.num { text-align: right; }
+  td { font-size: 13px; padding: 9px 12px; border-bottom: 1px solid #F8F7F4; vertical-align: middle; }
+  td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr.clicavel { cursor: pointer; } tbody tr.clicavel:hover td { background: #FAFAF8; }
+  .tabela-scroll { overflow-x: auto; }
+
+  .cod-dem { display: inline-block; font-size: 10.5px; font-weight: 700; color: #3C3489; background: #EEEDFE; border-radius: 4px; padding: 1px 6px; margin-bottom: 3px; white-space: nowrap; }
+  .sub { display: block; font-size: 11px; color: #888780; margin-top: 2px; }
+  .barra { height: 6px; background: #F1EFE8; border-radius: 99px; overflow: hidden; min-width: 70px; }
+  .barra > div { height: 100%; background: #534AB7; border-radius: 99px; }
+  .barra.pago > div { background: #1D9E75; }
+
+  .sit { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .sit-aguardando { background: #F1EFE8; color: #5F5E5A; }
+  .sit-em_contratacao { background: #E6F1FB; color: #0C447C; }
+  .sit-empenhada { background: #EEEDFE; color: #3C3489; }
+  .sit-em_execucao { background: #FAEEDA; color: #633806; }
+  .sit-concluida { background: #E1F5EE; color: #085041; }
+  .sit-nao_executada { background: #FCEBEB; color: #791F1F; }
+
+  .sem { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; white-space: nowrap; }
+  .sem::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #D3D1C7; flex-shrink: 0; }
+  .sem-vencido::before { background: #E24B4A; } .sem-vencido { color: #A32D2D; font-weight: 600; }
+  .sem-a_vencer::before { background: #EF9F27; } .sem-a_vencer { color: #7A4A00; font-weight: 600; }
+  .sem-no_prazo::before { background: #1D9E75; }
+  .sem-cumprido::before { background: #1D9E75; } .sem-cumprido { color: #085041; }
+  .sem-cumprido_atraso::before { background: #B4B2A9; } .sem-cumprido_atraso { color: #5F5E5A; }
+  .sem-sem_prazo { color: #888780; } .sem-nao_aplica { color: #B4B2A9; }
+
+  .filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .filtros select, .filtros input { padding: 6px 10px; border: 1px solid #D3D1C7; border-radius: 7px; font-size: 12.5px; background: #fff; }
+  .btn { border: 1px solid #D3D1C7; background: #fff; color: #444441; border-radius: 7px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: #F1EFE8; }
+  .btn-p { background: #3C3489; border-color: #3C3489; color: #fff; font-weight: 600; } .btn-p:hover { background: #534AB7; }
+  .btn-v { background: #085041; border-color: #085041; color: #fff; font-weight: 600; } .btn-v:hover { background: #0F6E56; }
+  .btn-r { color: #A32D2D; border-color: #F7C1C1; } .btn-r:hover { background: #FCEBEB; }
+  .btn-mini { padding: 3px 8px; font-size: 11.5px; }
+  .so-editor { } body.leitura .so-editor { display: none !important; }
+
+  .carregando, .vazio { text-align: center; padding: 34px; color: #B4B2A9; font-size: 13px; }
+  .grupo-un { padding: 10px 18px; background: #FAFAF8; font-size: 12px; font-weight: 700; color: #5F5E5A; border-bottom: 1px solid #F1EFE8; }
+
+  /* Modal */
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; overflow-y: auto; padding: 24px; }
+  .overlay.aberto { display: flex; align-items: flex-start; justify-content: center; }
+  .modal { background: #fff; border-radius: 14px; width: 100%; max-width: 980px; margin: auto; }
+  .modal.estreito { max-width: 560px; }
+  .modal-header { display: flex; align-items: flex-start; gap: 12px; padding: 20px 24px 14px; border-bottom: 1px solid #F1EFE8; }
+  .modal-titulo { font-size: 16px; font-weight: 600; flex: 1; line-height: 1.4; }
+  .modal-fechar { background: none; border: none; font-size: 20px; color: #888780; cursor: pointer; line-height: 1; }
+  .modal-corpo { padding: 18px 24px 22px; }
+  .bloco { margin-bottom: 20px; }
+  .bloco-titulo { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #888780; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .bloco-titulo .btn { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .caixa { border: 1px solid #F1EFE8; border-radius: 10px; overflow: hidden; }
+  .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .campo { display: flex; flex-direction: column; gap: 4px; }
+  .campo.largo { grid-column: 1 / -1; }
+  .campo label { font-size: 12px; font-weight: 600; color: #444441; }
+  .campo input, .campo select, .campo textarea { padding: 8px 10px; border: 1px solid #D3D1C7; border-radius: 7px; font-size: 13px; font-family: inherit; }
+  .campo input:focus, .campo select:focus, .campo textarea:focus { outline: none; border-color: #534AB7; box-shadow: 0 0 0 3px rgba(83,74,183,0.1); }
+  .campo .hint { font-size: 11px; color: #B4B2A9; }
+  .rodape { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .msg-erro { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 8px; padding: 8px 12px; font-size: 13px; color: #791F1F; margin-bottom: 12px; display: none; }
+  .msg-erro.vis { display: block; }
+  .mini-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .mini { background: #FAFAF8; border-radius: 9px; padding: 10px 12px; }
+  .mini b { display: block; font-size: 15px; margin-top: 2px; }
+  .mini span { font-size: 11px; color: #888780; }
+  .linha-cob { padding: 9px 12px; border-bottom: 1px solid #F8F7F4; font-size: 12.5px; }
+  .linha-cob:last-child { border-bottom: none; }
+  .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: #2C2C2A; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 400; display: none; }
+  .toast.vis { display: block; }
+
+  .st { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .st-aguardando_contratacao { background: #FAEEDA; color: #633806; }
+  .st-aguardando_gestor { background: #E6F1FB; color: #0C447C; }
+  .st-pendente { background: #FCEBEB; color: #791F1F; }
+  .st-aprovada { background: #E1F5EE; color: #085041; }
+  .st-em_solicitacao, .st-empenhada { background: #EEEDFE; color: #3C3489; }
+  .st-liquidada, .st-paga { background: #D7F0E6; color: #04342A; }
+  .st-cancelada, .st-encerrado, .st-fracassado { background: #F1EFE8; color: #888780; }
+  .st-vigente, .st-em_andamento { background: #E6F1FB; color: #0C447C; }
+  .st-concluido { background: #E1F5EE; color: #085041; }
+  .cod-req { display: inline-block; font-size: 10.5px; font-weight: 700; color: #085041; background: #E1F5EE; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+  .aviso { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; font-size: 13px; color: #791F1F; }
+  .aviso b { color: #A32D2D; }
+  .info { background: #F4F3FE; border: 1px solid #DAD7F7; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; color: #3C3489; }
+  .ok-box { background: #E1F5EE; border: 1px solid #B4E3D2; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; color: #085041; }
+  .bad-box { background: #FCEBEB; border: 1px solid #F7C1C1; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; color: #791F1F; }
+  .dados-dem { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 16px; background: #FAFAF8; border-radius: 10px; padding: 12px 14px; font-size: 12.5px; }
+  .dados-dem span { display: block; font-size: 10.5px; color: #888780; text-transform: uppercase; letter-spacing: .3px; }
+  .dados-dem b { font-weight: 600; }
+  .dados-dem .largo { grid-column: 1 / -1; }
+  .formas { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+  .forma { border: 1px solid #D3D1C7; border-radius: 9px; padding: 9px 11px; cursor: pointer; font-size: 12.5px; display: flex; gap: 8px; align-items: flex-start; }
+  .forma:hover { background: #FAFAF8; }
+  .forma input { margin-top: 2px; }
+  .forma.sel { border-color: #534AB7; background: #F4F3FE; }
+  .forma small { display: block; font-size: 11px; color: #888780; }
+  .check { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; background: #FAEEDA; border-radius: 9px; padding: 10px 12px; color: #633806; }
+  .inst-card { border-top: 3px solid #534AB7; }
+  .inst-meta { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: #5F5E5A; }
+  .inst-meta b { color: #2C2C2A; }
+  .hist { font-size: 12.5px; }
+  .hist div { padding: 8px 12px; border-bottom: 1px solid #F8F7F4; }
+  .hist div:last-child { border-bottom: none; }
+  .dias { font-size: 11px; color: #888780; }
+  .btn:disabled, .btn:disabled:hover { opacity: .4; cursor: not-allowed; }
+  .st-sol-elaboracao { background: #FAEEDA; color: #633806; } .st-sol-enviada { background: #E6F1FB; color: #0C447C; }
+  .st-sol-empenhada_parcial { background: #EEEDFE; color: #3C3489; } .st-sol-empenhada { background: #E1F5EE; color: #085041; }
+  .st-sol-devolvida { background: #FCEBEB; color: #791F1F; } .st-sol-cancelada { background: #F1EFE8; color: #888780; }
+
+  .st-sol-elaboracao { background: #FAEEDA; color: #633806; } .st-sol-enviada { background: #E6F1FB; color: #0C447C; }
+  .st-sol-empenhada_parcial { background: #EEEDFE; color: #3C3489; } .st-sol-empenhada { background: #E1F5EE; color: #085041; }
+  .st-sol-devolvida { background: #FCEBEB; color: #791F1F; } .st-sol-cancelada { background: #F1EFE8; color: #888780; }
+  .dm-sem_requisicao { background: #F1EFE8; color: #5F5E5A; } .dm-requisitada { background: #E6F1FB; color: #0C447C; }
+  .dm-aprovada { background: #E1F5EE; color: #085041; } .dm-empenhada { background: #EEEDFE; color: #3C3489; }
+  .dm-em_execucao { background: #FFF4D6; color: #7A4A00; }
+  .dm-liquidada { background: #FAEEDA; color: #633806; } .dm-paga { background: #D7F0E6; color: #04342A; }
+  .dm-encerrada { background: #FCEBEB; color: #791F1F; }
+  .cadeia { display: flex; gap: 0; flex-wrap: wrap; margin-bottom: 18px; }
+  .elo { flex: 1; min-width: 120px; background: #fff; border: 1px solid #D3D1C7; padding: 10px 12px; position: relative; }
+  .elo:first-child { border-radius: 10px 0 0 10px; } .elo:last-child { border-radius: 0 10px 10px 0; }
+  .elo + .elo { border-left: none; }
+  .elo span { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; color: #888780; font-weight: 600; }
+  .elo b { display: block; font-size: 15px; margin-top: 3px; } .elo small { font-size: 11px; color: #888780; }
+  .cob-linha td input[type=number] { width: 130px; padding: 4px 6px; border: 1px solid #D3D1C7; border-radius: 6px; text-align: right; }
+  .alerta-num { color: #A32D2D; font-weight: 700; }
+  .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 16px; font-size: 12.5px; background: #FAFAF8; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+  .kv span { display: block; font-size: 10.5px; color: #888780; text-transform: uppercase; letter-spacing: .3px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="topbar-logo" title="Planejamento e Monitoramento Orçamentário">PMO</span>
+  <span class="topbar-sub">Empenhos</span>
+  <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:4px 10px;">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <select id="sel-exercicio" style="background:transparent;border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;outline:none;padding:0 2px;" onchange="trocarExercicio(this.value)"></select>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-usuario">
+    <div class="avatar" id="av">?</div>
+    <div>
+      <div style="font-weight:500" id="nome-usuario">Carregando...</div>
+      <div style="font-size:11px;opacity:0.7" id="unidade-usuario"></div>
+    </div>
+    <button class="btn-logout" onclick="fazerLogout()">Sair</button>
+  </div>
+</div>
+
+<div class="layout">
+  <nav class="sidebar" id="sidebar"></nav>
+  <main class="main">
+    <div class="cabecalho">
+      <div>
+        <div class="page-title">Empenhos</div>
+        <div class="page-sub">Solicitações de empenho recebidas e empenhos registrados — exercício <span id="exercicio-label">…</span></div>
+      </div>
+      <div class="escopo"><span class="selo" id="selo-modo" style="display:none"></span>
+        <button class="btn btn-p so-editor" onclick="registrarEmpenho(null, null)">+ Registrar empenho</button></div>
+    </div>
+    <div class="abas" id="abas">
+      <button class="aba ativa" data-aba="solicitacoes" onclick="mostrarAba('solicitacoes')">Solicitações<span class="cnt" id="cnt-sol" style="display:none"></span></button>
+      <button class="aba" data-aba="empenhos" onclick="mostrarAba('empenhos')">Empenhos</button>
+      <button class="aba" data-aba="conciliacao" onclick="mostrarAba('conciliacao')">Conciliação pedido × empenho</button>
+    </div>
+    <div id="conteudo"><div class="carregando">Carregando…</div></div>
+
+  </main>
+</div>
+
+<div class="overlay" id="overlay" onclick="if(event.target===this) fecharModal()">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div class="modal-titulo" id="modal-titulo"></div>
+      <button class="modal-fechar" onclick="fecharModal()" aria-label="Fechar">×</button>
+    </div>
+    <div class="modal-corpo"><div class="msg-erro" id="modal-erro"></div><div id="modal-corpo"></div></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="api.js?v=202611041700"></script>
+<script>
+  const token = localStorage.getItem('pac_token') || '';
+  let _usuario = null, _ctx = null, _dados = null;
+  const PAGINA_ATUAL = 'empenhos';
+
+  // ── Utilitários ───────────────────────────────────────────────────────────
+  const $ = id => document.getElementById(id);
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function fmtV(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function fmtN(v) { return Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 }); }
+  function fmtD(d) { if (!d) return '—'; const s = String(d).slice(0, 10); return s.slice(8,10) + '/' + s.slice(5,7) + '/' + s.slice(0,4); }
+  function fmtDH(d) { if (!d) return '—'; try { return new Date(d).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); } catch (e) { return '—'; } }
+  function diasDesde(d) { if (!d) return ''; const n = Math.floor((Date.now() - new Date(d).getTime()) / 864e5); return n <= 0 ? 'hoje' : n === 1 ? 'há 1 dia' : 'há ' + n + ' dias'; }
+  function pct(a, b) { return b ? Math.round(a / b * 100) : 0; }
+  function barra(a, b) { const p = Math.min(100, pct(a, b)); return `<div class="barra" title="${p}%"><div style="width:${p}%"></div></div>`; }
+  function num(v) { const n = parseFloat(String(v).replace(/\./g, '').replace(',', '.')); return isNaN(n) ? 0 : n; }
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('vis'); setTimeout(() => t.classList.remove('vis'), 2600); }
+  function chamar(acao, params) {
+    return new Promise(ok => google.script.run.withSuccessHandler(ok)
+      .withFailureHandler(e => ok({ ok: false, erro: e.message })).chamarAcao(token, acao, JSON.stringify(params || {})));
+  }
+  const SIT_REQ = { aguardando_contratacao: 'Pendente: aguarda contratação', aguardando_gestor: 'Aguardando o gestor',
+    pendente: 'Pendente: devolvida', aprovada: 'Aprovada', em_solicitacao: 'Em solicitação de empenho',
+    empenhada: 'Empenhada', liquidada: 'Liquidada', paga: 'Paga', cancelada: 'Cancelada' };
+  const FORMAS = { contrato: 'Contrato vigente', ata: 'Ata de registro de preços', nova_contratacao: 'Nova contratação',
+    bolsas_editais: 'Bolsas e editais', diarias: 'Diárias', outros: 'Outros' };
+  const TIPOS_INST = { contrato: 'Contrato', ata: 'Ata de RP', processo: 'Processo de contratação' };
+  const SIT_INST = { vigente: 'Vigente', encerrado: 'Encerrado', em_andamento: 'Em andamento', concluido: 'Concluído', fracassado: 'Fracassado' };
+  function stReq(s) { return `<span class="st st-${s}">${esc(SIT_REQ[s] || s)}</span>`; }
+  function stInst(s) { return `<span class="st st-${s}">${esc(SIT_INST[s] || s)}</span>`; }
+  function abrirModal(titulo, html, largo) {
+    $('modal-titulo').innerHTML = titulo; $('modal-corpo').innerHTML = html;
+    $('modal').classList.toggle('estreito', !largo);
+    $('modal-erro').classList.remove('vis'); $('overlay').classList.add('aberto');
+  }
+  function fecharModal() { $('overlay').classList.remove('aberto'); }
+  function erroModal(m) { const e = $('modal-erro'); e.textContent = m; e.classList.add('vis'); e.scrollIntoView({ block: 'nearest' }); }
+
+  // ── Exercício e navegação ─────────────────────────────────────────────────
+  function getExercicio() { return sessionStorage.getItem('pac_exercicio') || ''; }
+  function trocarExercicio(ano) { sessionStorage.setItem('pac_exercicio', String(ano)); carregar(); }
+  function popularSeletorExercicios(atualCfg) {
+    const base = Number(atualCfg) || new Date().getFullYear();
+    const atual = getExercicio() || base;
+    const anos = PMO_ANOS();
+    $('sel-exercicio').innerHTML = anos.map(a => `<option value="${a}" style="background:#3C3489;color:#fff"${String(a)===String(atual)?' selected':''}>${a}</option>`).join('');
+    if (!getExercicio()) sessionStorage.setItem('pac_exercicio', String(base));
+  }
+  function navegar(page) { window.location.href = _pacUrlPagina(page); }
+  function fazerLogout() { google.script.run.chamarAcao(token, 'logout', '{}'); try { localStorage.removeItem('pac_token'); } catch (e) {} navegar('login'); }
+
+  (async function iniciar() {
+    const r = await chamar('dados_usuario');
+    if (!r.ok) { navegar('login'); return; }
+    _usuario = r.usuario;
+    $('av').textContent = _usuario.nome.charAt(0).toUpperCase();
+    $('nome-usuario').textContent = _usuario.nome;
+    $('unidade-usuario').textContent = _usuario.sigla || _usuario.unidade || '';
+    const menus = PMO_MENUS[_usuario.papel] || [];
+    $('sidebar').innerHTML = '<div class="nav-titulo" style="margin-top:8px">Menu</div>' + menus.map(m =>
+      `<a class="nav-item${m.page===PAGINA_ATUAL?' ativo':''}" href="#" onclick="navegar('${m.page}');return false;"><svg viewBox="0 0 24 24">${PMO_ICONS[m.icon]||''}</svg> ${m.label}</a>`).join('');
+    _ctx = await chamar('emp_contexto');
+    if (!_ctx.ok) { $('conteudo').innerHTML = `<div class="vazio">${esc(_ctx.erro)}</div>`; return; }
+    popularSeletorExercicios(_ctx.exercicio);
+    iniciarPagina();
+  })();
+  const SIT_SOL = { elaboracao: 'Em elaboração', enviada: 'Enviada ao Orçamento', empenhada_parcial: 'Empenhada em parte',
+    empenhada: 'Empenhada', devolvida: 'Devolvida pelo Orçamento', cancelada: 'Cancelada' };
+  function stSol(s) { return `<span class="st st-sol-${s}">${esc(SIT_SOL[s] || s)}</span>`; }
+
+  function stSol(s) { return `<span class="st st-sol-${s}">${esc(SIT_SOL[s] || s)}</span>`; }
+  const ORIGENS = {};
+  let _aba = 'solicitacoes';
+  const pode = () => _ctx && _ctx.pode_editar;
+
+  function iniciarPagina() {
+    (_ctx.origens || []).forEach(o => ORIGENS[o.valor] = o.nome);
+    if (!pode()) { document.body.classList.add('leitura'); $('selo-modo').style.display = ''; $('selo-modo').textContent = 'Somente consulta'; }
+    carregar();
+  }
+  async function carregar() {
+    $('exercicio-label').textContent = getExercicio();
+    $('conteudo').innerHTML = '<div class="carregando">Carregando…</div>';
+    const r = await chamar('emp_dados', { exercicio: getExercicio() });
+    if (!r.ok) { $('conteudo').innerHTML = `<div class="vazio">${esc(r.erro)}</div>`; return; }
+    _dados = r;
+    const n = r.solicitacoes.filter(s => s.situacao_exibicao === 'enviada' || s.situacao_exibicao === 'empenhada_parcial').length;
+    $('cnt-sol').style.display = n ? '' : 'none'; $('cnt-sol').textContent = n;
+    mostrarAba(_aba);
+  }
+  function mostrarAba(aba) {
+    _aba = aba;
+    document.querySelectorAll('.aba').forEach(b => b.classList.toggle('ativa', b.dataset.aba === aba));
+    if (!_dados) return;
+    ({ solicitacoes: renderSolicitacoes, empenhos: renderEmpenhos, conciliacao: renderConciliacao })[aba]();
+  }
+  const soma = (l, k) => l.reduce((t, x) => t + Number(x[k] || 0), 0);
+  function cards() {
+    const S = _dados.solicitacoes, E = _dados.empenhos, t = _dados.conciliacao.total;
+    const abertas = S.filter(s => ['enviada', 'empenhada_parcial'].includes(s.situacao_exibicao));
+    const dev = S.filter(s => s.situacao === 'devolvida');
+    return `<div class="cards">
+      <div class="card ${abertas.length ? 'amarelo' : ''}"><div class="card-label">A empenhar</div><div class="card-valor">${fmtV(soma(abertas, 'a_empenhar'))}</div><div class="card-det">${abertas.length} solicitação(ões) em aberto</div></div>
+      <div class="card"><div class="card-label">Empenhado no exercício</div><div class="card-valor">${fmtV(soma(E, 'valor_atual'))}</div><div class="card-det">${E.length} empenho(s)</div></div>
+      <div class="card ${Math.abs(t.sem_vinculo) > 0.005 ? 'vermelho' : ''}"><div class="card-label">Empenho sem vínculo</div><div class="card-valor">${fmtV(t.sem_vinculo)}</div><div class="card-det">deve ser zero</div></div>
+      <div class="card"><div class="card-label">Devolvidas</div><div class="card-valor">${dev.length}</div><div class="card-det">aguardando a seção gestora</div></div>
+    </div>`;
+  }
+
+  // ── Solicitações ──────────────────────────────────────────────────────────
+  function renderSolicitacoes() {
+    const S = _dados.solicitacoes;
+    const grupos = [
+      ['A empenhar', S.filter(s => s.situacao_exibicao === 'enviada')],
+      ['Empenhadas em parte', S.filter(s => s.situacao_exibicao === 'empenhada_parcial')],
+      ['Devolvidas à seção gestora', S.filter(s => s.situacao === 'devolvida')],
+      ['Empenhadas', S.filter(s => s.situacao_exibicao === 'empenhada')],
+    ];
+    $('conteudo').innerHTML = cards() + grupos.map(([titulo, l]) => `
+      <div class="secao"><div class="secao-header"><span class="secao-titulo">${titulo}</span><span class="selo">${l.length}</span></div>
+      <div class="tabela-scroll">${l.length ? `<table><thead><tr><th>Solicitação</th><th>Seção gestora</th><th>Instrumento</th><th class="num">Valor real</th><th class="num">Empenhado</th><th class="num">A empenhar</th><th>Enviada</th><th></th></tr></thead><tbody>
+        ${l.map(s => `<tr class="clicavel" onclick="verSolicitacao('${s.id_solicitacao}')">
+          <td><span class="cod-dem">${esc(s.codigo)}</span><span class="sub">${s.n_requisicoes} requisição(ões)</span></td>
+          <td>${esc(s.sigla_gestora)}</td>
+          <td>${s.numero_instrumento ? `${esc(TIPOS_INST[s.tipo_instrumento]||'')} ${esc(s.numero_instrumento)}<span class="sub">${esc(s.fornecedor_nome||'')}</span>` : esc(FORMAS[s.forma]||s.forma)}</td>
+          <td class="num">${fmtV(s.total_real)}</td><td class="num">${fmtV(s.empenhado)}</td>
+          <td class="num">${s.a_empenhar > 0.005 ? `<b>${fmtV(s.a_empenhar)}</b>` : '—'}</td>
+          <td>${fmtD(s.data_envio)}<span class="dias">${diasDesde(s.data_envio)}</span>${s.situacao === 'devolvida' ? `<span class="sub" style="color:#A32D2D">${esc(s.motivo||'')}</span>` : ''}</td>
+          <td style="text-align:right;white-space:nowrap" onclick="event.stopPropagation()">
+            ${s.situacao === 'enviada' && s.a_empenhar > 0.005 ? `<button class="btn btn-p btn-mini so-editor" onclick="registrarEmpenho(null,'${s.id_solicitacao}')">Registrar empenho</button>` : ''}
+            <button class="btn btn-mini" onclick="verSolicitacao('${s.id_solicitacao}')">Abrir</button></td></tr>`).join('')}
+        </tbody></table>` : '<div class="vazio" style="padding:14px">Nenhuma.</div>'}</div></div>`).join('');
+  }
+
+  async function verSolicitacao(id) {
+    abrirModal('Solicitação de empenho', '<div class="carregando">Carregando…</div>', true);
+    const r = await chamar('sol_detalhe', { id_solicitacao: id });
+    if (!r.ok) return erroModal(r.erro);
+    window._sol = r;
+    const s = r.solicitacao, R = r.requisicoes;
+    $('modal-titulo').innerHTML = `<span class="cod-dem">${esc(s.codigo)}</span> ${esc(s.sigla_gestora)} · ${s.numero_instrumento ? esc(TIPOS_INST[s.tipo_instrumento]||'') + ' ' + esc(s.numero_instrumento) : esc(FORMAS[s.forma]||'')} ${stSol(s.situacao_exibicao)}`;
+    $('modal-corpo').innerHTML = `
+      ${s.situacao === 'devolvida' ? `<div class="aviso"><b>Devolvida à seção gestora:</b> ${esc(s.motivo||'')}</div>` : ''}
+      <div class="kv">
+        ${s.numero_instrumento ? `<div><span>Fornecedor</span><b>${esc(s.fornecedor_nome||'—')}</b>${s.fornecedor_cnpj ? '<br>' + esc(s.fornecedor_cnpj) : ''}</div>
+        <div><span>Objeto</span>${esc(s.objeto_instrumento||'')}</div><div><span>Processo SEI</span>${esc(s.processo_sei_instrumento||'—')}</div>` : ''}
+        <div><span>Valor real</span><b>${fmtV(s.total_real)}</b></div><div><span>Empenhado</span><b>${fmtV(s.empenhado)}</b></div>
+        <div><span>A empenhar</span><b>${fmtV(s.a_empenhar)}</b></div><div><span>Enviada</span>${fmtDH(s.data_envio)}<br>${esc(s.nome_envio||'')}</div>
+        ${s.observacao ? `<div style="grid-column:1/-1"><span>Observação</span>${esc(s.observacao)}</div>` : ''}
+      </div>
+      <div class="bloco"><div class="bloco-titulo">Requisições</div><div class="caixa tabela-scroll"><table>
+        <thead><tr><th>Requisição</th><th>Unidade</th><th>Objeto</th><th>Natureza</th><th class="num">Real</th><th class="num">Empenhado</th><th>Empenhos</th></tr></thead><tbody>
+        ${R.map(x => `<tr><td><span class="cod-req">${esc(x.codigo)}</span><span class="sub">${esc(x.codigo_demanda)}</span></td>
+          <td>${esc(x.sigla_unidade)}</td><td style="max-width:220px">${esc(x.descricao_objeto)}</td><td>${esc(x.natureza_despesa||'—')}</td>
+          <td class="num">${fmtV(x.valor_real)}</td><td class="num">${fmtV(x.empenhado)}</td>
+          <td>${x.empenhos.map(e => `<a href="#" onclick="verEmpenho('${e.id_empenho}');return false;">${esc(e.numero)}</a> <span class="sub" style="display:inline">${fmtV(e.valor)}</span>`).join('<br>') || '—'}</td></tr>`).join('')}
+        </tbody></table></div></div>
+      <div class="bloco so-editor" id="bloco-devolver" style="display:none"><div class="bloco-titulo">Devolver à seção gestora</div>
+        <div class="campo"><textarea id="dev-motivo" rows="2" placeholder="Ex.: sem crédito disponível na ação; natureza de despesa divergente"></textarea></div>
+        <div class="rodape" style="margin-top:8px"><button class="btn btn-r" onclick="devolver('${s.id_solicitacao}')">Confirmar devolução</button></div></div>
+      <div class="rodape">
+        ${s.situacao === 'enviada' && s.a_empenhar > 0.005 ? `<button class="btn btn-r so-editor" style="margin-right:auto" onclick="$('bloco-devolver').style.display='';$('dev-motivo').focus()">Devolver</button>` : ''}
+        <button class="btn" onclick="relatorioSolicitacao()">Relatório (PDF)</button>
+        <button class="btn" onclick="fecharModal()">Fechar</button>
+        ${s.situacao === 'enviada' && s.a_empenhar > 0.005 ? `<button class="btn btn-p so-editor" onclick="registrarEmpenho(null,'${s.id_solicitacao}')">Registrar empenho</button>` : ''}
+      </div>`;
+  }
+  async function devolver(id) {
+    const m = $('dev-motivo').value.trim();
+    if (m.length < 5) return erroModal('Escreva o motivo da devolução.');
+    const r = await chamar('sol_acao', { id_solicitacao: id, acao: 'devolver', motivo: m });
+    if (!r.ok) return erroModal(r.erro);
+    fecharModal(); toast('Solicitação devolvida à seção gestora.'); carregar();
+  }
+
+  // ── Registrar / editar empenho ────────────────────────────────────────────
+  // Por padrão cobre todas as requisições da solicitação, pelo que falta empenhar
+  // de cada uma; o Orçamento pode desmarcar, reduzir ou incluir outras.
+  async function registrarEmpenho(idEmpenho, idSol) {
+    let e = {}, cobAtual = [];
+    if (idEmpenho) {
+      const r = await chamar('emp_detalhe', { id_empenho: idEmpenho });
+      if (!r.ok) return toast(r.erro);
+      e = r.empenho; cobAtual = r.cobertura;
+    }
+    const R = _dados.requisicoes;
+    const restante = x => Math.max(0, Number(x.valor_real || 0) - Number(x.empenhado || 0));
+    const linhasIni = [];
+    cobAtual.forEach(c => { const x = R.find(r => r.id_requisicao === c.id_requisicao) || c.requisicao; linhasIni.push({ x, valor: c.valor, max: restante(x) + c.valor, marcado: true }); });
+    let sol = null;
+    if (idSol) {
+      sol = _dados.solicitacoes.find(s => s.id_solicitacao === idSol);
+      R.filter(x => x.id_solicitacao === idSol && restante(x) > 0.005 && !linhasIni.some(l => l.x.id_requisicao === x.id_requisicao))
+        .forEach(x => linhasIni.push({ x, valor: restante(x), max: restante(x), marcado: true }));
+    }
+    window._cob = linhasIni;
+    const nd = [...new Set(linhasIni.map(l => l.x.natureza_despesa).filter(Boolean))];
+    const ref = sol || (linhasIni[0] ? _dados.solicitacoes.find(s => s.id_solicitacao === linhasIni[0].x.id_solicitacao) : null);
+    const val = k => esc(e[k] != null ? e[k] : '');
+    const totalIni = linhasIni.reduce((t, l) => t + l.valor, 0);
+    abrirModal(idEmpenho ? `Editar empenho ${esc(e.numero)}` : `Registrar empenho${sol ? ` — <span class="cod-dem">${esc(sol.codigo)}</span>` : ''}`, `
+      <div class="form">
+        <div class="campo"><label>Número *</label><input id="e-numero" value="${val('numero')}" placeholder="2026NE000123"></div>
+        <div class="campo"><label>Data de emissão *</label><input type="date" id="e-data" value="${val('data_emissao') || new Date().toISOString().slice(0,10)}"></div>
+        <div class="campo"><label>Valor empenhado (R$) *</label><input type="number" step="0.01" min="0" id="e-valor" value="${e.valor_empenhado != null ? e.valor_empenhado : (totalIni ? totalIni.toFixed(2) : '')}" oninput="somarCob()"></div>
+        <div class="campo"><label>Origem do crédito</label><select id="e-origem"><option value="">—</option>${(_ctx.origens||[]).map(o => `<option value="${o.valor}"${e.origem===o.valor?' selected':''}>${esc(o.nome)}</option>`).join('')}</select></div>
+        <div class="campo"><label>Fonte</label><select id="e-fonte"><option value="">—</option>${(_ctx.fontes||[]).map(f => `<option value="${f.codigo}"${e.fonte_codigo===f.codigo?' selected':''}>${esc(f.codigo)} — ${esc(f.nome)}</option>`).join('')}</select></div>
+        <div class="campo"><label>Ação de governo</label><input id="e-acao" value="${val('acao_governo')}" placeholder="Ex.: 20RL"></div>
+        <div class="campo"><label>Natureza de despesa</label><input id="e-nd" value="${e.natureza_despesa != null ? esc(e.natureza_despesa) : esc(nd.length === 1 ? nd[0] : '')}" placeholder="Ex.: 3.3.90.30"></div>
+        <div class="campo"><label>Favorecido (CNPJ)</label><input id="e-cnpj" value="${e.favorecido_cnpj != null ? esc(e.favorecido_cnpj) : esc(ref && ref.fornecedor_cnpj || '')}"></div>
+        <div class="campo"><label>Favorecido (nome)</label><input id="e-fav" value="${e.favorecido_nome != null ? esc(e.favorecido_nome) : esc(ref && ref.fornecedor_nome || '')}"></div>
+        <div class="campo largo"><label>Observação</label><input id="e-obs" value="${val('observacao')}"></div>
+      </div>
+      <input type="hidden" id="e-inst" value="${esc(e.id_instrumento || (ref && ref.id_instrumento) || '')}">
+      <div class="bloco" style="margin-top:16px"><div class="bloco-titulo">O que este empenho cobre
+        <select id="e-add" class="btn" style="margin-left:auto" onchange="incluirReq(this.value);this.value=''"><option value="">+ incluir requisição de outra solicitação…</option>
+          ${R.filter(x => x.situacao_solicitacao === 'enviada' && restante(x) > 0.005 && !linhasIni.some(l => l.x.id_requisicao === x.id_requisicao))
+             .map(x => `<option value="${x.id_requisicao}">${esc(x.codigo_solicitacao)} · ${esc(x.codigo)} · ${esc(x.sigla_unidade)} · falta ${fmtV(restante(x))}</option>`).join('')}</select></div>
+        <div class="caixa tabela-scroll"><table><thead><tr><th></th><th>Requisição</th><th>Unidade</th><th>Natureza</th><th class="num">Valor real</th><th class="num">Falta empenhar</th><th class="num">Valor coberto</th></tr></thead>
+          <tbody id="cob-corpo"></tbody></table></div>
+        <div id="cob-soma" style="margin-top:8px"></div>
+      </div>
+      <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button>
+        <button class="btn btn-p" onclick="salvarEmpenho('${idEmpenho || ''}')">${idEmpenho ? 'Salvar alterações' : 'Registrar empenho'}</button></div>`, true);
+    desenharCob();
+  }
+  function desenharCob() {
+    $('cob-corpo').innerHTML = window._cob.map((l, i) => `<tr class="cob-linha">
+      <td><input type="checkbox" ${l.marcado ? 'checked' : ''} onchange="window._cob[${i}].marcado=this.checked;somarCob()"></td>
+      <td><span class="cod-req">${esc(l.x.codigo)}</span><span class="sub">${esc(l.x.codigo_solicitacao||'')} · ${esc(l.x.codigo_demanda||'')}</span></td>
+      <td>${esc(l.x.sigla_unidade||'')}</td><td>${esc(l.x.natureza_despesa||'—')}</td>
+      <td class="num">${fmtV(l.x.valor_real)}</td><td class="num">${fmtV(l.max)}</td>
+      <td class="num"><input type="number" step="0.01" min="0" value="${Number(l.valor).toFixed(2)}" oninput="window._cob[${i}].valor=Number(this.value||0);somarCob()"></td></tr>`).join('')
+      || '<tr><td colspan="7" class="vazio" style="padding:14px">Nenhuma requisição marcada. Inclua ao menos uma, ou registre o empenho e vincule depois.</td></tr>';
+    somarCob();
+  }
+  function incluirReq(id) {
+    if (!id) return;
+    const x = _dados.requisicoes.find(r => r.id_requisicao === id);
+    const falta = Math.max(0, Number(x.valor_real || 0) - Number(x.empenhado || 0));
+    window._cob.push({ x, valor: falta, max: falta, marcado: true });
+    const opt = document.querySelector(`#e-add option[value="${id}"]`); if (opt) opt.remove();
+    desenharCob();
+  }
+  function somarCob() {
+    const tot = window._cob.filter(l => l.marcado).reduce((t, l) => t + Number(l.valor || 0), 0);
+    const v = Number($('e-valor').value || 0);
+    const acima = window._cob.find(l => l.marcado && l.valor > l.max + 0.004);
+    const dif = v - tot;
+    $('cob-soma').innerHTML = acima ? `<div class="bad-box">${esc(acima.x.codigo)}: o valor coberto passa do que falta empenhar (${fmtV(acima.max)}).</div>`
+      : Math.abs(dif) < 0.005 ? `<div class="ok-box">O empenho cobre exatamente ${fmtV(tot)} em ${window._cob.filter(l => l.marcado).length} requisição(ões).</div>`
+      : dif > 0 ? `<div class="bad-box">Cobertura de ${fmtV(tot)}: ficam <b>${fmtV(dif)}</b> do empenho sem vínculo.</div>`
+      : `<div class="bad-box">A cobertura (${fmtV(tot)}) passa do valor do empenho em <b>${fmtV(-dif)}</b>.</div>`;
+  }
+  async function salvarEmpenho(id) {
+    const empenho = { id_empenho: id || null, numero: $('e-numero').value.trim(), data_emissao: $('e-data').value,
+      valor_empenhado: $('e-valor').value, origem: $('e-origem').value, fonte_codigo: $('e-fonte').value,
+      acao_governo: $('e-acao').value, natureza_despesa: $('e-nd').value, favorecido_cnpj: $('e-cnpj').value,
+      favorecido_nome: $('e-fav').value, observacao: $('e-obs').value, id_instrumento: $('e-inst').value };
+    const cobertura = window._cob.filter(l => l.marcado && Number(l.valor) > 0).map(l => ({ id_requisicao: l.x.id_requisicao, valor: l.valor }));
+    const r = await chamar('emp_salvar', { empenho, cobertura });
+    if (!r.ok) return erroModal(r.erro);
+    fecharModal(); toast('Empenho ' + (r.numero || '') + (id ? ' atualizado.' : ' registrado.')); carregar();
+  }
+
+  // ── Empenhos ──────────────────────────────────────────────────────────────
+  function renderEmpenhos() {
+    const E = _dados.empenhos;
+    $('conteudo').innerHTML = cards() + `<div class="secao"><div class="secao-header"><span class="secao-titulo">Empenhos do exercício</span>
+      <div class="filtros"><input id="f-busca" placeholder="Buscar número, ação, favorecido…" oninput="filtrarEmp()"></div></div>
+      <div class="tabela-scroll" id="tab-emp"></div></div>`;
+    filtrarEmp();
+  }
+  function filtrarEmp() {
+    const b = ($('f-busca') ? $('f-busca').value : '').toLowerCase();
+    const E = _dados.empenhos.filter(e => !b || [e.numero, e.acao_governo, e.natureza_despesa, e.favorecido_nome, e.solicitacoes].some(v => String(v||'').toLowerCase().includes(b)));
+    $('tab-emp').innerHTML = E.length ? `<table><thead><tr><th>Empenho</th><th>Ação / natureza</th><th>Fonte</th><th>Favorecido</th><th class="num">Valor atual</th><th class="num">Coberto</th><th class="num">Sem vínculo</th><th>Solicitações</th></tr></thead><tbody>
+      ${E.map(e => `<tr class="clicavel" onclick="verEmpenho('${e.id_empenho}')">
+        <td><b>${esc(e.numero)}</b><span class="sub">${fmtD(e.data_emissao)}</span></td>
+        <td>${esc(e.acao_governo||'—')}<span class="sub">${esc(e.natureza_despesa||'')}</span></td>
+        <td>${esc(e.fonte_codigo||'—')}<span class="sub">${esc(ORIGENS[e.origem]||'')}</span></td>
+        <td>${esc(e.favorecido_nome||'—')}</td>
+        <td class="num">${fmtV(e.valor_atual)}${Math.abs(e.valor_atual - e.valor_empenhado) > 0.005 ? `<span class="sub">emitido ${fmtV(e.valor_empenhado)}</span>` : ''}</td>
+        <td class="num">${fmtV(e.coberto)}</td>
+        <td class="num">${Math.abs(e.sem_vinculo) > 0.005 ? `<span class="alerta-num">${fmtV(e.sem_vinculo)}</span>` : '—'}</td>
+        <td>${esc(e.solicitacoes||'—')}</td></tr>`).join('')}
+      </tbody></table>` : '<div class="vazio">Nenhum empenho registrado neste exercício.</div>';
+  }
+  async function verEmpenho(id) {
+    abrirModal('Empenho', '<div class="carregando">Carregando…</div>', true);
+    const r = await chamar('emp_detalhe', { id_empenho: id });
+    if (!r.ok) return erroModal(r.erro);
+    const e = r.empenho;
+    $('modal-titulo').innerHTML = `Empenho <b>${esc(e.numero)}</b>`;
+    $('modal-corpo').innerHTML = `
+      <div class="kv">
+        <div><span>Emissão</span>${fmtD(e.data_emissao)}</div><div><span>Valor emitido</span><b>${fmtV(e.valor_empenhado)}</b></div>
+        <div><span>Valor atual</span><b>${fmtV(e.valor_atual)}</b></div><div><span>Coberto</span><b>${fmtV(e.coberto)}</b></div>
+        <div><span>Sem vínculo</span><b class="${Math.abs(e.sem_vinculo) > 0.005 ? 'alerta-num' : ''}">${fmtV(e.sem_vinculo)}</b></div>
+        <div><span>Origem</span>${esc(ORIGENS[e.origem]||'—')}</div><div><span>Fonte</span>${esc(e.fonte_codigo||'—')} ${esc(e.fonte_nome||'')}</div>
+        <div><span>Ação de governo</span>${esc(e.acao_governo||'—')}</div><div><span>Natureza de despesa</span>${esc(e.natureza_despesa||'—')}</div>
+        <div><span>Favorecido</span>${esc(e.favorecido_nome||'—')}<br>${esc(e.favorecido_cnpj||'')}</div>
+        ${e.observacao ? `<div style="grid-column:1/-1"><span>Observação</span>${esc(e.observacao)}</div>` : ''}
+      </div>
+      <div class="bloco"><div class="bloco-titulo">O que cobre</div><div class="caixa tabela-scroll"><table>
+        <thead><tr><th>Requisição</th><th>Solicitação</th><th>Unidade</th><th>Objeto</th><th class="num">Valor real</th><th class="num">Coberto aqui</th></tr></thead><tbody>
+        ${r.cobertura.map(c => `<tr><td><span class="cod-req">${esc(c.requisicao.codigo||'')}</span><span class="sub">${esc(c.requisicao.codigo_demanda||'')}</span></td>
+          <td>${esc(c.requisicao.codigo_solicitacao||'')}</td><td>${esc(c.requisicao.sigla_unidade||'')}</td>
+          <td style="max-width:220px">${esc(c.requisicao.descricao_objeto||'')}</td><td class="num">${fmtV(c.requisicao.valor_real)}</td><td class="num">${fmtV(c.valor)}</td></tr>`).join('')
+          || '<tr><td colspan="6" class="vazio" style="padding:14px">Sem vínculo com requisições.</td></tr>'}
+        </tbody></table></div></div>
+      <div class="bloco"><div class="bloco-titulo">Reforços e anulações</div><div class="caixa hist">
+        ${r.movimentos.map(m => `<div><b>${m.tipo === 'reforco' ? 'Reforço' : 'Anulação'}</b> ${m.tipo === 'reforco' ? '+' : '−'}${fmtV(m.valor)} · ${fmtD(m.data)}${m.documento ? ' · ' + esc(m.documento) : ''}${m.observacao ? `<span class="sub">${esc(m.observacao)}</span>` : ''}
+          <button class="btn btn-mini btn-r so-editor" style="float:right" onclick="excluirMov('${m.id_movimento}','${e.id_empenho}')">Excluir</button></div>`).join('') || '<div>Nenhum.</div>'}
+      </div>
+      <div class="form so-editor" style="margin-top:10px">
+        <div class="campo"><label>Tipo</label><select id="m-tipo"><option value="reforco">Reforço</option><option value="anulacao">Anulação</option></select></div>
+        <div class="campo"><label>Valor (R$)</label><input type="number" step="0.01" min="0" id="m-valor"></div>
+        <div class="campo"><label>Data</label><input type="date" id="m-data" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="campo"><label>Documento</label><input id="m-doc" placeholder="NE de reforço/anulação"></div>
+        <div class="campo" style="justify-content:flex-end"><button class="btn" onclick="lancarMov('${e.id_empenho}')">Lançar</button></div>
+      </div></div>
+      <div class="rodape">
+        <button class="btn btn-r so-editor" style="margin-right:auto" onclick="excluirEmpenho('${e.id_empenho}')">Excluir empenho</button>
+        <button class="btn" onclick="fecharModal()">Fechar</button>
+        <button class="btn btn-p so-editor" onclick="registrarEmpenho('${e.id_empenho}', null)">Editar dados e cobertura</button>
+      </div>`;
+  }
+  async function lancarMov(id) {
+    const r = await chamar('emp_movimento', { id_empenho: id, tipo: $('m-tipo').value, valor: $('m-valor').value, data: $('m-data').value, documento: $('m-doc').value });
+    if (!r.ok) return erroModal(r.erro);
+    toast('Lançado.'); await carregar(); verEmpenho(id);
+  }
+  async function excluirMov(idMov, id) {
+    const r = await chamar('emp_excluir_movimento', { id_movimento: idMov });
+    if (!r.ok) return erroModal(r.erro);
+    await carregar(); verEmpenho(id);
+  }
+  async function excluirEmpenho(id) {
+    if (!confirm('Excluir este empenho? O que ele cobre volta a ficar a empenhar.')) return;
+    const r = await chamar('emp_excluir', { id_empenho: id });
+    if (!r.ok) return erroModal(r.erro);
+    fecharModal(); toast('Empenho excluído.'); carregar();
+  }
+
+  // ── Conciliação ───────────────────────────────────────────────────────────
+  function renderConciliacao() { $('conteudo').innerHTML = htmlConciliacao(_dados.conciliacao); }
+  // ── Conciliação pedido × empenho (mesma conta no Orçamento e no Monitoramento) ──
+  function htmlConciliacao(cc) {
+    const t = cc.total;
+    const tab = (lista, rotulo) => lista.length ? `<table><thead><tr><th>${rotulo}</th><th class="num">Aprovado (real)</th><th class="num">Solicitado</th><th class="num">Empenhado</th><th class="num">A empenhar</th><th class="num">Liquidado</th><th></th></tr></thead><tbody>
+      ${lista.map(x => `<tr><td>${esc(x.nome)}<span class="sub">${x.n} requisição(ões)</span></td>
+        <td class="num">${fmtV(x.aprovado)}</td><td class="num">${fmtV(x.solicitado)}</td><td class="num">${fmtV(x.empenhado)}</td>
+        <td class="num">${x.a_empenhar > 0.005 ? `<b style="color:#7A4A00">${fmtV(x.a_empenhar)}</b>` : '—'}</td>
+        <td class="num">${fmtV(x.liquidado)}</td>
+        <td style="min-width:90px">${barra(x.empenhado, x.aprovado)}</td></tr>`).join('')}
+      <tr><td><b>Total</b></td><td class="num"><b>${fmtV(lista.reduce((s, x) => s + x.aprovado, 0))}</b></td><td class="num"><b>${fmtV(lista.reduce((s, x) => s + x.solicitado, 0))}</b></td>
+        <td class="num"><b>${fmtV(lista.reduce((s, x) => s + x.empenhado, 0))}</b></td><td class="num"><b>${fmtV(lista.reduce((s, x) => s + x.a_empenhar, 0))}</b></td>
+        <td class="num"><b>${fmtV(lista.reduce((s, x) => s + x.liquidado, 0))}</b></td><td></td></tr>
+      </tbody></table>` : '<div class="vazio">Nenhuma requisição aprovada neste filtro.</div>';
+    const bate = Math.abs(t.sem_vinculo) < 0.005;
+    return `
+      <div class="cadeia">
+        <div class="elo"><span>Aprovado (real)</span><b>${fmtV(t.aprovado)}</b><small>requisições aprovadas</small></div>
+        <div class="elo"><span>Solicitado</span><b>${fmtV(t.solicitado)}</b><small>em solicitação enviada</small></div>
+        <div class="elo"><span>Empenhado</span><b>${fmtV(t.empenhado)}</b><small>o que os empenhos cobrem</small></div>
+        <div class="elo"><span>A empenhar</span><b>${fmtV(t.a_empenhar)}</b><small>solicitado − empenhado</small></div>
+        <div class="elo" style="${bate ? '' : 'background:#FCEBEB'}"><span>Empenho sem vínculo</span><b class="${bate ? '' : 'alerta-num'}">${fmtV(t.sem_vinculo)}</b><small>${bate ? 'empenhos totalmente vinculados' : 'valor dos empenhos − o que cobrem'}</small></div>
+      </div>
+      ${!bate ? `<div class="aviso"><b>Há empenho sem vínculo.</b> A soma dos empenhos (${fmtV(t.empenhos)}) não bate com a soma do que eles cobrem (${fmtV(t.empenhado)}).
+        ${cc.sem_vinculo.map(e => `<span class="cod-dem" style="margin-left:6px">${esc(e.numero)}: ${fmtV(e.sem_vinculo)}</span>`).join('')}</div>`
+        : `<div class="ok-box" style="margin-bottom:18px">A soma dos empenhos é igual à soma do que eles cobrem nas requisições.</div>`}
+      <div class="secao"><div class="secao-header"><span class="secao-titulo">Por contrato, ata ou forma de atendimento</span></div><div class="tabela-scroll">${tab(cc.por_instrumento, 'Instrumento')}</div></div>
+      <div class="secao"><div class="secao-header"><span class="secao-titulo">Por unidade requerente</span></div><div class="tabela-scroll">${tab(cc.por_unidade, 'Unidade')}</div></div>`;
+  }
+
+  // Relatório da solicitação (abre em nova aba, pronto para imprimir ou salvar em PDF).
+  const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  function relatorioSolicitacao() {
+    const { solicitacao: s, requisicoes: R } = window._sol;
+    const hoje = new Date();
+    const instTxt = s.numero_instrumento ? `${s.tipo_instrumento === 'ata' ? 'na Ata de Registro de Preços' : 'no Contrato'} nº ${esc(s.numero_instrumento)}` : `em ${esc((FORMAS[s.forma]||'').toLowerCase())} (atendimento direto)`;
+    const porND = {};
+    R.forEach(x => { const k = x.natureza_despesa || 'Não informada'; porND[k] = (porND[k] || 0) + Number(x.valor_real || 0); });
+    const saldoDepois = s.saldo_instrumento, saldoAntes = s.saldo_instrumento != null ? s.saldo_instrumento + (s.situacao === 'cancelada' ? 0 : s.total_real) : null;
+    const assinante = s.nome_envio || s.nome_criador || (_usuario && _usuario.nome) || '';
+    const siape = s.nome_envio ? s.siape_envio : s.siape_criador;
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>${esc(s.codigo)} — Solicitação de empenho</title>
+    <style>
+      *{box-sizing:border-box} body{font-family:Calibri,Carlito,'Segoe UI',Arial,sans-serif;font-size:11.5pt;color:#111;margin:0;background:#e9e9e9}
+      .folha{background:#fff;max-width:210mm;margin:16px auto;padding:20mm 20mm 18mm;line-height:1.45}
+      .barra{max-width:210mm;margin:16px auto 0;display:flex;justify-content:flex-end}
+      .barra button{font:inherit;font-size:10pt;padding:7px 14px;border-radius:6px;border:1px solid #1F4E79;background:#1F4E79;color:#fff;cursor:pointer}
+      .cab{text-align:center} .cab p{margin:0;font-size:10.5pt} .cab .b{font-weight:bold}
+      .data{text-align:right;margin:18px 0 22px}
+      h1{color:#1F4E79;font-size:14pt;text-align:center;margin:0 0 4px} .subt{color:#2E75B6;text-align:center;font-weight:bold;margin:0 0 22px}
+      h2{color:#1F4E79;font-size:12pt;margin:22px 0 8px} p{margin:0 0 9px;text-align:justify}
+      table{width:100%;border-collapse:collapse;font-size:10pt;margin:6px 0 10px}
+      th{background:#DDEBF7;border:1px solid #9DC3E6;padding:4px 6px;text-align:left} td{border:1px solid #BDD7EE;padding:3px 6px;vertical-align:top}
+      td.v,th.v{text-align:right;white-space:nowrap} tr.tot td{font-weight:bold;background:#F3F8FC}
+      .ass{margin-top:46px;text-align:center} .ass .linha{border-top:1px solid #333;width:300px;margin:0 auto 4px}
+      .rodape{margin-top:30px;font-size:9pt;color:#555;border-top:1px solid #ccc;padding-top:8px}
+      @media print{ body{background:#fff} .barra{display:none} .folha{margin:0;padding:0;max-width:none} @page{size:A4;margin:18mm 18mm 16mm} }
+    </style></head><body>
+    <div class="barra"><button onclick="window.print()">Imprimir / salvar em PDF</button></div>
+    <div class="folha">
+      <div class="cab"><p class="b">MINISTÉRIO DA EDUCAÇÃO</p><p class="b">COLÉGIO PEDRO II</p><p>${esc(s.nome_gestora||'').toUpperCase()}</p></div>
+      <p class="data">Em ${hoje.getDate()} de ${MESES[hoje.getMonth()]} de ${hoje.getFullYear()}.</p>
+      <h1>SOLICITAÇÃO DE EMISSÃO DE NOTA DE EMPENHO</h1>
+      <p class="subt">${esc(s.codigo)} · exercício ${s.exercicio}</p>
+      <p>À Seção de Orçamento,</p>
+      <p>Solicito a emissão de nota de empenho para atendimento das requisições abaixo, amparadas ${instTxt}, no valor total de <b>${fmtV(s.total_real)}</b>.</p>
+      ${s.observacao ? `<p><b>Observação:</b> ${esc(s.observacao)}</p>` : ''}
+      <h2>1. INSTRUMENTO</h2>
+      <table>
+        ${s.numero_instrumento ? `
+        <tr><th style="width:34%">Tipo e número</th><td>${esc(TIPOS_INST[s.tipo_instrumento]||'')} nº ${esc(s.numero_instrumento)}</td></tr>
+        <tr><th>Objeto</th><td>${esc(s.objeto_instrumento||'')}</td></tr>
+        <tr><th>Fornecedor</th><td>${esc(s.fornecedor_nome||'—')}${s.fornecedor_cnpj ? ' — CNPJ ' + esc(s.fornecedor_cnpj) : ''}</td></tr>
+        <tr><th>Vigência</th><td>${s.vigencia_inicio ? fmtD(s.vigencia_inicio) + ' a ' : 'até '}${fmtD(s.vigencia_fim)}</td></tr>
+        <tr><th>Processo SEI</th><td>${esc(s.processo_sei_instrumento||'—')}</td></tr>
+        ${s.valor_limite != null ? `<tr><th>Valor do instrumento</th><td>${fmtV(s.valor_limite)}</td></tr>
+        <tr><th>Saldo antes desta solicitação</th><td>${fmtV(saldoAntes)}</td></tr>
+        <tr><th>Saldo depois desta solicitação</th><td>${fmtV(saldoDepois)}</td></tr>` : ''}`
+        : `<tr><th style="width:34%">Forma de atendimento</th><td>${esc(FORMAS[s.forma]||s.forma)} — atendimento direto, sem contrato ou ata</td></tr>`}
+      </table>
+      <h2>2. REQUISIÇÕES</h2>
+      <table><thead><tr><th>Requisição / demanda</th><th>Unidade requerente</th><th>Objeto</th><th class="v">Qtd.</th><th class="v">Previsto</th><th class="v">Real</th><th class="v">Resíduo</th></tr></thead><tbody>
+        ${R.map(x => `<tr><td>${esc(x.codigo)}<br><small>${esc(x.codigo_demanda)}</small></td><td>${esc(x.sigla_unidade)}</td><td>${esc(x.descricao_objeto)}</td>
+          <td class="v">${fmtN(x.quantidade)} ${esc(x.unidade_medida||'')}</td><td class="v">${fmtV(x.valor)}</td><td class="v">${fmtV(x.valor_real)}</td><td class="v">${fmtV(x.residuo)}</td></tr>`).join('')}
+        <tr class="tot"><td colspan="4">Total</td><td class="v">${fmtV(s.total_previsto)}</td><td class="v">${fmtV(s.total_real)}</td><td class="v">${fmtV(s.total_previsto - s.total_real)}</td></tr>
+      </tbody></table>
+      <h2>3. TOTAIS POR NATUREZA DE DESPESA</h2>
+      <table><thead><tr><th>Natureza de despesa</th><th class="v">Valor</th></tr></thead><tbody>
+        ${Object.keys(porND).sort().map(k => `<tr><td>${esc(k)}</td><td class="v">${fmtV(porND[k])}</td></tr>`).join('')}
+        <tr class="tot"><td>Total geral</td><td class="v">${fmtV(s.total_real)}</td></tr>
+      </tbody></table>
+      <div class="ass"><div class="linha"></div><b>${esc(assinante)}</b><br>${siape ? 'SIAPE ' + esc(siape) + '<br>' : ''}${esc(s.sigla_gestora||'')} — seção gestora</div>
+      <p class="rodape">Documento gerado em ${hoje.toLocaleString('pt-BR')} pelo sistema Planejamento e Monitoramento Orçamentário do Colégio Pedro II. Situação da solicitação: ${esc(SIT_SOL[s.situacao_exibicao]||s.situacao_exibicao)}.</p>
+    </div></body></html>`;
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  function analisar(id) {
+    const x = _dados.requisicoes.find(r => r.id_requisicao === id);
+    const inst = x.id_instrumento ? _dados.instrumentos.find(i => i.id_instrumento === x.id_instrumento) : null;
+    const saldoInst = inst && inst.valor_limite != null ? Number(inst.saldo) + (x.situacao === 'aprovada' ? Number(x.valor_real || 0) : 0) : null;
+    const unit = x.quantidade_demanda ? Number(x.valor_demanda) / Number(x.quantidade_demanda) : null;
+    const pode = x.situacao === 'aguardando_gestor', aprovada = x.situacao === 'aprovada';
+    abrirModal(`<span class="cod-req">${esc(x.codigo)}</span> ${esc(x.descricao_objeto)}<span class="sub">${esc(x.codigo_demanda)} · ${esc(x.nome_unidade)}</span>`, `
+      <div class="dados-dem" style="margin-bottom:14px">
+        <div><span>Quantidade pedida</span><b>${fmtN(x.quantidade)} ${esc(x.unidade_medida||'')}</b></div>
+        <div><span>Valor requisitado</span><b>${fmtV(x.valor)}</b></div>
+        <div><span>Unitário previsto</span><b>${unit ? fmtV(unit) : '—'}</b></div>
+        <div><span>Atendimento</span><b>${esc(FORMAS[x.forma]||x.forma)}</b>${inst ? `<div style="font-size:11px;color:#888780">${esc(inst.numero)}</div>` : ''}</div>
+        ${saldoInst != null ? `<div><span>Saldo do instrumento</span><b>${fmtV(saldoInst)}</b></div>` : ''}
+        ${x.observacao ? `<div class="largo"><span>Observação do requerente</span>${esc(x.observacao)}</div>` : ''}
+        ${x.motivo ? `<div class="largo"><span>Motivo registrado</span>${esc(x.motivo)}</div>` : ''}
+      </div>
+      ${pode || aprovada ? `<div class="form">
+        <div class="campo"><label>Valor real (R$) *</label><input type="number" min="0" step="0.01" id="an-real" value="${x.valor_real || ''}" oninput="conferir()" ${aprovada ? 'disabled' : ''}>
+          <span class="hint">Preço do ${inst ? (inst.tipo === 'ata' ? 'item na ata' : 'contrato') : 'atendimento'} × quantidade pedida</span></div>
+        <div class="campo" style="justify-content:flex-end"><div id="an-conf"></div></div>
+        <div class="campo largo"><label>Motivo (obrigatório para devolver)</label><textarea id="an-motivo" rows="2" placeholder="Ex.: valor real supera o requisitado; readeque a quantidade"></textarea></div>
+      </div>
+      <div class="rodape">
+        <button class="btn btn-r" style="margin-right:auto" onclick="decidir('${x.id_requisicao}','devolver')">Devolver ao requerente</button>
+        ${aprovada ? `<button class="btn" onclick="decidir('${x.id_requisicao}','desfazer')">Voltar para análise</button>` : ''}
+        <button class="btn" onclick="fecharModal()">Fechar</button>
+        ${pode ? `<button class="btn btn-v" id="an-aprovar" onclick="decidir('${x.id_requisicao}','aprovar')" disabled>Aprovar</button>` : ''}
+      </div>` : `<div class="rodape"><button class="btn" onclick="fecharModal()">Fechar</button></div>`}`, true);
+    window._an = { x, saldoInst };
+    if (pode) conferir();
+  }
+  function conferir() {
+    const { x, saldoInst } = window._an;
+    const v = Number($('an-real').value || 0), el = $('an-conf'), btn = $('an-aprovar');
+    if (!v) { el.innerHTML = ''; if (btn) btn.disabled = true; return; }
+    let html, ok = true;
+    if (v > Number(x.valor) + 0.004) {
+      ok = false; html = `<div class="bad-box">O valor real supera o requisitado em <b>${fmtV(v - Number(x.valor))}</b>. Não é possível aprovar: devolva para o requerente readequar a quantidade ou o valor.</div>`;
+      if (!$('an-motivo').value) $('an-motivo').value = `O valor real (${fmtV(v)}) supera o requisitado (${fmtV(x.valor)}). Readeque a quantidade ou o valor dentro do saldo da demanda.`;
+    } else if (saldoInst != null && v > saldoInst + 0.004) {
+      ok = false; html = `<div class="bad-box">O instrumento tem só <b>${fmtV(saldoInst)}</b> de saldo. Devolva ou aguarde um aditivo.</div>`;
+    } else {
+      const r = Number(x.valor) - v;
+      html = `<div class="ok-box">Cabe no requisitado${saldoInst != null ? ' e no saldo do instrumento' : ''}.${r > 0.004 ? ` Resíduo positivo: <b>${fmtV(r)}</b>.` : ''}</div>`;
+    }
+    el.innerHTML = html; if (btn) btn.disabled = !ok;
+  }
+  async function decidir(id, acao) {
+    const motivo = $('an-motivo') ? $('an-motivo').value.trim() : '';
+    if (acao === 'devolver' && motivo.length < 5) return erroModal('Escreva o motivo da devolução.');
+    const r = await chamar('ped_analisar', { id_requisicao: id, acao, valor_real: $('an-real') ? $('an-real').value : null, motivo });
+    if (!r.ok) return erroModal(r.erro);
+    fecharModal();
+    toast(acao === 'aprovar' ? 'Requisição aprovada' + (Number(r.residuo) > 0 ? ` — resíduo de ${fmtV(r.residuo)}` : '') + '.'
+        : acao === 'devolver' ? 'Requisição devolvida ao requerente.' : 'Requisição voltou para análise.');
+    carregar();
+  }
+
+
+
+</script>
+</body>
+</html>

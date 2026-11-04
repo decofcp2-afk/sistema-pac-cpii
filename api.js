@@ -114,20 +114,14 @@ async function _confirmarSenha(senha) {
   return error ? 'Senha incorreta.' : null;
 }
 
-// ─── Monitoramento: marcos, situação e semáforo ──────────────────────────────
-const TIPOS_MARCO = [
-  { valor: 'abertura_processo', nome: 'Abertura do processo' },
-  { valor: 'envio_processo',    nome: 'Envio do processo' },
-  { valor: 'empenho',           nome: 'Empenho' },
-  { valor: 'primeiro_pedido',   nome: 'Primeiro pedido' },
-  { valor: 'conclusao',         nome: 'Conclusão' },
-];
-const _nomeMarco = t => (TIPOS_MARCO.find(x => x.valor === t) || {}).nome || t || '';
-const DIAS_ALERTA = 15;   // amarelo: vence em até 15 dias (decisão do gestor)
-const SITUACOES = {
-  aguardando: 'Aguardando início', em_contratacao: 'Em contratação', empenhada: 'Empenhada',
-  em_execucao: 'Em execução', concluida: 'Concluída', nao_executada: 'Não executada',
+// ─── Execução: prazos para requisitar, situação e conciliação ────────────────
+const DIAS_ALERTA = 15;   // amarelo: prazo vence em até 15 dias (decisão do gestor)
+const SIT_DEMANDA = {
+  sem_requisicao: 'Sem requisição', requisitada: 'Requisitada', aprovada: 'Aprovada pelo gestor',
+  empenhada: 'Empenhada', em_execucao: 'Em execução (liquidada em parte)', liquidada: 'Liquidada', paga: 'Paga',
+  encerrada: 'Não será requisitada',
 };
+const CANAIS_COBRANCA = ['sei', 'email', 'telefone', 'presencial', 'outro'];
 
 // Filtro da chave seletora: 'todos', 'reitoria' (fora de qualquer campus) ou o id de um campus.
 function _filtroEscopo(arv, escopo) {
@@ -142,58 +136,85 @@ function _dias(iso) {
   const d = new Date(String(iso).slice(0, 10) + 'T00:00:00');
   return Math.round((d - hoje) / 864e5);
 }
+const _n = v => Number(v || 0);
 
-// Junta os dados de execução de uma demanda com prazos (próprios ou do calendário).
-function _montarExecucao(d, arv, cal, overr, cobs) {
-  const n = k => Number(d[k] || 0);
-  const v = { ...d, valor_estimado: n('valor_estimado'), reservado: n('reservado'), pedido: n('pedido'),
-              liquidado: n('liquidado'), pago: n('pago') };
-  v.situacao = d.encerramento === 'nao_executada' ? 'nao_executada'
-             : d.encerramento === 'concluida'     ? 'concluida'
-             : v.pedido > 0                       ? 'em_execucao'
-             : v.reservado > 0                    ? 'empenhada'
-             : d.processo_sei                     ? 'em_contratacao'
-             : 'aguardando';
-  v.situacao_nome = SITUACOES[v.situacao];
-  v.empenho_parcial = v.reservado > 0 && v.reservado < v.valor_estimado;
-  v.pct_execucao = v.valor_estimado ? Math.round(v.pedido / v.valor_estimado * 100) : 0;
-
+// Prazo para requisitar de uma demanda: o próprio; senão o do calendário mais
+// próximo na estrutura (unidade → … → instituição), preferindo o da categoria.
+function _prazoDemanda(d, arv, prazos, proprios) {
+  const p = proprios.find(x => x.id_demanda === d.id_demanda);
+  if (p) return { data: p.data_limite, origem: 'proprio', motivo: p.motivo };
   const cadeia = []; let x = d.id_unidade_fk, i = 0;
   while (x && i++ < 30) { cadeia.push(x); x = arv.pai[x]; }
-  const prazoCal = tipo => {
-    for (const u of cadeia) { const m = cal.find(c => c.tipo === tipo && c.id_unidade_escopo === u && c.exercicio === d.exercicio); if (m) return m.data_limite; }
-    const g = cal.find(c => c.tipo === tipo && !c.id_unidade_escopo && c.exercicio === d.exercicio);
-    return g ? g.data_limite : null;
-  };
-  const feito = {
-    abertura_processo: d.data_abertura_processo || (d.processo_sei ? 'informado' : null),
-    envio_processo: d.data_envio_processo,
-    empenho: d.primeira_reserva,
-    primeiro_pedido: d.primeiro_pedido,
-    conclusao: d.encerramento === 'concluida' ? d.data_encerramento : null,
-  };
-  const ordem = { vencido: 5, a_vencer: 4, no_prazo: 3, sem_prazo: 2, cumprido_atraso: 1, cumprido: 0, nao_aplica: -1 };
-  v.marcos = TIPOS_MARCO.map(t => {
-    const proprio = overr.find(o => o.id_demanda === d.id_demanda && o.tipo === t.valor);
-    const prazo = proprio ? proprio.data_limite : prazoCal(t.valor);
-    const cumprido = feito[t.valor];
-    let estado, dias = null;
-    if (cumprido) estado = (prazo && cumprido !== 'informado' && String(cumprido) > String(prazo)) ? 'cumprido_atraso' : 'cumprido';
-    else if (d.encerramento) estado = 'nao_aplica';
-    else if (!prazo) estado = 'sem_prazo';
-    else { dias = _dias(prazo); estado = dias < 0 ? 'vencido' : dias <= DIAS_ALERTA ? 'a_vencer' : 'no_prazo'; }
-    return { tipo: t.valor, nome: t.nome, prazo, prazo_proprio: !!proprio, cumprido_em: cumprido, estado, dias };
-  });
-  v.pior_estado = v.marcos.reduce((a, m) => (ordem[m.estado] > ordem[a] ? m.estado : a), 'nao_aplica');
-  v.proximo_marco = v.marcos.find(m => ['vencido', 'a_vencer', 'no_prazo', 'sem_prazo'].includes(m.estado)) || null;
-  v.cobrancas_por_marco = {};
-  cobs.filter(c => c.id_demanda === d.id_demanda).forEach(c => {
-    const k = c.tipo_marco || 'geral';
-    if (!v.cobrancas_por_marco[k]) v.cobrancas_por_marco[k] = c.data_cobranca;
-  });
-  v.n_cobrancas = cobs.filter(c => c.id_demanda === d.id_demanda).length;
+  cadeia.push(null);
+  for (const u of cadeia) {
+    const doNivel = prazos.filter(m => (m.id_unidade_escopo || null) === u && m.exercicio === d.exercicio);
+    const m = doNivel.find(m => m.id_categoria && m.id_categoria === d.id_categoria_fk) || doNivel.find(m => !m.id_categoria);
+    if (m) return { data: m.data_limite, origem: u ? ((arv.porId[u] || {}).sigla || 'unidade') : 'instituição', descricao: m.descricao };
+  }
+  return null;
+}
+
+// Demanda homologada + cadeia de valores + prazo + cobranças.
+function _montarDemanda(d, arv, prazos, proprios, cobs) {
+  const v = { ...d };
+  ['valor_estimado','requisitado','saldo','aprovado','empenhado','liquidado','pago','residuo'].forEach(k => v[k] = _n(d[k]));
+  // Paga/liquidada só quando cobre todo o aprovado; antes disso, "em execução".
+  v.situacao = d.encerrada ? 'encerrada'
+             : v.aprovado > 0 && v.pago >= v.aprovado - 0.005 ? 'paga'
+             : v.aprovado > 0 && v.liquidado >= v.aprovado - 0.005 ? 'liquidada'
+             : v.liquidado > 0 ? 'em_execucao' : v.empenhado > 0 ? 'empenhada'
+             : v.aprovado > 0 ? 'aprovada' : v.requisitado > 0 ? 'requisitada' : 'sem_requisicao';
+  v.situacao_nome = SIT_DEMANDA[v.situacao];
+  v.pct_execucao = v.valor_estimado ? Math.round(v.liquidado / v.valor_estimado * 100) : 0;
+  const pr = _prazoDemanda(d, arv, prazos, proprios);
+  v.prazo = pr ? pr.data : null;
+  v.prazo_origem = pr ? pr.origem : null;
+  v.prazo_motivo = pr ? (pr.motivo || pr.descricao || '') : '';
+  v.dias_prazo = v.prazo ? _dias(v.prazo) : null;
+  v.estado_prazo = d.encerrada || v.saldo <= 0.005 ? 'nao_aplica'
+                 : !v.prazo ? 'sem_prazo'
+                 : v.dias_prazo < 0 ? 'vencido' : v.dias_prazo <= DIAS_ALERTA ? 'a_vencer' : 'no_prazo';
+  const minhas = cobs.filter(c => c.id_demanda === d.id_demanda);
+  v.n_cobrancas = minhas.length;
+  v.ultima_cobranca = minhas.length ? minhas[0].data_cobranca : null;
   return v;
 }
+
+// Conciliação pedido × empenho: por instrumento (ou forma direta) e por unidade.
+function _conciliar(reqs, emps) {
+  const consome = s => ['aprovada','em_solicitacao','empenhada','liquidada','paga'].includes(s);
+  const FORMAS = { bolsas_editais: 'Bolsas e editais', diarias: 'Diárias', outros: 'Outros' };
+  const grupo = (chave, nome) => (r, g) => {
+    const k = chave(r); const x = g[k] = g[k] || { chave: k, nome: nome(r), aprovado: 0, solicitado: 0, empenhado: 0, liquidado: 0, pago: 0, n: 0 };
+    if (!consome(r.situacao)) return;
+    x.n++; x.aprovado += _n(r.valor_real);
+    if (r.id_solicitacao && ['enviada','devolvida'].includes(r.situacao_solicitacao)) x.solicitado += _n(r.valor_real);
+    x.empenhado += _n(r.empenhado); x.liquidado += _n(r.liquidado); x.pago += _n(r.pago);
+  };
+  const montar = fn => {
+    const g = {}; reqs.forEach(r => fn(r, g));
+    return Object.values(g).filter(x => x.n).map(x => ({ ...x, a_empenhar: Math.max(0, x.solicitado - x.empenhado) }))
+      .sort((a, b) => b.aprovado - a.aprovado);
+  };
+  const porInstrumento = montar(grupo(r => r.id_instrumento || ('forma:' + r.forma + ':' + r.id_unidade_gestora),
+    r => r.id_instrumento ? ((r.tipo_instrumento === 'ata' ? 'Ata ' : r.tipo_instrumento === 'contrato' ? 'Contrato ' : '') + r.numero_instrumento + (r.fornecedor_nome ? ' — ' + r.fornecedor_nome : ''))
+                          : (FORMAS[r.forma] || r.forma) + ' — ' + r.sigla_gestora));
+  const porUnidade = montar(grupo(r => r.id_unidade, r => r.sigla_unidade));
+  const semVinculo = emps.filter(e => Math.abs(_n(e.sem_vinculo)) > 0.005)
+    .map(e => ({ id_empenho: e.id_empenho, numero: e.numero, valor_atual: _n(e.valor_atual), coberto: _n(e.coberto), sem_vinculo: _n(e.sem_vinculo) }));
+  const t = porInstrumento.reduce((a, x) => { ['aprovado','solicitado','empenhado','liquidado','pago','a_empenhar'].forEach(k => a[k] += x[k]); return a; },
+    { aprovado: 0, solicitado: 0, empenhado: 0, liquidado: 0, pago: 0, a_empenhar: 0 });
+  t.empenhos = emps.reduce((s, e) => s + _n(e.valor_atual), 0);
+  t.sem_vinculo = semVinculo.reduce((s, e) => s + e.sem_vinculo, 0);
+  return { por_instrumento: porInstrumento, por_unidade: porUnidade, sem_vinculo: semVinculo, total: t };
+}
+
+const _numReq = r => ({ ...r, valor: _n(r.valor), valor_real: r.valor_real == null ? null : _n(r.valor_real),
+  residuo: _n(r.residuo), empenhado: _n(r.empenhado), liquidado: _n(r.liquidado), pago: _n(r.pago) });
+const _numSol = s => ({ ...s, total_previsto: _n(s.total_previsto), total_real: _n(s.total_real), empenhado: _n(s.empenhado),
+  a_empenhar: _n(s.a_empenhar), saldo_instrumento: s.saldo_instrumento == null ? null : _n(s.saldo_instrumento) });
+const _numEmp = e => ({ ...e, valor_empenhado: _n(e.valor_empenhado), valor_atual: _n(e.valor_atual), coberto: _n(e.coberto), sem_vinculo: _n(e.sem_vinculo) });
+const _numLiq = l => ({ ...l, valor: _n(l.valor), coberto: _n(l.coberto), sem_vinculo: _n(l.sem_vinculo), pago: _n(l.pago), a_pagar: _n(l.a_pagar) });
 
 // Unidades e subárvores (para somas por estrutura).
 async function _arvore() {
@@ -737,10 +758,10 @@ const ACOES = {
     return { ok: true, valor_devolvido: v, saldo_livre_anterior: livre };
   },
 
-  // ─── Monitoramento da execução ─────────────────────────────────────────────
-  // Permissões ficam no banco (RLS + gatilhos): o Monitoramento da Reitoria
-  // enxerga tudo, o de um campus só o seu campus; demais perfis só leem o que
-  // está no seu escopo. Aqui só montamos os dados e calculamos situação/semáforo.
+  // ─── Monitoramento da execução (etapa 3 — 04/11/2026) ──────────────────────
+  // O Monitoramento acompanha a cadeia DEM → REQ → SOL → empenho → liquidação,
+  // lança liquidações e pagamentos, define prazos para requisitar e cobra.
+  // O da Reitoria vê tudo (com a chave Ver); o de um campus, só o seu campus.
   async mon_contexto() {
     const p = await _meuPerfil();
     if (!p) return { ok: false, erro: 'Sessão expirada.' };
@@ -752,11 +773,13 @@ const ACOES = {
       ? [{ valor: 'todos', nome: 'Toda a instituição' }, { valor: 'reitoria', nome: 'Reitoria (sem os campi)' },
          ...campi.map(c => ({ valor: c.id_unidade, nome: (c.sigla ? c.sigla + ' — ' : '') + c.nome.replace(/^[^–]*–\s*/, '') }))]
       : [];
+    const c = await sb();
+    const { data: cats } = await c.from('categorias_despesa').select('id_categoria,nome').order('nome');
     return {
       ok: true, papel: p.papel, raiz, opcoes_escopo: opcoes,
       unidade: un ? { id: un.id_unidade, sigla: un.sigla, nome: un.nome } : null,
       pode_editar: p.papel === 'monitoramento' || (p.papel === 'licitacoes' && !p.id_unidade_fk),
-      tipos_marco: TIPOS_MARCO, exercicio: await _exercicioAtual(),
+      exercicio: await _exercicioAtual(), categorias: cats || [],
       unidades: arv.lista.map(u => ({ id: u.id_unidade, sigla: u.sigla, nome: u.nome, tipo: u.tipo, pai: u.id_unidade_pai })),
     };
   },
@@ -766,293 +789,171 @@ const ACOES = {
     const ex = Number(exercicio || await _exercicioAtual());
     const arv = await _arvore();
     const dentro = _filtroEscopo(arv, escopo);
-    const [{ data: execs, error: e1 }, { data: emps, error: e2 }, { data: cal }, { data: overr },
-           { data: cobs }, { data: vincs }] = await Promise.all([
-      c.from('v_execucao_demandas').select('*').eq('exercicio', ex).order('codigo'),
-      c.from('v_empenhos_saldo').select('*').eq('exercicio', ex).order('data_emissao', { ascending: false }),
-      c.from('marcos_calendario').select('*').eq('exercicio', ex),
-      c.from('marcos_demanda').select('*'),
-      c.from('cobrancas').select('id_cobranca,id_demanda,tipo_marco,data_cobranca,canal').order('data_cobranca', { ascending: false }),
-      c.from('empenho_demandas').select('id_empenho,id_demanda'),
+    const [rD, rR, rS, rE, rC, rL, rI, rP, rPD, rCo] = await Promise.all([
+      c.from('v_demandas_saldo').select('*').eq('exercicio', ex).order('codigo'),
+      c.from('v_requisicoes').select('*').eq('exercicio', ex).neq('situacao', 'cancelada').order('codigo'),
+      c.from('v_solicitacoes').select('*').eq('exercicio', ex).order('codigo'),
+      c.from('v_empenhos').select('*').eq('exercicio', ex).order('numero'),
+      c.from('empenho_cobertura').select('id_empenho,id_requisicao,valor'),
+      c.from('v_liquidacoes').select('*').eq('exercicio', ex).order('data', { ascending: false }),
+      c.from('liquidacao_itens').select('id_liquidacao,id_requisicao,valor'),
+      c.from('prazos_requisicao').select('*').eq('exercicio', ex),
+      c.from('prazos_demanda').select('*'),
+      c.from('cobrancas').select('id_cobranca,id_demanda,data_cobranca,canal').order('data_cobranca', { ascending: false }),
     ]);
-    if (e1) return { ok: false, erro: _erro(e1) };
-    if (e2) return { ok: false, erro: _erro(e2) };
+    const erro = [rD, rR, rS, rE, rC, rL, rI, rP, rPD, rCo].find(r => r.error);
+    if (erro) return { ok: false, erro: _erro(erro.error) };
 
-    const demandas = (execs || []).filter(d => dentro(d.id_unidade_fk))
-      .map(d => _montarExecucao(d, arv, cal || [], overr || [], cobs || []));
-    const idsDem = new Set(demandas.map(d => d.id_demanda));
-    const empComDemanda = new Set((vincs || []).filter(v => idsDem.has(v.id_demanda)).map(v => v.id_empenho));
-    const empenhos = (emps || []).filter(e => dentro(e.id_unidade_gestora_fk) || empComDemanda.has(e.id_empenho))
-      .map(e => ({ ...e, ...['valor_empenhado','valor_atual','reservado','pedido','liquidado','pago','saldo_empenho','saldo_a_reservar']
-        .reduce((o, k) => (o[k] = Number(e[k] || 0), o), {}) }));
+    const reqs = (rR.data || []).filter(r => dentro(r.id_unidade)).map(_numReq);
+    const idsReq = new Set(reqs.map(r => r.id_requisicao));
+    const cob = (rC.data || []).filter(x => idsReq.has(x.id_requisicao));
+    const itens = (rI.data || []).filter(x => idsReq.has(x.id_requisicao));
+    const todosOuRaiz = !escopo || escopo === 'todos';
+    const empIds = new Set(cob.map(x => x.id_empenho));
+    const empenhos = (rE.data || []).filter(e => empIds.has(e.id_empenho) || (todosOuRaiz && !_n(e.coberto))).map(_numEmp);
+    const solIds = new Set(reqs.filter(r => r.id_solicitacao).map(r => r.id_solicitacao));
+    const solicitacoes = (rS.data || []).filter(s => solIds.has(s.id_solicitacao) || dentro(s.id_unidade_gestora)).map(_numSol);
+    const liqIds = new Set(itens.map(x => x.id_liquidacao));
+    const liquidacoes = (rL.data || []).filter(l => liqIds.has(l.id_liquidacao)).map(_numLiq);
+    const demandas = (rD.data || []).filter(d => dentro(d.id_unidade_fk))
+      .map(d => _montarDemanda(d, arv, rP.data || [], rPD.data || [], rCo.data || []));
 
-    // Calendário: a Reitoria vê e edita todos os marcos; um campus vê os da
-    // instituição e os da sua estrutura, e edita só os da sua estrutura.
+    // Calendário: a Reitoria vê e edita todos; um campus vê os da instituição e
+    // os da sua estrutura, e edita só os da sua estrutura.
     const eu = await _meuPerfil();
     const minha = eu && eu.id_unidade_fk;
     const raiz = !minha || !arv.pai[minha];
     const minhaSub = minha ? arv.sub(minha) : [];
     const acima = []; { let x = minha, i = 0; while (x && i++ < 30) { acima.push(x); x = arv.pai[x]; } }
     const editor = eu && (eu.papel === 'monitoramento' || (eu.papel === 'licitacoes' && !eu.id_unidade_fk));
-    const calendario = (cal || [])
+    const { data: cats } = await c.from('categorias_despesa').select('id_categoria,nome');
+    const nomeCat = Object.fromEntries((cats || []).map(x => [x.id_categoria, x.nome]));
+    const calendario = (rP.data || [])
       .filter(m => raiz || !m.id_unidade_escopo || minhaSub.includes(m.id_unidade_escopo) || acima.includes(m.id_unidade_escopo))
       .map(m => ({
-        ...m, tipo_nome: _nomeMarco(m.tipo),
+        ...m, categoria_nome: m.id_categoria ? (nomeCat[m.id_categoria] || '') : 'Todas as categorias',
         escopo_nome: m.id_unidade_escopo ? ((arv.porId[m.id_unidade_escopo] || {}).sigla || '') : 'Toda a instituição',
+        n_demandas: demandas.filter(d => d.prazo === m.data_limite && d.prazo_origem !== 'proprio').length,
         editavel: !!editor && (raiz || (!!m.id_unidade_escopo && minhaSub.includes(m.id_unidade_escopo))),
       })).sort((a, b) => String(a.data_limite).localeCompare(String(b.data_limite)));
 
-    const soma = (l, k) => l.reduce((t, d) => t + Number(d[k] || 0), 0);
+    const soma = (l, k) => l.reduce((t, d) => t + _n(d[k]), 0);
     const agrupar = chave => {
       const g = {};
       demandas.forEach(d => {
         const k = d[chave] || 'Sem categoria';
-        const x = g[k] = g[k] || { nome: k, n: 0, planejado: 0, reservado: 0, pedido: 0, pago: 0, atrasadas: 0 };
-        x.n++; x.planejado += d.valor_estimado; x.reservado += d.reservado; x.pedido += d.pedido; x.pago += d.pago;
-        if (d.pior_estado === 'vencido') x.atrasadas++;
+        const x = g[k] = g[k] || { nome: k, n: 0, homologado: 0, requisitado: 0, aprovado: 0, empenhado: 0, liquidado: 0, pago: 0, vencidas: 0 };
+        x.n++; ['requisitado','aprovado','empenhado','liquidado','pago'].forEach(f => x[f] += d[f]); x.homologado += d.valor_estimado;
+        if (d.estado_prazo === 'vencido') x.vencidas++;
       });
-      return Object.values(g).sort((a, b) => b.planejado - a.planejado);
+      return Object.values(g).sort((a, b) => b.homologado - a.homologado);
     };
     const porSituacao = {};
     demandas.forEach(d => { porSituacao[d.situacao] = (porSituacao[d.situacao] || 0) + 1; });
-    const pendencias = [];
-    demandas.forEach(d => d.marcos.forEach(m => {
-      if (m.estado === 'vencido' || m.estado === 'a_vencer')
-        pendencias.push({ id_demanda: d.id_demanda, codigo: d.codigo, descricao_objeto: d.descricao_objeto,
-          sigla_unidade: d.sigla_unidade, id_unidade_fk: d.id_unidade_fk, ...m, ultima_cobranca: d.cobrancas_por_marco[m.tipo] || null });
-    }));
-    pendencias.sort((a, b) => (a.estado === b.estado ? 0 : a.estado === 'vencido' ? -1 : 1) || String(a.prazo).localeCompare(String(b.prazo)));
-
+    const pendencias = demandas.filter(d => d.estado_prazo === 'vencido' || d.estado_prazo === 'a_vencer')
+      .sort((a, b) => (a.estado_prazo === b.estado_prazo ? 0 : a.estado_prazo === 'vencido' ? -1 : 1) || String(a.prazo).localeCompare(String(b.prazo)));
+    const residuos = [
+      ...reqs.filter(r => r.residuo > 0.005).map(r => ({ tipo: 'residuo', codigo: r.codigo, codigo_demanda: r.codigo_demanda,
+        id_demanda: r.id_demanda, sigla_unidade: r.sigla_unidade, categoria: r.categoria, valor: r.residuo,
+        instrumento: r.numero_instrumento ? (r.tipo_instrumento === 'ata' ? 'Ata ' : 'Contrato ') + r.numero_instrumento : '—',
+        descricao_objeto: r.descricao_objeto })),
+      ...demandas.filter(d => d.encerrada && d.saldo > 0.005).map(d => ({ tipo: 'nao_requisitado', codigo: '', codigo_demanda: d.codigo,
+        id_demanda: d.id_demanda, sigla_unidade: d.sigla_unidade, categoria: d.categoria, valor: d.saldo, instrumento: '—',
+        descricao_objeto: d.descricao_objeto, motivo: d.motivo_encerramento })),
+    ];
     return {
-      ok: true, exercicio: ex, demandas, empenhos, calendario, pendencias,
+      ok: true, exercicio: ex, demandas, requisicoes: reqs, solicitacoes, empenhos, liquidacoes, calendario, pendencias, residuos,
+      cobertura: cob, itens_liquidacao: itens,
+      conciliacao: _conciliar(reqs, empenhos),
       resumo: {
-        n: demandas.length, planejado: soma(demandas, 'valor_estimado'), reservado: soma(demandas, 'reservado'),
-        pedido: soma(demandas, 'pedido'), liquidado: soma(demandas, 'liquidado'), pago: soma(demandas, 'pago'),
+        n: demandas.length, homologado: soma(demandas, 'valor_estimado'), requisitado: soma(demandas, 'requisitado'),
+        aprovado: soma(demandas, 'aprovado'), empenhado: soma(demandas, 'empenhado'), liquidado: soma(demandas, 'liquidado'),
+        pago: soma(demandas, 'pago'), saldo_requisitar: soma(demandas.filter(d => !d.encerrada), 'saldo'),
+        residuos: residuos.reduce((t, x) => t + x.valor, 0),
         por_situacao: porSituacao, por_unidade: agrupar('sigla_unidade'), por_categoria: agrupar('categoria'),
-        vencidos: pendencias.filter(p => p.estado === 'vencido').length,
-        a_vencer: pendencias.filter(p => p.estado === 'a_vencer').length,
+        vencidos: pendencias.filter(p => p.estado_prazo === 'vencido').length,
+        a_vencer: pendencias.filter(p => p.estado_prazo === 'a_vencer').length,
       },
     };
   },
 
+  // Ficha da demanda: cadeia DEM → REQ → SOL → empenho → liquidação, prazo e cobranças.
   async mon_ficha({ id_demanda }) {
     const c = await sb();
     const arv = await _arvore();
-    const [{ data: ex, error }, { data: cal }, { data: overr }, { data: cobs }, { data: vincs }] = await Promise.all([
-      c.from('v_execucao_demandas').select('*').eq('id_demanda', id_demanda).maybeSingle(),
-      c.from('marcos_calendario').select('*'),
-      c.from('marcos_demanda').select('*').eq('id_demanda', id_demanda),
+    const { data: d, error } = await c.from('v_demandas_saldo').select('*').eq('id_demanda', id_demanda).maybeSingle();
+    if (error) return { ok: false, erro: _erro(error) };
+    if (!d) return { ok: false, erro: 'Demanda não encontrada ou não homologada.' };
+    const [rR, rP, rPD, rCo] = await Promise.all([
+      c.from('v_requisicoes').select('*').eq('id_demanda', id_demanda).order('codigo'),
+      c.from('prazos_requisicao').select('*').eq('exercicio', d.exercicio),
+      c.from('prazos_demanda').select('*').eq('id_demanda', id_demanda),
       c.from('cobrancas').select('*, perfis(nome)').eq('id_demanda', id_demanda).order('data_cobranca', { ascending: false }),
-      c.from('empenho_demandas').select('*, empenhos(numero,data_emissao,favorecido_nome,natureza_despesa,tipo), execucoes(*)')
-        .eq('id_demanda', id_demanda).order('data_criacao'),
     ]);
-    if (error) return { ok: false, erro: _erro(error) };
-    if (!ex) return { ok: false, erro: 'Demanda não encontrada ou não homologada.' };
-    const demanda = _montarExecucao(ex, arv, (cal || []).filter(m => m.exercicio === ex.exercicio), overr || [], cobs || []);
-    const vinculos = (vincs || []).map(v => {
-      const execucoes = (v.execucoes || []).sort((a, b) => String(a.data_pedido).localeCompare(String(b.data_pedido)))
-        .map(x => ({ ...x, valor: Number(x.valor), valor_liquidado: Number(x.valor_liquidado), valor_pago: Number(x.valor_pago) }));
-      const pedido = execucoes.reduce((t, x) => t + x.valor, 0);
-      return { id_vinculo: v.id_vinculo, id_empenho: v.id_empenho, valor_reservado: Number(v.valor_reservado),
-               observacao: v.observacao, empenho: v.empenhos || {}, execucoes, pedido,
-               saldo_reserva: Number(v.valor_reservado) - pedido };
-    });
-    return {
-      ok: true, demanda, vinculos,
-      cobrancas: (cobs || []).map(x => ({ ...x, autor: x.perfis ? x.perfis.nome : '', tipo_nome: _nomeMarco(x.tipo_marco) })),
-      prazos_proprios: overr || [],
-    };
-  },
-
-  async mon_empenho({ id_empenho }) {
-    const c = await sb();
-    const [{ data: e, error }, { data: movs }, { data: vincs }] = await Promise.all([
-      c.from('v_empenhos_saldo').select('*').eq('id_empenho', id_empenho).maybeSingle(),
-      c.from('empenho_movimentos').select('*').eq('id_empenho', id_empenho).order('data'),
-      c.from('empenho_demandas').select('*, demandas(codigo,descricao_objeto,valor_estimado,unidades(sigla)), execucoes(*)')
-        .eq('id_empenho', id_empenho).order('data_criacao'),
-    ]);
-    if (error) return { ok: false, erro: _erro(error) };
-    if (!e) return { ok: false, erro: 'Empenho não encontrado.' };
-    const vinculos = (vincs || []).map(v => {
-      const xs = (v.execucoes || []).sort((a, b) => String(a.data_pedido).localeCompare(String(b.data_pedido)));
-      const pedido = xs.reduce((t, x) => t + Number(x.valor), 0);
-      const d = v.demandas || {};
-      return {
-        id_vinculo: v.id_vinculo, id_demanda: v.id_demanda, codigo: d.codigo, descricao_objeto: d.descricao_objeto,
-        sigla_unidade: d.unidades ? d.unidades.sigla : '', valor_estimado: Number(d.valor_estimado || 0),
-        valor_reservado: Number(v.valor_reservado), pedido,
-        liquidado: xs.reduce((t, x) => t + Number(x.valor_liquidado), 0), pago: xs.reduce((t, x) => t + Number(x.valor_pago), 0),
-        saldo_reserva: Number(v.valor_reservado) - pedido,
-        ultimo_pedido: xs.length ? xs[xs.length - 1].data_pedido : null,
-        execucoes: xs.map(x => ({ ...x, valor: Number(x.valor), valor_liquidado: Number(x.valor_liquidado), valor_pago: Number(x.valor_pago) })),
-      };
-    });
-    const num = k => Number(e[k] || 0);
+    const reqs = (rR.data || []).map(_numReq);
+    const ids = reqs.map(r => r.id_requisicao);
+    let cob = [], itens = [];
+    if (ids.length) {
+      const [a, b] = await Promise.all([
+        c.from('empenho_cobertura').select('id_requisicao,valor,empenhos(numero,data_emissao,acao_governo,natureza_despesa)').in('id_requisicao', ids),
+        c.from('liquidacao_itens').select('id_requisicao,valor,liquidacoes(documento,data)').in('id_requisicao', ids),
+      ]);
+      cob = a.data || []; itens = b.data || [];
+    }
     return {
       ok: true,
-      empenho: { ...e, valor_empenhado: num('valor_empenhado'), valor_atual: num('valor_atual'), reservado: num('reservado'),
-                 pedido: num('pedido'), liquidado: num('liquidado'), pago: num('pago'),
-                 saldo_empenho: num('saldo_empenho'), saldo_a_reservar: num('saldo_a_reservar') },
-      movimentos: (movs || []).map(m => ({ ...m, valor: Number(m.valor) })),
-      vinculos,
+      demanda: _montarDemanda(d, arv, rP.data || [], rPD.data || [], rCo.data || []),
+      requisicoes: reqs.map(r => ({
+        ...r,
+        empenhos: cob.filter(x => x.id_requisicao === r.id_requisicao).map(x => ({ ...(x.empenhos || {}), valor: _n(x.valor) })),
+        liquidacoes: itens.filter(x => x.id_requisicao === r.id_requisicao).map(x => ({ ...(x.liquidacoes || {}), valor: _n(x.valor) })),
+      })),
+      prazo_proprio: (rPD.data || [])[0] || null,
+      cobrancas: (rCo.data || []).map(x => ({ ...x, autor: x.perfis ? x.perfis.nome : '' })),
     };
   },
 
-  async mon_salvar_empenho({ empenho }) {
+  async mon_salvar_prazo(params) {
     const c = await sb();
     const p = await _meuPerfil();
-    const x = { ...empenho };
-    ['numero', 'data_emissao', 'id_unidade_gestora_fk', 'valor_empenhado'].forEach(k => { if (typeof x[k] === 'string') x[k] = x[k].trim(); });
-    if (!x.numero) return { ok: false, erro: 'Informe o número do empenho.' };
-    if (!x.data_emissao) return { ok: false, erro: 'Informe a data de emissão.' };
-    if (!x.id_unidade_gestora_fk) return { ok: false, erro: 'Informe a unidade gestora.' };
-    if (!(Number(x.valor_empenhado) > 0)) return { ok: false, erro: 'Informe o valor empenhado.' };
-    x.numero = x.numero.toUpperCase();
-    x.valor_empenhado = Number(x.valor_empenhado);
-    x.exercicio = Number(x.exercicio || String(x.data_emissao).slice(0, 4));
-    if (!x.fonte_codigo) x.fonte_codigo = null;
-    const campos = ['numero','exercicio','id_unidade_gestora_fk','ug_codigo','data_emissao','favorecido_cnpj','favorecido_nome',
-                    'natureza_despesa','fonte_codigo','processo_sei','tipo','valor_empenhado','observacao'];
-    const dados = Object.fromEntries(campos.filter(k => k in x).map(k => [k, x[k] === '' ? null : x[k]]));
-    let r;
-    if (x.id_empenho) r = await c.from('empenhos').update(dados).eq('id_empenho', x.id_empenho).select('id_empenho').single();
-    else r = await c.from('empenhos').insert({ ...dados, criado_por: p.id_usuario }).select('id_empenho').single();
-    if (r.error) return { ok: false, erro: /duplicate|unique/i.test(r.error.message) ? 'Já existe um empenho com este número nesta UG.' : _erro(r.error) };
-    return { ok: true, id_empenho: r.data.id_empenho };
-  },
-
-  async mon_movimento({ id_empenho, tipo, valor, data, documento, observacao }) {
-    const c = await sb();
-    const p = await _meuPerfil();
-    if (!['reforco', 'anulacao'].includes(tipo)) return { ok: false, erro: 'Tipo inválido.' };
-    if (!(Number(valor) > 0) || !data) return { ok: false, erro: 'Informe valor e data.' };
-    const { error } = await c.from('empenho_movimentos').insert({
-      id_empenho, tipo, valor: Number(valor), data, documento: documento || null, observacao: observacao || null, criado_por: p.id_usuario });
-    return error ? { ok: false, erro: _erro(error) } : { ok: true };
-  },
-
-  async mon_excluir_movimento({ id_movimento }) {
-    const c = await sb();
-    const { error } = await c.from('empenho_movimentos').delete().eq('id_movimento', id_movimento);
-    return error ? { ok: false, erro: _erro(error) } : { ok: true };
-  },
-
-  async mon_vincular({ id_empenho, id_demanda, codigo, valor_reservado, observacao }) {
-    const c = await sb();
-    const p = await _meuPerfil();
-    let idDem = id_demanda;
-    if (!idDem && codigo) {
-      const { data } = await c.from('demandas').select('id_demanda,status').eq('codigo', String(codigo).trim().toUpperCase()).maybeSingle();
-      if (!data) return { ok: false, erro: 'Demanda ' + codigo + ' não encontrada no seu escopo.' };
-      idDem = data.id_demanda;
-    }
-    if (!idDem) return { ok: false, erro: 'Informe a demanda.' };
-    if (!(Number(valor_reservado) > 0)) return { ok: false, erro: 'Informe o valor a reservar.' };
-    const { error } = await c.from('empenho_demandas').insert({
-      id_empenho, id_demanda: idDem, valor_reservado: Number(valor_reservado), observacao: observacao || null, criado_por: p.id_usuario });
-    if (error && /duplicate|unique/i.test(error.message)) return { ok: false, erro: 'Esta demanda já tem reserva neste empenho; altere o valor da reserva existente.' };
-    return error ? { ok: false, erro: _erro(error) } : { ok: true };
-  },
-
-  async mon_editar_vinculo({ id_vinculo, valor_reservado }) {
-    const c = await sb();
-    if (!(Number(valor_reservado) > 0)) return { ok: false, erro: 'Informe o valor a reservar.' };
-    const { error } = await c.from('empenho_demandas').update({ valor_reservado: Number(valor_reservado) }).eq('id_vinculo', id_vinculo);
-    return error ? { ok: false, erro: _erro(error) } : { ok: true };
-  },
-
-  async mon_excluir_vinculo({ id_vinculo }) {
-    const c = await sb();
-    const { error } = await c.from('empenho_demandas').delete().eq('id_vinculo', id_vinculo);
-    if (error && /foreign key|violates/i.test(error.message)) return { ok: false, erro: 'A reserva já tem pedidos lançados; exclua os pedidos antes.' };
-    return error ? { ok: false, erro: _erro(error) } : { ok: true };
-  },
-
-  async mon_pedido(params) {
-    const c = await sb();
-    const p = await _meuPerfil();
-    const x = params.pedido || params;
-    if (!x.id_vinculo) return { ok: false, erro: 'Selecione a reserva (empenho e demanda).' };
-    if (!x.data_pedido || !(Number(x.valor) > 0)) return { ok: false, erro: 'Informe data e valor do pedido.' };
-    const dados = {
-      id_vinculo: x.id_vinculo, data_pedido: x.data_pedido, valor: Number(x.valor),
-      tipo_documento: x.tipo_documento || 'ordem_fornecimento', numero_documento: x.numero_documento || null,
-      descricao: x.descricao || null, nota_fiscal: x.nota_fiscal || null,
-      data_liquidacao: x.data_liquidacao || null, valor_liquidado: Number(x.valor_liquidado || 0),
-      data_pagamento: x.data_pagamento || null, valor_pago: Number(x.valor_pago || 0),
-    };
-    if (dados.valor_liquidado > dados.valor) return { ok: false, erro: 'O valor liquidado não pode passar do valor do pedido.' };
-    if (dados.valor_pago > dados.valor_liquidado) return { ok: false, erro: 'O valor pago não pode passar do liquidado.' };
-    let r;
-    if (x.id_execucao) r = await c.from('execucoes').update(dados).eq('id_execucao', x.id_execucao);
-    else r = await c.from('execucoes').insert({ ...dados, criado_por: p.id_usuario });
-    return r.error ? { ok: false, erro: _erro(r.error) } : { ok: true };
-  },
-
-  async mon_excluir_pedido({ id_execucao }) {
-    const c = await sb();
-    const { error } = await c.from('execucoes').delete().eq('id_execucao', id_execucao);
-    return error ? { ok: false, erro: _erro(error) } : { ok: true };
-  },
-
-  // Processo (unidade ou Monitoramento) e encerramento (só Monitoramento — o banco confere).
-  async mon_salvar_execucao(params) {
-    const c = await sb();
-    const x = params.execucao || params;
-    if (!x.id_demanda) return { ok: false, erro: 'Demanda não informada.' };
-    const campos = ['processo_sei','data_abertura_processo','data_envio_processo','encerramento','justificativa_encerramento','data_encerramento'];
-    const dados = { id_demanda: x.id_demanda };
-    campos.forEach(k => { if (k in x) dados[k] = x[k] === '' ? null : x[k]; });
-    if (dados.processo_sei && !dados.data_abertura_processo && !('data_abertura_processo' in x))
-      dados.data_abertura_processo = new Date().toISOString().slice(0, 10);
-    if (dados.encerramento === 'nao_executada' && String(dados.justificativa_encerramento || '').trim().length < 5)
-      return { ok: false, erro: 'Justifique por que a demanda não será executada.' };
-    if (dados.encerramento && !dados.data_encerramento) dados.data_encerramento = new Date().toISOString().slice(0, 10);
-    const { error } = await c.from('execucao_demandas').upsert(dados, { onConflict: 'id_demanda' });
-    return error ? { ok: false, erro: _erro(error) } : { ok: true };
-  },
-
-  async mon_salvar_marco(params) {
-    const c = await sb();
-    const p = await _meuPerfil();
-    const x = params.marco || params;
-    if (!TIPOS_MARCO.some(t => t.valor === x.tipo)) return { ok: false, erro: 'Selecione o marco.' };
+    const x = params.prazo || params;
     if (!x.data_limite) return { ok: false, erro: 'Informe a data limite.' };
-    const dados = { exercicio: Number(x.exercicio), tipo: x.tipo, id_unidade_escopo: x.id_unidade_escopo || null,
+    const dados = { exercicio: Number(x.exercicio), id_unidade_escopo: x.id_unidade_escopo || null,
+                    id_categoria: x.id_categoria ? Number(x.id_categoria) : null,
                     data_limite: x.data_limite, descricao: x.descricao || null };
     let r;
-    if (x.id_marco) r = await c.from('marcos_calendario').update(dados).eq('id_marco', x.id_marco);
-    else r = await c.from('marcos_calendario').insert({ ...dados, criado_por: p.id_usuario });
-    if (r.error && /duplicate|unique/i.test(r.error.message)) return { ok: false, erro: 'Já existe esse marco para este exercício e escopo; edite o existente.' };
-    if (r.error && /row-level|42501/i.test(r.error.message))
-      return { ok: false, erro: 'Você só pode criar marcos para a sua unidade' + (p.id_unidade_fk ? '' : '') + '; marcos de toda a instituição são da Reitoria.' };
-    return r.error ? { ok: false, erro: _erro(r.error) } : { ok: true };
+    if (x.id_prazo) r = await c.from('prazos_requisicao').update(dados).eq('id_prazo', x.id_prazo).select('id_prazo');
+    else r = await c.from('prazos_requisicao').insert({ ...dados, criado_por: p.id_usuario }).select('id_prazo');
+    if (r.error && /duplicate|unique/i.test(r.error.message)) return { ok: false, erro: 'Já existe um prazo para este escopo e categoria neste exercício; edite o existente.' };
+    if (r.error && /row-level|42501/i.test(r.error.message)) return { ok: false, erro: 'Você só pode criar prazos para a sua estrutura; os de toda a instituição são da Reitoria.' };
+    if (r.error) return { ok: false, erro: _erro(r.error) };
+    return r.data && r.data.length ? { ok: true } : { ok: false, erro: 'Você não tem permissão para esta operação.' };
   },
 
-  async mon_excluir_marco({ id_marco }) {
+  async mon_excluir_prazo({ id_prazo }) {
     const c = await sb();
-    const { error } = await c.from('marcos_calendario').delete().eq('id_marco', id_marco);
-    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+    const { data, error } = await c.from('prazos_requisicao').delete().eq('id_prazo', id_prazo).select('id_prazo');
+    if (error) return { ok: false, erro: _erro(error) };
+    return data && data.length ? { ok: true } : { ok: false, erro: 'Você não tem permissão para esta operação.' };
   },
 
-  // Prazo específico de uma demanda (substitui o do calendário). data_limite vazia = volta ao calendário.
-  async mon_prazo_demanda({ id_demanda, tipo, data_limite, motivo }) {
+  // Prazo próprio da demanda (substitui o do calendário). Data vazia = volta ao calendário.
+  async mon_prazo_demanda({ id_demanda, data_limite, motivo }) {
     const c = await sb();
     const p = await _meuPerfil();
     let r;
-    if (!data_limite) r = await c.from('marcos_demanda').delete().eq('id_demanda', id_demanda).eq('tipo', tipo);
-    else r = await c.from('marcos_demanda').upsert({ id_demanda, tipo, data_limite, motivo: motivo || null, criado_por: p.id_usuario },
-                                                     { onConflict: 'id_demanda,tipo' });
+    if (!data_limite) r = await c.from('prazos_demanda').delete().eq('id_demanda', id_demanda);
+    else r = await c.from('prazos_demanda').upsert({ id_demanda, data_limite, motivo: motivo || null, criado_por: p.id_usuario },
+                                                    { onConflict: 'id_demanda' });
     return r.error ? { ok: false, erro: _erro(r.error) } : { ok: true };
   },
 
-  async mon_cobrar({ id_demanda, tipo_marco, canal, registro }) {
+  async mon_cobrar({ id_demanda, canal, registro }) {
     const c = await sb();
     const p = await _meuPerfil();
     if (String(registro || '').trim().length < 5) return { ok: false, erro: 'Descreva a cobrança (mínimo 5 caracteres).' };
     const { error } = await c.from('cobrancas').insert({
-      id_demanda, tipo_marco: tipo_marco || null, canal: canal || 'sei', registro: String(registro).trim(), criado_por: p.id_usuario });
+      id_demanda, canal: CANAIS_COBRANCA.includes(canal) ? canal : 'sei', registro: String(registro).trim(), criado_por: p.id_usuario });
     return error ? { ok: false, erro: _erro(error) } : { ok: true };
   },
 
@@ -1060,6 +961,186 @@ const ACOES = {
     const c = await sb();
     const { error } = await c.from('cobrancas').update({
       resposta: resposta || null, data_resposta: data_resposta || new Date().toISOString().slice(0, 10) }).eq('id_cobranca', id_cobranca);
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  // "Não será requisitada": tira a demanda das pendências (motivo vazio = desfaz).
+  async mon_encerrar({ id_demanda, motivo }) {
+    const c = await sb();
+    const p = await _meuPerfil();
+    let r;
+    if (!motivo) r = await c.from('encerramentos_demanda').delete().eq('id_demanda', id_demanda).select('id_demanda');
+    else {
+      if (String(motivo).trim().length < 5) return { ok: false, erro: 'Justifique por que o saldo não será requisitado.' };
+      r = await c.from('encerramentos_demanda').upsert({ id_demanda, motivo: String(motivo).trim(), criado_por: p.id_usuario },
+                                                       { onConflict: 'id_demanda' }).select('id_demanda');
+    }
+    if (r.error) return { ok: false, erro: _erro(r.error) };
+    return r.data && r.data.length ? { ok: true } : { ok: false, erro: 'Você não tem permissão para esta operação.' };
+  },
+
+  // Liquidações e pagamentos (o banco confere escopo e saldos).
+  async liq_detalhe({ id_liquidacao }) {
+    const c = await sb();
+    const [{ data: l, error }, { data: itens }, { data: pags }] = await Promise.all([
+      c.from('v_liquidacoes').select('*').eq('id_liquidacao', id_liquidacao).maybeSingle(),
+      c.from('liquidacao_itens').select('*').eq('id_liquidacao', id_liquidacao),
+      c.from('pagamentos').select('*').eq('id_liquidacao', id_liquidacao).order('data'),
+    ]);
+    if (error) return { ok: false, erro: _erro(error) };
+    if (!l) return { ok: false, erro: 'Liquidação não encontrada.' };
+    return { ok: true, liquidacao: _numLiq(l), itens: (itens || []).map(i => ({ ...i, valor: _n(i.valor) })),
+             pagamentos: (pags || []).map(x => ({ ...x, valor: _n(x.valor) })) };
+  },
+
+  async liq_salvar(params) {
+    const c = await sb();
+    const x = params.liquidacao || params;
+    const { data, error } = await c.rpc('liq_salvar', {
+      p_id: x.id_liquidacao || null, p_data: x.data || null, p_documento: x.documento || '',
+      p_valor: Number(x.valor || 0), p_observacao: x.observacao || '',
+      p_itens: (x.itens || []).map(i => ({ id_requisicao: i.id_requisicao, valor: Number(i.valor || 0) })),
+    });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true, ...data };
+  },
+
+  async liq_excluir({ id_liquidacao }) {
+    const c = await sb();
+    const { error } = await c.rpc('liq_excluir', { p_id: id_liquidacao });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  async pag_salvar(params) {
+    const c = await sb();
+    const x = params.pagamento || params;
+    const { error } = await c.rpc('pag_salvar', {
+      p_id: x.id_pagamento || null, p_liquidacao: x.id_liquidacao, p_data: x.data || null,
+      p_valor: Number(x.valor || 0), p_ordem_bancaria: x.ordem_bancaria || '', p_observacao: x.observacao || '',
+    });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  async pag_excluir({ id_pagamento }) {
+    const c = await sb();
+    const { error } = await c.rpc('pag_excluir', { p_id: id_pagamento });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  // ─── Solicitação de empenho (seção gestora) e empenhos (Orçamento) — etapa 2 ─
+  async sol_gerar({ ids_requisicoes, observacao }) {
+    const c = await sb();
+    const { data, error } = await c.rpc('sol_gerar', { p_requisicoes: ids_requisicoes || [], p_observacao: observacao || '' });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true, ...data };
+  },
+
+  // acao: enviar | cancelar | retirar (gestor) | devolver (Orçamento)
+  async sol_acao({ id_solicitacao, acao, motivo, id_requisicao }) {
+    const c = await sb();
+    const { data, error } = await c.rpc('sol_acao', { p_id: id_solicitacao, p_acao: acao, p_motivo: motivo || null,
+                                                      p_requisicao: id_requisicao || null });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true, ...data };
+  },
+
+  // Solicitação completa (para a tela e para o relatório em PDF).
+  async sol_detalhe({ id_solicitacao }) {
+    const c = await sb();
+    const [{ data: s, error }, { data: reqs }, { data: hist }] = await Promise.all([
+      c.from('v_solicitacoes').select('*').eq('id_solicitacao', id_solicitacao).maybeSingle(),
+      c.from('v_requisicoes').select('*').eq('id_solicitacao', id_solicitacao).order('codigo'),
+      c.from('solicitacao_historico').select('*, perfis(nome)').eq('id_solicitacao', id_solicitacao).order('data_hora'),
+    ]);
+    if (error) return { ok: false, erro: _erro(error) };
+    if (!s) return { ok: false, erro: 'Solicitação não encontrada.' };
+    const ids = (reqs || []).map(r => r.id_requisicao);
+    let cob = [];
+    if (ids.length) {
+      const { data } = await c.from('empenho_cobertura').select('id_requisicao,valor,id_empenho,empenhos(numero,data_emissao)').in('id_requisicao', ids);
+      cob = data || [];
+    }
+    return {
+      ok: true, solicitacao: _numSol(s),
+      requisicoes: (reqs || []).map(_numReq).map(r => ({ ...r,
+        empenhos: cob.filter(x => x.id_requisicao === r.id_requisicao).map(x => ({ id_empenho: x.id_empenho, valor: _n(x.valor), ...(x.empenhos || {}) })) })),
+      historico: (hist || []).map(h => ({ ...h, autor: h.perfis ? h.perfis.nome : '' })),
+    };
+  },
+
+  async emp_contexto() {
+    const p = await _meuPerfil();
+    if (!p) return { ok: false, erro: 'Sessão expirada.' };
+    const c = await sb();
+    const { data: fontes } = await c.from('fontes_recurso').select('codigo,nome').order('codigo');
+    return {
+      ok: true, papel: p.papel, pode_editar: p.papel === 'orcamento' || (p.papel === 'licitacoes' && !p.id_unidade_fk),
+      exercicio: await _exercicioAtual(), fontes: fontes || [], origens: ORIGENS_DOTACAO,
+    };
+  },
+
+  async emp_dados({ exercicio } = {}) {
+    const c = await sb();
+    const ex = Number(exercicio || await _exercicioAtual());
+    const [rS, rE, rR, rC] = await Promise.all([
+      c.from('v_solicitacoes').select('*').eq('exercicio', ex).not('situacao', 'in', '(elaboracao,cancelada)').order('data_envio', { ascending: false }),
+      c.from('v_empenhos').select('*').eq('exercicio', ex).order('numero'),
+      c.from('v_requisicoes').select('*').eq('exercicio', ex).not('id_solicitacao', 'is', null).order('codigo'),
+      c.from('empenho_cobertura').select('id_empenho,id_requisicao,valor'),
+    ]);
+    const erro = [rS, rE, rR, rC].find(r => r.error);
+    if (erro) return { ok: false, erro: _erro(erro.error) };
+    const reqs = (rR.data || []).map(_numReq);
+    const empenhos = (rE.data || []).map(_numEmp);
+    return { ok: true, exercicio: ex, solicitacoes: (rS.data || []).map(_numSol), empenhos, requisicoes: reqs,
+             cobertura: (rC.data || []).map(x => ({ ...x, valor: _n(x.valor) })), conciliacao: _conciliar(reqs, empenhos) };
+  },
+
+  async emp_detalhe({ id_empenho }) {
+    const c = await sb();
+    const [{ data: e, error }, { data: movs }, { data: cob }] = await Promise.all([
+      c.from('v_empenhos').select('*').eq('id_empenho', id_empenho).maybeSingle(),
+      c.from('empenho_movimentos').select('*').eq('id_empenho', id_empenho).order('data'),
+      c.from('empenho_cobertura').select('id_requisicao,valor').eq('id_empenho', id_empenho),
+    ]);
+    if (error) return { ok: false, erro: _erro(error) };
+    if (!e) return { ok: false, erro: 'Empenho não encontrado.' };
+    const ids = (cob || []).map(x => x.id_requisicao);
+    let reqs = [];
+    if (ids.length) { const { data } = await c.from('v_requisicoes').select('*').in('id_requisicao', ids).order('codigo'); reqs = data || []; }
+    return { ok: true, empenho: _numEmp(e), movimentos: (movs || []).map(m => ({ ...m, valor: _n(m.valor) })),
+             cobertura: (cob || []).map(x => ({ ...x, valor: _n(x.valor), requisicao: _numReq(reqs.find(r => r.id_requisicao === x.id_requisicao) || {}) })) };
+  },
+
+  async emp_salvar({ empenho, cobertura }) {
+    const c = await sb();
+    const e = { ...empenho };
+    const { data, error } = await c.rpc('emp_salvar', {
+      p_id: e.id_empenho || null,
+      p_dados: { numero: e.numero, data_emissao: e.data_emissao, origem: e.origem || '', fonte_codigo: e.fonte_codigo || '',
+                 acao_governo: e.acao_governo || '', natureza_despesa: e.natureza_despesa || '',
+                 valor_empenhado: Number(e.valor_empenhado || 0), id_instrumento: e.id_instrumento || '',
+                 favorecido_cnpj: e.favorecido_cnpj || '', favorecido_nome: e.favorecido_nome || '', observacao: e.observacao || '' },
+      p_cobertura: cobertura ? cobertura.map(x => ({ id_requisicao: x.id_requisicao, valor: Number(x.valor || 0) })) : null,
+    });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true, ...data };
+  },
+
+  async emp_excluir({ id_empenho }) {
+    const c = await sb();
+    const { error } = await c.rpc('emp_excluir', { p_id: id_empenho });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  async emp_movimento({ id_empenho, tipo, valor, data, documento, observacao }) {
+    const c = await sb();
+    if (!['reforco', 'anulacao'].includes(tipo)) return { ok: false, erro: 'Tipo inválido.' };
+    if (!(Number(valor) > 0) || !data) return { ok: false, erro: 'Informe valor e data.' };
+    const { error } = await c.rpc('emp_movimento', { p_empenho: id_empenho, p_tipo: tipo, p_valor: Number(valor), p_data: data,
+                                                     p_documento: documento || '', p_observacao: observacao || '' });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  async emp_excluir_movimento({ id_movimento }) {
+    const c = await sb();
+    const { error } = await c.rpc('emp_excluir_movimento', { p_id: id_movimento });
     return error ? { ok: false, erro: _erro(error) } : { ok: true };
   },
 
@@ -1146,9 +1227,12 @@ const ACOES = {
       qi = qi.eq('id_unidade_gestora', ctx.unidade.id);
       qr = qr.eq('id_unidade_gestora', ctx.unidade.id);
     }
-    const [{ data: inst, error: e1 }, { data: reqs, error: e2 }] = await Promise.all([qi, qr]);
-    if (e1 || e2) return { ok: false, erro: _erro(e1 || e2) };
-    return { ok: true, exercicio: ex, instrumentos: inst || [], requisicoes: reqs || [], admin_global: ctx.admin_global };
+    let qs = c.from('v_solicitacoes').select('*').eq('exercicio', ex).neq('situacao', 'cancelada').order('codigo', { ascending: false });
+    if (!ctx.admin_global) qs = qs.eq('id_unidade_gestora', ctx.unidade.id);
+    const [{ data: inst, error: e1 }, { data: reqs, error: e2 }, { data: sols, error: e3 }] = await Promise.all([qi, qr, qs]);
+    if (e1 || e2 || e3) return { ok: false, erro: _erro(e1 || e2 || e3) };
+    return { ok: true, exercicio: ex, instrumentos: inst || [], requisicoes: (reqs || []).map(_numReq),
+             solicitacoes: (sols || []).map(_numSol), admin_global: ctx.admin_global };
   },
 
   async ped_analisar({ id_requisicao, acao, valor_real, motivo }) {
@@ -1290,12 +1374,20 @@ const ACOES = {
 
     // pac_publico expoe as demandas ja enviadas (submetida em diante), sem
     // rascunhos nem excluidas. Nenhum dado pessoal: so a unidade.
-    const [{ data: pub, error: eD }, { data: saldos, error: eS }] = await Promise.all([
+    const [{ data: pub, error: eD }, { data: saldos, error: eS }, { data: execPub }] = await Promise.all([
       c.from('pac_publico').select('*').eq('exercicio', Number(ex)),
       c.from('saldos_publicos').select('*').eq('exercicio', Number(ex)),
+      c.from('execucao_publica').select('id_demanda,codigo,situacao,requisitado,aprovado,empenhado,liquidado').eq('exercicio', Number(ex)),
     ]);
     if (eD) return { ok: false, erro: _erro(eD) };
     if (eS) return { ok: false, erro: _erro(eS) };
+    // Execução por demanda (só valores e situações — sem empenho, fornecedor ou nota fiscal).
+    const execPorDem = {};
+    (execPub || []).forEach(r => {
+      const x = execPorDem[r.id_demanda] = execPorDem[r.id_demanda] || { n_req: 0, requisitado: 0, aprovado: 0, empenhado: 0, liquidado: 0, requisicoes: [] };
+      x.n_req++; ['requisitado','aprovado','empenhado','liquidado'].forEach(k => x[k] += Number(r[k] || 0));
+      x.requisicoes.push({ codigo: r.codigo, situacao: r.situacao, requisitado: Number(r.requisitado || 0) });
+    });
 
     const porId = Object.fromEntries((unidades || []).map(u => [u.id_unidade, u]));
     // No banco a manifestacao da chefia gera status 'aprovada'; a tela chama de 'de_acordo'.
@@ -1336,6 +1428,8 @@ const ACOES = {
         ass_homologacao: null, ass_reprovacao: null,
         justificativa_reprovacao: rep ? (rep.justificativa || '') : '',
         data_reprovacao: rep ? rep.data_hora : null,
+        execucao: d.status === 'homologada'
+          ? (execPorDem[d.id_demanda] || { n_req: 0, requisitado: 0, aprovado: 0, empenhado: 0, liquidado: 0, requisicoes: [] }) : null,
       };
     });
 
@@ -1402,6 +1496,8 @@ const ACOES = {
       anos,
       exercicio: ex,
       arvoreOrcamento,
+      unidades_arvore: (unidades || []).map(u => ({ id: u.id_unidade, sigla: u.sigla, nome: u.nome, tipo: u.tipo, pai: u.id_unidade_pai })),
+      raiz_execucao: id_setor || id_unidade || null,
       total_valor: demandas.reduce((s, d) => s + Number(d.valor_estimado || 0), 0),
     };
   },
@@ -1523,7 +1619,7 @@ const PAGE_FILE_MAP = {
   admin: 'Admin.html', aprovacoes: 'Aprovacoes.html', dashboard: 'Dashboard.html',
   demandas: 'Demandas.html', homologacao: 'Homologacao.html', login: 'Login.html',
   orcamento: 'Orcamento.html', prioridades: 'Prioridades.html', monitoramento: 'Monitoramento.html',
-  requisicoes: 'Requisicoes.html', pedidos: 'Pedidos.html', instrumentos: 'Instrumentos.html',
+  requisicoes: 'Requisicoes.html', pedidos: 'Pedidos.html', instrumentos: 'Instrumentos.html', empenhos: 'Empenhos.html',
   publico: 'Publico.html', index: 'index.html',
 };
 
@@ -1541,6 +1637,7 @@ const _M = {
   requisicoes:  { label: 'Requisições', page: 'requisicoes', icon: 'cart' },
   pedidos:      { label: 'Gestão de pedidos', page: 'pedidos', icon: 'inbox' },
   instrumentos: { label: 'Contratos e atas', page: 'instrumentos', icon: 'briefcase' },
+  empenhos:     { label: 'Empenhos', page: 'empenhos', icon: 'file' },
   execucao:     { label: 'Execução', page: 'monitoramento', icon: 'activity' },
   monitorar:    { label: 'Monitoramento', page: 'monitoramento', icon: 'activity' },
 };
@@ -1549,8 +1646,9 @@ const PMO_MENUS = {
   chefia:        [_M.inicio, _M.minhas, _M.aprovar, _M.orcamento, _M.requisicoes, _M.pedidos, _M.execucao],
   ord_despesas:  [_M.inicio, _M.aprovacoes, _M.orcamento, _M.gut, _M.homologar, _M.pedidos, _M.monitorar],
   licitacoes:    [_M.inicio, _M.usuarios, _M.todas, _M.orcamento, _M.aprovacoes, _M.gut, _M.homologar,
-                  _M.instrumentos, _M.requisicoes, _M.pedidos, _M.monitorar],
+                  _M.instrumentos, _M.requisicoes, _M.pedidos, _M.empenhos, _M.monitorar],
   monitoramento: [_M.inicio, _M.monitorar],
+  orcamento:     [_M.inicio, _M.empenhos],
 };
 const PMO_ICONS = {
   home: '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
@@ -1564,6 +1662,7 @@ const PMO_ICONS = {
   cart: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/>',
   inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>',
   briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/>',
+  file: '<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>',
 };
 // Exercícios oferecidos nos seletores: de 2026 até 2036 (ou dois anos à frente, se maior).
 const PMO_ANO_INICIAL = 2026;

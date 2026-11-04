@@ -207,7 +207,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="api.js?v=202611041400"></script>
+<script src="api.js?v=202611041700"></script>
 <script>
   const token = localStorage.getItem('pac_token') || '';
   let _usuario = null, _ctx = null, _dados = null;
@@ -471,6 +471,10 @@
           <div><span>Instrumento</span><b>${x.numero_instrumento ? esc(TIPOS_INST[x.tipo_instrumento]||'') + ' ' + esc(x.numero_instrumento) : '—'}</b>${x.fornecedor_nome ? `<div style="font-size:11px;color:#888780">${esc(x.fornecedor_nome)}</div>` : ''}</div>
           <div><span>Seção gestora</span><b>${esc(x.sigla_gestora)}</b></div>
           ${x.observacao ? `<div class="largo"><span>Observação</span>${esc(x.observacao)}</div>` : ''}</div></div>
+      ${x.codigo_solicitacao || Number(x.empenhado) ? `<div class="bloco"><div class="bloco-titulo">Execução</div>
+        <div class="dados-dem"><div><span>Solicitação de empenho</span><b>${esc(x.codigo_solicitacao||'—')}</b></div>
+          <div><span>Empenhado</span><b>${fmtV(x.empenhado)}</b></div><div><span>Liquidado</span><b>${fmtV(x.liquidado)}</b></div>
+          <div><span>Pago</span><b>${fmtV(x.pago)}</b></div></div></div>` : ''}
       <div class="bloco"><div class="bloco-titulo">Histórico</div><div class="caixa hist" id="hist"><div class="carregando">Carregando…</div></div></div>
       <div class="rodape">${editavel ? `<button class="btn btn-r" style="margin-right:auto" onclick="cancelarRequisicao('${x.id_requisicao}')">Cancelar requisição</button>
         <button class="btn btn-p" onclick="formRequisicao('${x.id_requisicao}')">${x.situacao === 'pendente' ? 'Readequar e reenviar' : 'Alterar'}</button>` : ''}
@@ -481,7 +485,9 @@
       : '<div class="vazio" style="padding:14px">Sem histórico.</div>';
   }
   const ACOES_HIST = { enviada: 'Enviada', reenviada: 'Readequada e reenviada', aprovar: 'Aprovada pelo gestor', devolver: 'Devolvida',
-    desfazer: 'Voltou para análise', cancelada: 'Cancelada', contratacao_concluida: 'Contratação concluída', contratacao_fracassada: 'Contratação fracassada' };
+    desfazer: 'Voltou para análise', cancelada: 'Cancelada', contratacao_concluida: 'Contratação concluída', contratacao_fracassada: 'Contratação fracassada',
+    solicitacao: 'Incluída em solicitação de empenho', solicitacao_cancelada: 'Solicitação de empenho cancelada',
+    retirada_da_solicitacao: 'Retirada da solicitação de empenho', execucao: 'Execução atualizada' };
 
 </script>
 </body>
