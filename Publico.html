@@ -328,7 +328,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202611041300"></script>
+<script src="api.js?v=202611041400"></script>
 <script>
   const APP_URL = APPS_SCRIPT_URL;
   const _di     = {};
@@ -342,7 +342,7 @@
   window.addEventListener('load', function() {
     // Popular anos
     const selAno = document.getElementById('f-ano');
-    const anos = (_di && _di.anos) ? _di.anos : [];
+    const anos = PMO_ANOS();
     if (anos.length === 0) {
       // Fallback: gerar anos manualmente
       const anoAtual = new Date().getFullYear();

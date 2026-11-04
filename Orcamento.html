@@ -301,7 +301,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202611041300"></script>
+<script src="api.js?v=202611041400"></script>
 <script>
   const token  = localStorage.getItem('pac_token') || '';
   const appUrl = APPS_SCRIPT_URL;
@@ -333,7 +333,7 @@
     if (!sel) return;
     const anoBase = Number(exercicioAtualCfg) || new Date().getFullYear();
     const anos = [];
-    for (let a = anoBase - 3; a <= anoBase + 2; a++) anos.push(a);
+    PMO_ANOS().forEach(a => anos.push(a));
     const atual = getExercicio() || exercicioAtualCfg;
     sel.innerHTML = anos.map(a =>
       `<option value="${a}" style="background:#3C3489;color:#fff"${String(a)===String(atual)?' selected':''}>${a}</option>`
@@ -641,7 +641,7 @@
     document.getElementById('erro-dotacao').style.display = 'none';
     const sel = document.getElementById('d-exercicio');
     sel.innerHTML = '';
-    for (let a = _exercicioAtual - 1; a <= _exercicioAtual + 2; a++) {
+    for (const a of PMO_ANOS()) {
       const opt = document.createElement('option');
       opt.value = a; opt.textContent = a;
       if (a === _exercicioAtual) opt.selected = true;

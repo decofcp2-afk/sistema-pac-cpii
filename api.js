@@ -1565,6 +1565,18 @@ const PMO_ICONS = {
   inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>',
   briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/>',
 };
+// Exercícios oferecidos nos seletores: de 2026 até 2036 (ou dois anos à frente, se maior).
+const PMO_ANO_INICIAL = 2026;
+function PMO_ANOS() {
+  const fim = Math.max(2036, new Date().getFullYear() + 2);
+  const anos = []; for (let a = PMO_ANO_INICIAL; a <= fim; a++) anos.push(a);
+  return anos;
+}
+window.PMO_ANOS = PMO_ANOS;
+try {
+  const e = sessionStorage.getItem('pac_exercicio');
+  if (e && Number(e) < PMO_ANO_INICIAL) sessionStorage.removeItem('pac_exercicio');
+} catch (e) {}
 window.PMO_MENUS = PMO_MENUS;
 window.PMO_ICONS = PMO_ICONS;
 

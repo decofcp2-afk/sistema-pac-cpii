@@ -193,7 +193,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="api.js?v=202611041300"></script>
+<script src="api.js?v=202611041400"></script>
 <script>
   const token = localStorage.getItem('pac_token') || '';
   let _usuario = null, _ctx = null, _dados = null, _aba = 'painel';
@@ -244,7 +244,7 @@
   function popularSeletorExercicios(atualCfg) {
     const base = Number(atualCfg) || new Date().getFullYear();
     const atual = getExercicio() || base;
-    const anos = []; for (let a = base - 3; a <= base + 2; a++) anos.push(a);
+    const anos = PMO_ANOS();
     $('sel-exercicio').innerHTML = anos.map(a => `<option value="${a}" style="background:#3C3489;color:#fff"${String(a)===String(atual)?' selected':''}>${a}</option>`).join('');
     if (!getExercicio()) sessionStorage.setItem('pac_exercicio', String(base));
   }
