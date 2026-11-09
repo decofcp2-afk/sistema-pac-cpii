@@ -1502,6 +1502,21 @@ const ACOES = {
     };
   },
 
+  // Acesso ao painel: aberto ao público (chave do administrador) ou só com login.
+  async painel_acesso() {
+    const c = await sb();
+    const [{ data: { session } }, { data: aberto, error }] = await Promise.all([
+      c.auth.getSession(), c.rpc('painel_publico_aberto'),
+    ]);
+    return { ok: true, logado: !!session, aberto: error ? false : !!aberto };
+  },
+
+  async painel_definir_publico({ aberto }) {
+    const c = await sb();
+    const { data, error } = await c.rpc('definir_painel_publico', { p_aberto: !!aberto });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true, aberto: !!data };
+  },
+
   async listar_unidades_publico() {
     const c = await sb();
     const { data, error } = await c.from('unidades_publicas')
@@ -1640,15 +1655,16 @@ const _M = {
   empenhos:     { label: 'Empenhos', page: 'empenhos', icon: 'file' },
   execucao:     { label: 'Execução', page: 'monitoramento', icon: 'activity' },
   monitorar:    { label: 'Monitoramento', page: 'monitoramento', icon: 'activity' },
+  painel:       { label: 'Painel', page: 'publico', icon: 'chart' },
 };
 const PMO_MENUS = {
-  chefe_secao:   [_M.inicio, _M.minhas, _M.requisicoes, _M.pedidos, _M.execucao],
-  chefia:        [_M.inicio, _M.minhas, _M.aprovar, _M.orcamento, _M.requisicoes, _M.pedidos, _M.execucao],
-  ord_despesas:  [_M.inicio, _M.aprovacoes, _M.orcamento, _M.gut, _M.homologar, _M.pedidos, _M.monitorar],
+  chefe_secao:   [_M.inicio, _M.minhas, _M.requisicoes, _M.pedidos, _M.execucao, _M.painel],
+  chefia:        [_M.inicio, _M.minhas, _M.aprovar, _M.orcamento, _M.requisicoes, _M.pedidos, _M.execucao, _M.painel],
+  ord_despesas:  [_M.inicio, _M.aprovacoes, _M.orcamento, _M.gut, _M.homologar, _M.pedidos, _M.monitorar, _M.painel],
   licitacoes:    [_M.inicio, _M.usuarios, _M.todas, _M.orcamento, _M.aprovacoes, _M.gut, _M.homologar,
-                  _M.instrumentos, _M.requisicoes, _M.pedidos, _M.empenhos, _M.monitorar],
-  monitoramento: [_M.inicio, _M.monitorar],
-  orcamento:     [_M.inicio, _M.empenhos],
+                  _M.instrumentos, _M.requisicoes, _M.pedidos, _M.empenhos, _M.monitorar, _M.painel],
+  monitoramento: [_M.inicio, _M.monitorar, _M.painel],
+  orcamento:     [_M.inicio, _M.empenhos, _M.painel],
 };
 const PMO_ICONS = {
   home: '<path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
@@ -1662,6 +1678,7 @@ const PMO_ICONS = {
   cart: '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/>',
   inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/>',
   briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/>',
+  chart: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
   file: '<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>',
 };
 // Exercícios oferecidos nos seletores: de 2026 até 2036 (ou dois anos à frente, se maior).

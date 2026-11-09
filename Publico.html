@@ -196,14 +196,14 @@
   <div class="header-info">
     <div class="header-mec">Ministério da Educação</div>
     <div class="header-nome">Colégio Pedro II</div>
-    <div class="header-sub">Planejamento e Monitoramento Orçamentário — Painel Público</div>
+    <div class="header-sub" id="header-sub">Planejamento e Monitoramento Orçamentário — Painel</div>
   </div>
 
   <!-- Botão login -->
   <div class="login-wrap">
-    <button class="btn-login-header" onclick="toggleLogin()">
+    <button class="btn-login-header" id="btn-login-header" onclick="toggleLogin()">
       <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      Acesso restrito
+      <span id="btn-login-rotulo">Acesso restrito</span>
     </button>
     <div class="login-dropdown" id="login-dropdown">
       <div class="login-dropdown-titulo">Entrar no sistema</div>
@@ -243,12 +243,27 @@
 <!-- ── Conteúdo público ── -->
 <div class="container">
 
+  <!-- Painel fechado ao público: só com login -->
+  <div id="painel-restrito" style="display:none;background:#fff;border:1px solid #D3D1C7;border-radius:12px;padding:40px 28px;text-align:center;margin-top:8px">
+    <div style="font-size:30px;margin-bottom:10px">🔒</div>
+    <div style="font-size:16px;font-weight:700;color:#1a1060;margin-bottom:8px">Painel de acesso restrito</div>
+    <p style="font-size:13px;color:#444441;line-height:1.7;max-width:520px;margin:0 auto 18px">
+      O painel do Planejamento e Monitoramento Orçamentário está disponível apenas para servidores com acesso ao sistema.
+      Entre com seu e-mail institucional e senha para consultar.
+    </p>
+    <button class="btn-buscar" onclick="event.stopPropagation();toggleLogin()">Entrar</button>
+  </div>
+
+  <div id="painel-conteudo" style="display:none">
   <!-- Apresentação -->
   <div style="background:#fff;border:1px solid #D3D1C7;border-radius:12px;padding:24px 28px;margin-bottom:20px">
     <div style="display:flex;align-items:flex-start;gap:16px">
       <div style="font-size:28px;flex-shrink:0">📋</div>
       <div>
-        <div style="font-size:15px;font-weight:700;color:#1a1060;margin-bottom:6px">Planejamento e Monitoramento Orçamentário — Painel Público</div>
+        <div style="font-size:15px;font-weight:700;color:#1a1060;margin-bottom:6px" id="painel-titulo">Planejamento e Monitoramento Orçamentário — Painel</div>
+        <p id="painel-aviso-restrito" style="display:none;font-size:12.5px;color:#633806;background:#FAEEDA;border-radius:8px;padding:8px 12px;margin-bottom:10px">
+          Acesso restrito: no momento, este painel só pode ser consultado por usuários logados no sistema.
+        </p>
         <p style="font-size:13px;color:#444441;line-height:1.7;margin-bottom:8px">
           Este painel demonstra à comunidade do Colégio Pedro II como o orçamento institucional está sendo distribuído internamente e quais demandas ele deverá atender, compondo o Plano Anual de Contratações (PAC). 
           <strong>Os valores apresentados são de planejamento e não representam a execução orçamentária ou das contratações</strong> — evidenciam quais áreas e necessidades estão sendo priorizadas.
@@ -362,9 +377,10 @@
       </div>
     </div>
   </div>
+  </div><!-- /painel-conteudo -->
 </div>
 
-<script src="api.js?v=202611041700"></script>
+<script src="api.js?v=202611091200"></script>
 <script>
   const APP_URL = APPS_SCRIPT_URL;
   const _di     = {};
@@ -374,8 +390,36 @@
   let _tokenSessao = null;
   let _emailLogin  = null;
 
+  // ── Acesso: painel aberto ao público ou só com login ──────────────────────
+  let _logado = false;
+  async function verificarAcessoPainel() {
+    let a = { logado: false, aberto: false };
+    try {
+      a = await new Promise((ok, falha) => google.script.run
+        .withSuccessHandler(ok).withFailureHandler(falha).chamarAcaoPublica('painel_acesso', '{}'));
+    } catch (e) {}
+    _logado = !!a.logado;
+    if (!a.logado && !a.aberto) {
+      document.getElementById('painel-restrito').style.display = '';
+      return false;
+    }
+    document.getElementById('painel-conteudo').style.display = '';
+    if (a.aberto) {
+      document.getElementById('header-sub').textContent = 'Planejamento e Monitoramento Orçamentário — Painel Público';
+      document.getElementById('painel-titulo').textContent = 'Planejamento e Monitoramento Orçamentário — Painel Público';
+    } else {
+      document.getElementById('painel-aviso-restrito').style.display = '';
+    }
+    if (a.logado) {
+      document.getElementById('btn-login-rotulo').textContent = 'Voltar ao sistema';
+      document.getElementById('btn-login-header').onclick = () => navegar('dashboard');
+    }
+    return true;
+  }
+
   // ── Popular filtros iniciais ───────────────────────────────────────────────
-  window.addEventListener('load', function() {
+  window.addEventListener('load', async function() {
+    if (!(await verificarAcessoPainel())) return;
     // Popular anos
     const selAno = document.getElementById('f-ano');
     const anos = PMO_ANOS();

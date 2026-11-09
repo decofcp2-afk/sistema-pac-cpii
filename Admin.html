@@ -106,6 +106,19 @@
       </button>
     </div>
 
+    <div class="secao" id="secao-painel" style="display:none">
+      <div class="secao-header">
+        <span class="secao-titulo">Acesso ao painel</span>
+      </div>
+      <div style="padding:16px 20px;display:flex;align-items:flex-start;gap:14px;font-size:13px;color:#444441;line-height:1.6">
+        <input type="checkbox" id="painel-aberto" style="width:18px;height:18px;margin-top:2px;cursor:pointer" onchange="definirPainelPublico(this.checked)">
+        <div>
+          <label for="painel-aberto" style="font-weight:600;cursor:pointer">Abrir o painel ao público (sem login)</label>
+          <div id="painel-situacao" style="font-size:12px;color:#888780">Carregando...</div>
+        </div>
+      </div>
+    </div>
+
     <div class="secao">
       <div class="secao-header">
         <span class="secao-titulo">Usuários cadastrados</span>
@@ -172,7 +185,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202611041700"></script>
+<script src="api.js?v=202611091200"></script>
 <script>
   const token  = localStorage.getItem('pac_token') || '';
   const appUrl = APPS_SCRIPT_URL;
@@ -249,10 +262,37 @@
             `<a class="nav-item${m.page==='admin'?' ativo':''}" href="#" onclick="navegar('${m.page}');return false;"><svg viewBox="0 0 24 24">${PMO_ICONS[m.icon]||''}</svg> ${m.label}</a>`).join('');
         _meuId           = resp.usuario.id;
         _minhaUnidadeId  = resp.usuario.id_unidade_fk || '';
+        if (!_minhaUnidadeId) carregarPainel();   // só o administrador global
         carregarUnidades();
         carregarUsuarios();
       })
       .chamarAcao(token, 'dados_usuario', '{}');
+  }
+
+  // ── Painel: aberto ao público ou só com login ──────────────────────────────
+  function situacaoPainel(aberto) {
+    document.getElementById('painel-aberto').checked = !!aberto;
+    document.getElementById('painel-situacao').textContent = aberto
+      ? 'Aberto: qualquer pessoa com o endereço do sistema consulta o painel, sem login.'
+      : 'Restrito: só usuários logados consultam o painel. Quem acessa sem login vê a tela de entrada.';
+  }
+  function carregarPainel() {
+    document.getElementById('secao-painel').style.display = '';
+    google.script.run
+      .withSuccessHandler(function(r) { situacaoPainel(r && r.aberto); })
+      .chamarAcao(token, 'painel_acesso', '{}');
+  }
+  function definirPainelPublico(aberto) {
+    const msg = aberto
+      ? 'Abrir o painel ao público? Qualquer pessoa poderá consultar demandas, distribuição e execução sem login.'
+      : 'Restringir o painel? Só usuários logados poderão consultá-lo.';
+    if (!confirm(msg)) { situacaoPainel(!aberto); return; }
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (!r.ok) { alert(r.erro); situacaoPainel(!aberto); return; }
+        situacaoPainel(r.aberto);
+      })
+      .chamarAcao(token, 'painel_definir_publico', JSON.stringify({ aberto }));
   }
 
   function carregarUnidades() {
