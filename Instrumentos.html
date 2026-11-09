@@ -207,7 +207,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="api.js?v=202611091800"></script>
+<script src="api.js?v=202611091900"></script>
 <script>
   const token = localStorage.getItem('pac_token') || '';
   let _usuario = null, _ctx = null, _dados = null;
@@ -369,6 +369,13 @@
     if (!inst.objeto) return erroModal('Informe o objeto.');
     if (!inst.id_unidade_gestora) return erroModal('Escolha a seção gestora.');
     if (t !== 'processo' && !(Number(inst.valor_limite) > 0)) return erroModal('Informe o valor limite.');
+    if (t !== 'processo') {
+      const ano = d => Number(String(d).slice(0, 4));
+      for (const [d, nome] of [[inst.vigencia_inicio, 'início'], [inst.vigencia_fim, 'fim']])
+        if (d && (ano(d) < 2000 || ano(d) > 2100)) return erroModal(`Confira o ano da vigência (${nome}): ${fmtD(d)}.`);
+      if (inst.vigencia_inicio && inst.vigencia_fim && inst.vigencia_fim < inst.vigencia_inicio)
+        return erroModal(`A vigência termina (${fmtD(inst.vigencia_fim)}) antes de começar (${fmtD(inst.vigencia_inicio)}). Confira as datas.`);
+    }
     if (id) delete inst.tipo;
     const r = await chamar('inst_salvar', { instrumento: inst });
     if (!r.ok) return erroModal(r.erro);

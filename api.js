@@ -251,6 +251,15 @@ function _erro(e) {
     return MSG_SEM_CONEXAO;
   if (/row-level security|42501/i.test(m))
     return 'Você não tem permissão para esta operação.';
+  // Regras do banco com nome técnico: traduz as mais comuns.
+  const REGRAS = {
+    instrumentos_check: 'Contrato e ata precisam de valor limite.',
+    instrumentos_check1: 'Situação inválida para um processo.',
+    instrumentos_check2: 'Situação inválida para contrato ou ata.',
+    instrumentos_check3: 'A vigência final não pode ser anterior à inicial. Confira as datas.',
+  };
+  const regra = (m.match(/violates check constraint "([^"]+)"/) || [])[1];
+  if (regra) return REGRAS[regra] || 'Algum dado informado não atende às regras do sistema (' + regra + '). Confira os campos.';
   return m.replace(/^new row violates.*?:\s*/i, '');
 }
 
