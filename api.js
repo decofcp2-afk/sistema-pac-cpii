@@ -1786,4 +1786,173 @@ window.google.script.run = _criarRunner(null, null);
   if (md && md.deve_trocar_senha) location.href = _pacUrlPagina('login') + '?trocar=1';
 })();
 
+// ── Busca nas listas longas (09/11/2026) ─────────────────────────────────────
+// Toda caixa de seleção com 15 opções ou mais (unidades, seções, instrumentos…)
+// abre, ao clicar, uma lista com campo de busca. A caixa original continua no
+// lugar e guarda o valor; a escolha dispara o evento "change" normalmente.
+// Para desligar numa caixa específica: atributo data-sem-busca.
+(function () {
+  const MIN_OPCOES = 15;
+  const norm = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const qualifica = s => s && s.tagName === 'SELECT' && !s.multiple && !(s.size > 1) && !s.disabled
+    && !s.hasAttribute('data-sem-busca') && s.options.length >= MIN_OPCOES;
+
+  function css() {
+    if (document.getElementById('pmo-busca-css')) return;
+    const st = document.createElement('style');
+    st.id = 'pmo-busca-css';
+    st.textContent = `
+      .pmo-busca { position: fixed; z-index: 100000; background: #fff; border: 1px solid #B4B2A9; border-radius: 10px;
+        box-shadow: 0 10px 30px rgba(0,0,0,.18); display: flex; flex-direction: column; overflow: hidden; font-family: inherit; }
+      .pmo-busca input { margin: 8px; padding: 8px 10px; border: 1px solid #D3D1C7; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; }
+      .pmo-busca input:focus { border-color: #534AB7; box-shadow: 0 0 0 3px rgba(83,74,183,.12); }
+      .pmo-busca ul { list-style: none; margin: 0; padding: 0 0 6px; overflow-y: auto; }
+      .pmo-busca li { padding: 7px 12px; font-size: 13px; cursor: pointer; color: #2C2C2A; line-height: 1.35; }
+      .pmo-busca li.grupo { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #888780; cursor: default; padding-top: 10px; }
+      .pmo-busca li.ativo { background: #EEEDFE; color: #26215C; }
+      .pmo-busca li.atual { font-weight: 600; }
+      .pmo-busca li.desab { color: #B4B2A9; cursor: default; }
+      .pmo-busca li mark { background: #FAEEDA; color: inherit; padding: 0; border-radius: 2px; }
+      .pmo-busca .vazio-busca { padding: 10px 12px 14px; font-size: 12.5px; color: #888780; }`;
+    document.head.appendChild(st);
+  }
+
+  let aberto = null;   // { sel, caixa, itens, ativo }
+
+  function fechar(devolverFoco) {
+    if (!aberto) return;
+    const s = aberto.sel;
+    aberto.caixa.remove();
+    window.removeEventListener('resize', aoRolar, true);
+    window.removeEventListener('scroll', aoRolar, true);
+    aberto = null;
+    if (devolverFoco) try { s.focus(); } catch (e) {}
+  }
+  function aoRolar(e) { if (aberto && !aberto.caixa.contains(e.target)) fechar(false); }
+
+  function escolher(op) {
+    if (!aberto || !op || op.disabled) return;
+    const s = aberto.sel;
+    fechar(true);
+    if (s.value !== op.value) {
+      s.value = op.value;
+      s.dispatchEvent(new Event('input', { bubbles: true }));
+      s.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+
+  function marcar(texto, termos) {
+    const esc = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    if (!termos.length) return esc(texto);
+    // marca o primeiro trecho de cada termo, comparando sem acentos
+    const n = norm(texto);
+    const marcas = [];
+    termos.forEach(t => { const i = n.indexOf(t); if (i >= 0) marcas.push([i, i + t.length]); });
+    marcas.sort((a, b) => a[0] - b[0]);
+    let out = '', pos = 0;
+    marcas.forEach(([a, b]) => { if (a < pos) return; out += esc(texto.slice(pos, a)) + '<mark>' + esc(texto.slice(a, b)) + '</mark>'; pos = b; });
+    return out + esc(texto.slice(pos));
+  }
+
+  function desenhar() {
+    const { sel, caixa } = aberto;
+    const termos = norm(caixa.querySelector('input').value).split(/\s+/).filter(Boolean);
+    const ul = caixa.querySelector('ul');
+    const itens = [];
+    let html = '', grupoAtual = null;
+    Array.from(sel.options).forEach(op => {
+      const texto = op.textContent.trim();
+      if (termos.length && !termos.every(t => norm(texto).includes(t))) return;
+      if (termos.length && op.value === '') return;   // "Selecione..." some durante a busca
+      const g = op.parentElement && op.parentElement.tagName === 'OPTGROUP' ? op.parentElement.label : null;
+      if (g !== grupoAtual) { if (g) html += `<li class="grupo">${marcar(g, [])}</li>`; grupoAtual = g; }
+      const idx = itens.length;
+      itens.push(op);
+      html += `<li data-i="${idx}" class="${op.disabled ? 'desab' : ''}${op.value === sel.value && op.value !== '' ? ' atual' : ''}">${marcar(texto, termos)}</li>`;
+    });
+    ul.innerHTML = html || '';
+    caixa.querySelector('.vazio-busca').style.display = itens.length ? 'none' : '';
+    aberto.itens = itens;
+    let ini = termos.length ? itens.findIndex(o => !o.disabled) : itens.findIndex(o => o.value === sel.value);
+    if (ini < 0) ini = itens.findIndex(o => !o.disabled);
+    ativar(ini, true);
+  }
+
+  function ativar(i, centralizar) {
+    if (!aberto) return;
+    const lis = aberto.caixa.querySelectorAll('li[data-i]');
+    lis.forEach(li => li.classList.remove('ativo'));
+    aberto.ativo = i;
+    const li = aberto.caixa.querySelector(`li[data-i="${i}"]`);
+    if (li) { li.classList.add('ativo'); li.scrollIntoView({ block: centralizar ? 'center' : 'nearest' }); }
+  }
+
+  function posicionar() {
+    const { sel, caixa } = aberto;
+    const r = sel.getBoundingClientRect();
+    const larg = Math.min(Math.max(r.width, 320), window.innerWidth - 16);
+    let esq = Math.min(Math.max(8, r.left), window.innerWidth - larg - 8);
+    const abaixo = window.innerHeight - r.bottom - 12, acima = r.top - 12;
+    const paraCima = abaixo < 240 && acima > abaixo;
+    const alt = Math.min(380, Math.max(160, paraCima ? acima : abaixo));
+    caixa.style.left = esq + 'px';
+    caixa.style.width = larg + 'px';
+    caixa.style.maxHeight = alt + 'px';
+    if (paraCima) { caixa.style.top = ''; caixa.style.bottom = (window.innerHeight - r.top + 4) + 'px'; }
+    else { caixa.style.bottom = ''; caixa.style.top = (r.bottom + 4) + 'px'; }
+  }
+
+  function abrir(sel) {
+    fechar(false);
+    css();
+    const caixa = document.createElement('div');
+    caixa.className = 'pmo-busca';
+    caixa.innerHTML = '<input type="text" placeholder="Digite para buscar (sigla ou nome)…" autocomplete="off"><ul></ul><div class="vazio-busca" style="display:none">Nada encontrado.</div>';
+    document.body.appendChild(caixa);
+    aberto = { sel, caixa, itens: [], ativo: -1 };
+    posicionar();
+    const inp = caixa.querySelector('input');
+    inp.addEventListener('input', desenhar);
+    inp.addEventListener('keydown', e => {
+      const n = aberto.itens.length;
+      const passo = d => { let i = aberto.ativo; for (let k = 0; k < n; k++) { i = (i + d + n) % n; if (!aberto.itens[i].disabled) return ativar(i); } };
+      if (e.key === 'ArrowDown') { e.preventDefault(); if (n) passo(1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); if (n) passo(-1); }
+      else if (e.key === 'Enter') { e.preventDefault(); if (aberto.ativo >= 0) escolher(aberto.itens[aberto.ativo]); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fechar(true); }
+      else if (e.key === 'Tab') { fechar(false); }
+    });
+    caixa.addEventListener('mousedown', e => {
+      const li = e.target.closest('li[data-i]');
+      if (li) { e.preventDefault(); escolher(aberto.itens[Number(li.dataset.i)]); }
+      else if (e.target.tagName !== 'INPUT') e.preventDefault();
+    });
+    caixa.addEventListener('mousemove', e => {
+      const li = e.target.closest('li[data-i]');
+      if (li && Number(li.dataset.i) !== aberto.ativo && !aberto.itens[Number(li.dataset.i)].disabled) ativar(Number(li.dataset.i));
+    });
+    desenhar();
+    window.addEventListener('resize', aoRolar, true);
+    window.addEventListener('scroll', aoRolar, true);
+    setTimeout(() => inp.focus(), 0);
+  }
+
+  // Clique na caixa: abre a busca no lugar da lista nativa.
+  document.addEventListener('mousedown', e => {
+    if (aberto && !aberto.caixa.contains(e.target)) {
+      const mesmo = e.target === aberto.sel;
+      fechar(false);
+      if (mesmo) { e.preventDefault(); return; }
+    }
+    const s = e.target && e.target.closest ? e.target.closest('select') : null;
+    if (e.button === 0 && qualifica(s)) { e.preventDefault(); s.focus(); abrir(s); }
+  }, true);
+  // Teclado: Enter, Espaço ou Alt+↓ com a caixa em foco também abrem a busca.
+  document.addEventListener('keydown', e => {
+    const s = e.target;
+    if (!qualifica(s) || aberto) return;
+    if (e.key === 'Enter' || e.key === ' ' || (e.altKey && e.key === 'ArrowDown') || e.key === 'F4') { e.preventDefault(); abrir(s); }
+  }, true);
+})();
+
 })();
