@@ -211,7 +211,7 @@ function _conciliar(reqs, emps) {
                           : (FORMAS[r.forma] || r.forma) + ' — ' + r.sigla_gestora));
   const porUnidade = montar(grupo(r => r.id_unidade, r => r.sigla_unidade));
   const semVinculo = emps.filter(e => Math.abs(_n(e.sem_vinculo)) > 0.005)
-    .map(e => ({ id_empenho: e.id_empenho, numero: e.numero, valor_atual: _n(e.valor_atual), coberto: _n(e.coberto), sem_vinculo: _n(e.sem_vinculo) }));
+    .map(e => ({ id_empenho: e.id_empenho, numero: e.numero, valor_atual: _n(e.valor_atual), coberto: _n(e.coberto), sem_vinculo: _n(e.sem_vinculo), justificativa: e.justificativa_sem_vinculo || '' }));
   const t = porInstrumento.reduce((a, x) => { ['aprovado','solicitado','empenhado','liquidado','pago','a_empenhar'].forEach(k => a[k] += x[k]); return a; },
     { aprovado: 0, solicitado: 0, empenhado: 0, liquidado: 0, pago: 0, a_empenhar: 0 });
   t.empenhos = emps.reduce((s, e) => s + _n(e.valor_atual), 0);
@@ -899,10 +899,20 @@ const ACOES = {
                    : economia > 0.005 ? 'economia' : null;
       if (!motivo) return null;
       const valor = motivo === 'economia' ? Math.min(economia, d.devolvivel) : d.devolvivel;
+      const naoReq = Math.max(0, d.valor_estimado - d.requisitado);
+      const fmtD = x => x ? String(x).slice(8, 10) + '/' + String(x).slice(5, 7) + '/' + String(x).slice(0, 4) : '';
+      const explicacao = motivo === 'nao_requisitada' ? 'Tudo o que está disponível: a demanda foi marcada como "não será requisitada".'
+        : motivo === 'prazo_encerrado' ? 'Tudo o que está disponível: o prazo para requisitar venceu' + (d.prazo ? ' em ' + fmtD(d.prazo) : '') + '.'
+        : 'Só a economia' + (naoReq > 0.005 ? '; o não requisitado ainda pode ser requisitado' + (d.prazo ? ' até ' + fmtD(d.prazo) : '') : '') + '.';
       return { id_demanda: d.id_demanda, codigo_demanda: d.codigo, descricao_objeto: d.descricao_objeto,
                sigla_unidade: d.sigla_unidade, categoria: d.categoria, motivo, motivo_nome: MOTIVOS_DEVOLUCAO[motivo],
-               detalhe: motivo === 'nao_requisitada' ? (d.motivo_encerramento || '') : motivo === 'prazo_encerrado' ? 'Prazo: ' + (d.prazo || '') : '',
-               valor, devolvivel: d.devolvivel };
+               detalhe: motivo === 'nao_requisitada' ? (d.motivo_encerramento || '') : '',
+               explicacao, valor, devolvivel: d.devolvivel,
+               // composição (09/11/2026)
+               homologado: d.valor_estimado, requisitado: d.requisitado, real: d.aprovado,
+               em_analise: Math.max(0, d.requisitado - d.aprovado - d.residuo),
+               economia: d.residuo, nao_requisitado: naoReq, devolvido: d.devolvido,
+               empenhado: d.empenhado, a_empenhar: Math.max(0, d.aprovado - d.empenhado) };
     }).filter(Boolean);
     const idsDem = new Set(demandas.map(d => d.id_demanda));
     const { data: devs } = await c.from('devolucoes_saldo')
@@ -1191,7 +1201,8 @@ const ACOES = {
       p_dados: { numero: e.numero, data_emissao: e.data_emissao, origem: e.origem || '', fonte_codigo: e.fonte_codigo || '',
                  acao_governo: e.acao_governo || '', natureza_despesa: e.natureza_despesa || '',
                  valor_empenhado: Number(e.valor_empenhado || 0), id_instrumento: e.id_instrumento || '',
-                 favorecido_cnpj: e.favorecido_cnpj || '', favorecido_nome: e.favorecido_nome || '', observacao: e.observacao || '' },
+                 favorecido_cnpj: e.favorecido_cnpj || '', favorecido_nome: e.favorecido_nome || '', observacao: e.observacao || '',
+                 justificativa_sem_vinculo: e.justificativa_sem_vinculo || '' },
       p_cobertura: cobertura ? cobertura.map(x => ({ id_requisicao: x.id_requisicao, valor: Number(x.valor || 0) })) : null,
     });
     return error ? { ok: false, erro: _erro(error) } : { ok: true, ...data };
@@ -1203,12 +1214,13 @@ const ACOES = {
     return error ? { ok: false, erro: _erro(error) } : { ok: true };
   },
 
-  async emp_movimento({ id_empenho, tipo, valor, data, documento, observacao }) {
+  async emp_movimento({ id_empenho, tipo, valor, data, documento, observacao, justificativa }) {
     const c = await sb();
     if (!['reforco', 'anulacao'].includes(tipo)) return { ok: false, erro: 'Tipo inválido.' };
     if (!(Number(valor) > 0) || !data) return { ok: false, erro: 'Informe valor e data.' };
     const { error } = await c.rpc('emp_movimento', { p_empenho: id_empenho, p_tipo: tipo, p_valor: Number(valor), p_data: data,
-                                                     p_documento: documento || '', p_observacao: observacao || '' });
+                                                     p_documento: documento || '', p_observacao: observacao || '',
+                                                     p_justificativa: justificativa || null });
     return error ? { ok: false, erro: _erro(error) } : { ok: true };
   },
 

@@ -181,6 +181,11 @@
   .cob-linha td input[data-moeda], .cob-linha td input[type=number] { width: 130px; padding: 4px 6px; border: 1px solid #D3D1C7; border-radius: 6px; text-align: right; }
   .alerta-num { color: #A32D2D; font-weight: 700; }
   .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 16px; font-size: 12.5px; background: #FAFAF8; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+  .comp-dev { width: 100%; max-width: 560px; border-collapse: collapse; font-size: 12.5px; margin-bottom: 10px; }
+  .comp-dev td { padding: 5px 8px; border-bottom: 1px solid #EEEDE8; }
+  .comp-dev tr.c-parc td { background: #FAFAF8; } .comp-dev tr.c-tot td { background: #E1F5EE; border-bottom: none; }
+  .tab-dev th, .tab-dev td { padding: 9px 7px; font-size: 12px; } .tab-dev th { font-size: 10px; } .tab-dev td.num { white-space: nowrap; } .tab-dev .sub { font-size: 11px; }
+  .tab-dev th.c-parc, .tab-dev td.c-parc { background: #FAFAF8; } .tab-dev th.c-tot, .tab-dev td.c-tot { background: #E1F5EE; }
   .kv span { display: block; font-size: 10.5px; color: #888780; text-transform: uppercase; letter-spacing: .3px; }
 </style>
 </head>
@@ -243,7 +248,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="api.js?v=202611091900"></script>
+<script src="api.js?v=202611092000"></script>
 <script>
   const token = localStorage.getItem('pac_token') || '';
   let _usuario = null, _ctx = null, _dados = null;
@@ -470,7 +475,7 @@
         </div>
       </div>
       <div class="bloco"><div class="bloco-titulo">Devolução de saldo à Reitoria</div>
-        <div style="font-size:12.5px;color:#5F5E5A;margin-bottom:8px">Pode ser devolvido: <b>${fmtV(d.devolvivel)}</b> — o homologado menos o já devolvido e o que as requisições comprometem (valor real, se aprovadas).</div>
+        ${composicaoDevolucao(d)}
         ${listaDevolucoes(r.devolucoes, d.id_demanda)}
         ${d.devolvivel > 0.005 ? `<div class="form so-editor" style="margin-top:10px">
           <div class="campo"><label>Valor (R$)</label><input type="number" id="fd-valor" min="0.01" step="0.01" max="${d.devolvivel.toFixed(2)}" value="${sugestaoDevolucao(d).valor.toFixed(2)}"></div>
@@ -482,6 +487,23 @@
   }
 
   // ── Devolução de saldo à Reitoria ─────────────────────────────────────────
+  // Composição do que pode voltar à Reitoria (vale para a ficha e o formulário).
+  function composicaoDevolucao(d) {
+    const real = d.real != null ? d.real : d.aprovado, econ = d.economia != null ? d.economia : d.residuo;
+    const naoReq = Math.max(0, d.valor_estimado != null ? d.valor_estimado - d.requisitado : d.nao_requisitado);
+    const homol = d.homologado != null ? d.homologado : d.valor_estimado;
+    const emAnalise = Math.max(0, d.requisitado - real - econ);
+    const L = (t, v, cls, sub) => `<tr${cls ? ` class="${cls}"` : ''}><td>${t}${sub ? `<span class="sub">${sub}</span>` : ''}</td><td class="num">${v}</td></tr>`;
+    return `<table class="comp-dev"><tbody>
+      ${L('Homologado no plano', fmtV(homol))}
+      ${L('Requisitado', fmtV(d.requisitado), '', emAnalise > 0.005 ? `inclui ${fmtV(emAnalise)} ainda em análise pelo gestor` : '')}
+      ${L('Valor real aprovado nas requisições', fmtV(real), '', `empenhado ${fmtV(d.empenhado)} · a empenhar ${fmtV(Math.max(0, real - d.empenhado))} — não entram na devolução`)}
+      ${L('① Economia (requisitado − valor real)', fmtV(econ), 'c-parc')}
+      ${L('② Não requisitado (homologado − requisitado)', fmtV(naoReq), 'c-parc')}
+      ${L('③ Já devolvido à Reitoria', '− ' + fmtV(d.devolvido), 'c-parc')}
+      ${L('<b>Disponível para devolver (① + ② − ③)</b>', `<b>${fmtV(d.devolvivel)}</b>`, 'c-tot')}
+    </tbody></table>`;
+  }
   function sugestaoDevolucao(d) {
     const economia = Math.max(0, d.residuo - d.devolvido);
     if (d.encerrada) return { motivo: 'nao_requisitada', valor: d.devolvivel };
@@ -512,7 +534,9 @@
     if (!d) return;
     const sug = sugestaoDevolucao(d);
     abrirModal(`Devolver saldo — <span class="cod-dem">${esc(d.codigo)}</span>`, `
-      <div style="font-size:13px;margin-bottom:10px">${esc(d.descricao_objeto)}<span class="sub">${esc(d.sigla_unidade)} · homologado ${fmtV(d.valor_estimado)} · pode ser devolvido ${fmtV(d.devolvivel)}</span></div>
+      <div style="font-size:13px;margin-bottom:10px">${esc(d.descricao_objeto)}<span class="sub">${esc(d.sigla_unidade)}</span></div>
+      ${composicaoDevolucao(d)}
+      <div class="info" style="margin:10px 0 12px">Sugerido: <b>${fmtV(sug.valor)}</b> — ${sug.motivo === 'economia' ? 'só a economia; o não requisitado ainda pode ser requisitado pela unidade.' : sug.motivo === 'outro' ? 'nenhum motivo automático; informe o motivo.' : 'tudo o que está disponível (' + esc(_dados.motivos_devolucao[sug.motivo]).toLowerCase() + ').'}</div>
       <div class="form">
         <div class="campo"><label>Valor (R$)</label><input type="number" id="fd-valor" min="0.01" step="0.01" max="${d.devolvivel.toFixed(2)}" value="${sug.valor.toFixed(2)}"></div>
         <div class="campo"><label>Motivo</label><select id="fd-motivo">${Object.entries(_dados.motivos_devolucao).map(([k, n]) => `<option value="${k}"${k === sug.motivo ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
@@ -773,15 +797,28 @@
     const mini = (titulo, l) => `<div class="secao"><div class="secao-header"><span class="secao-titulo">${titulo}</span></div><table><tbody>
       ${l.map(([n, v]) => `<tr><td>${esc(n)}</td><td class="num">${fmtV(v)}</td></tr>`).join('') || '<tr><td class="vazio">—</td></tr>'}</tbody></table></div>`;
     $('conteudo').innerHTML = `
-      <div class="info" style="margin-bottom:18px">Saldo que pode voltar à Reitoria: a economia na contratação (requisitado − valor real), o saldo das demandas marcadas como "não será requisitada" e o das demandas com prazo para requisitar vencido. A devolução é feita pelo Monitoramento: o valor sai da demanda e da cadeia de repasses e volta como saldo livre da Reitoria. Pode ser desfeita enquanto a Reitoria não redistribuir o valor.</div>
+      <div class="info" style="margin-bottom:18px;line-height:1.6">
+        <b>Como ler o quadro.</b> De cada demanda podem voltar à Reitoria duas parcelas:
+        <b>① economia</b> — quanto o valor real aprovado nas requisições ficou abaixo do requisitado; e
+        <b>② não requisitado</b> — a parte do valor homologado que a unidade não chegou a requisitar.
+        Descontado o <b>③ já devolvido</b>, sobra o <b>disponível para devolver</b>.
+        O valor real das requisições aprovadas (empenhado ou ainda a empenhar) não entra: continua reservado para elas.<br>
+        <b>Sugerido agora:</b> a economia sempre; o não requisitado só quando a demanda foi marcada como "não será requisitada" ou o prazo para requisitar venceu.
+        A devolução tira o valor da demanda e da cadeia de repasses e o devolve como saldo livre da Reitoria; pode ser desfeita enquanto a Reitoria não redistribuir.</div>
       <div class="cards">
         <div class="card"><div class="card-label">Saldo a devolver</div><div class="card-valor">${fmtV(X.reduce((t, x) => t + x.valor, 0))}</div><div class="card-det">${X.length} demanda(s)</div></div>
         <div class="card"><div class="card-label">Já devolvido à Reitoria</div><div class="card-valor">${fmtV(ativas.reduce((t, v) => t + v.valor, 0))}</div><div class="card-det">${ativas.length} devolução(ões)</div></div>
       </div>
-      <div class="secao"><div class="secao-header"><span class="secao-titulo">A devolver</span></div><div class="tabela-scroll">${X.length ? `<table><thead><tr><th>Demanda</th><th>Unidade</th><th>Motivo sugerido</th><th class="num">Valor sugerido</th><th class="num">Pode ser devolvido</th><th></th></tr></thead><tbody>
-        ${X.map(x => `<tr><td class="clicavel" onclick="abrirFicha('${x.id_demanda}')"><span class="cod-dem">${esc(x.codigo_demanda)}</span><span class="sub">${esc(x.descricao_objeto)}</span></td>
-          <td>${esc(x.sigla_unidade)}</td><td>${esc(x.motivo_nome)}${x.detalhe ? `<span class="sub">${esc(x.detalhe)}</span>` : ''}</td>
-          <td class="num"><b>${fmtV(x.valor)}</b></td><td class="num">${fmtV(x.devolvivel)}</td>
+      <div class="secao"><div class="secao-header"><span class="secao-titulo">A devolver</span></div><div class="tabela-scroll">${X.length ? `<table class="tab-dev"><thead><tr>
+          <th>Demanda</th><th class="num">Homologado</th><th class="num">Requisitado<br><small>→ valor real</small></th>
+          <th class="num c-parc">① Economia</th><th class="num c-parc">② Não<br>requisitado</th><th class="num c-parc">③ Já<br>devolvido</th>
+          <th class="num c-tot">Disponível<br><small>① + ② − ③</small></th><th class="num">Sugerido<br>agora</th><th></th></tr></thead><tbody>
+        ${X.map(x => `<tr><td class="clicavel" style="min-width:190px" onclick="abrirFicha('${x.id_demanda}')"><span class="cod-dem">${esc(x.codigo_demanda)}</span> <small>${esc(x.sigla_unidade)}</small><span class="sub">${esc(x.descricao_objeto)}</span></td>
+          <td class="num">${fmtV(x.homologado)}</td>
+          <td class="num">${fmtV(x.requisitado)}<span class="sub">→ real ${fmtV(x.real)}</span>${x.em_analise > 0.005 ? `<span class="sub">em análise ${fmtV(x.em_analise)}</span>` : ''}<span class="sub">empenhado ${fmtV(x.empenhado)}</span></td>
+          <td class="num c-parc">${fmtV(x.economia)}</td><td class="num c-parc">${fmtV(x.nao_requisitado)}</td><td class="num c-parc">${x.devolvido > 0.005 ? '− ' + fmtV(x.devolvido) : '—'}</td>
+          <td class="num c-tot"><b>${fmtV(x.devolvivel)}</b></td>
+          <td class="num" title="${esc(x.explicacao)}${x.detalhe ? ' ' + esc(x.detalhe) : ''}"><b>${fmtV(x.valor)}</b><span class="sub">${{ economia: 'só a economia', nao_requisitada: 'não será requisitada', prazo_encerrado: 'prazo vencido' }[x.motivo] || esc(x.motivo_nome)}</span></td>
           <td><button class="btn btn-mini btn-p so-editor" onclick="formDevolucao('${x.id_demanda}')">Devolver</button></td></tr>`).join('')}
         </tbody></table>` : '<div class="vazio">Nenhum saldo a devolver neste filtro.</div>'}</div></div>
       <div class="grade2">${mini('Devolvido por unidade', agrupa(ativas, 'sigla_unidade'))}${mini('Devolvido por motivo', agrupa(ativas, 'motivo_nome'))}</div>
@@ -816,7 +853,7 @@
         <div class="elo" style="${bate ? '' : 'background:#FCEBEB'}"><span>Empenho sem vínculo</span><b class="${bate ? '' : 'alerta-num'}">${fmtV(t.sem_vinculo)}</b><small>${bate ? 'empenhos totalmente vinculados' : 'valor dos empenhos − o que cobrem'}</small></div>
       </div>
       ${!bate ? `<div class="aviso"><b>Há empenho sem vínculo.</b> A soma dos empenhos (${fmtV(t.empenhos)}) não bate com a soma do que eles cobrem (${fmtV(t.empenhado)}).
-        ${cc.sem_vinculo.map(e => `<span class="cod-dem" style="margin-left:6px">${esc(e.numero)}: ${fmtV(e.sem_vinculo)}</span>`).join('')}</div>`
+        ${cc.sem_vinculo.map(e => `<span class="cod-dem" style="margin-left:6px" title="${esc(e.justificativa||'')}">${esc(e.numero)}: ${fmtV(e.sem_vinculo)}</span>${e.justificativa ? `<span class="sub" style="margin-left:6px">Justificativa: ${esc(e.justificativa)}</span>` : ''}`).join('')}</div>`
         : `<div class="ok-box" style="margin-bottom:18px">A soma dos empenhos é igual à soma do que eles cobrem nas requisições.</div>`}
       <div class="secao"><div class="secao-header"><span class="secao-titulo">Por contrato, ata ou forma de atendimento</span></div><div class="tabela-scroll">${tab(cc.por_instrumento, 'Instrumento')}</div></div>
       <div class="secao"><div class="secao-header"><span class="secao-titulo">Por unidade requerente</span></div><div class="tabela-scroll">${tab(cc.por_unidade, 'Unidade')}</div></div>`;

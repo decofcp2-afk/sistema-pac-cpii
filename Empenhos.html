@@ -181,6 +181,11 @@
   .cob-linha td input[data-moeda], .cob-linha td input[type=number] { width: 130px; padding: 4px 6px; border: 1px solid #D3D1C7; border-radius: 6px; text-align: right; }
   .alerta-num { color: #A32D2D; font-weight: 700; }
   .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 16px; font-size: 12.5px; background: #FAFAF8; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+  .comp-dev { width: 100%; max-width: 560px; border-collapse: collapse; font-size: 12.5px; margin-bottom: 10px; }
+  .comp-dev td { padding: 5px 8px; border-bottom: 1px solid #EEEDE8; }
+  .comp-dev tr.c-parc td { background: #FAFAF8; } .comp-dev tr.c-tot td { background: #E1F5EE; border-bottom: none; }
+  .tab-dev th, .tab-dev td { padding: 9px 7px; font-size: 12px; } .tab-dev th { font-size: 10px; } .tab-dev td.num { white-space: nowrap; } .tab-dev .sub { font-size: 11px; }
+  .tab-dev th.c-parc, .tab-dev td.c-parc { background: #FAFAF8; } .tab-dev th.c-tot, .tab-dev td.c-tot { background: #E1F5EE; }
   .kv span { display: block; font-size: 10.5px; color: #888780; text-transform: uppercase; letter-spacing: .3px; }
 </style>
 </head>
@@ -236,7 +241,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="api.js?v=202611091900"></script>
+<script src="api.js?v=202611092000"></script>
 <script>
   const token = localStorage.getItem('pac_token') || '';
   let _usuario = null, _ctx = null, _dados = null;
@@ -458,6 +463,9 @@
         <div class="caixa tabela-scroll"><table><thead><tr><th></th><th>Requisição</th><th>Unidade</th><th>Natureza</th><th class="num">Valor real</th><th class="num">Falta empenhar</th><th class="num">Valor coberto</th></tr></thead>
           <tbody id="cob-corpo"></tbody></table></div>
         <div id="cob-soma" style="margin-top:8px"></div>
+        <div class="campo" id="e-just-campo" style="display:none;margin-top:10px"><label>Justificativa da parte sem vínculo *</label>
+          <input id="e-just" value="${val('justificativa_sem_vinculo')}" placeholder="Ex.: NE emitida com valor estimado para reajuste; frete não planejado…">
+          <span class="sub">O empenho pode ser maior que as requisições vinculadas, mas a diferença precisa ser explicada. Ela aparece como "sem vínculo" na Conciliação.</span></div>
       </div>
       <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button>
         <button class="btn btn-p" onclick="salvarEmpenho('${idEmpenho || ''}')">${idEmpenho ? 'Salvar alterações' : 'Registrar empenho'}</button></div>`, true);
@@ -490,12 +498,18 @@
       : Math.abs(dif) < 0.005 ? `<div class="ok-box">O empenho cobre exatamente ${fmtV(tot)} em ${window._cob.filter(l => l.marcado).length} requisição(ões).</div>`
       : dif > 0 ? `<div class="bad-box">Cobertura de ${fmtV(tot)}: ficam <b>${fmtV(dif)}</b> do empenho sem vínculo.</div>`
       : `<div class="bad-box">A cobertura (${fmtV(tot)}) passa do valor do empenho em <b>${fmtV(-dif)}</b>.</div>`;
+    $('e-just-campo').style.display = !acima && dif > 0.005 ? '' : 'none';
   }
   async function salvarEmpenho(id) {
     const empenho = { id_empenho: id || null, numero: $('e-numero').value.trim(), data_emissao: $('e-data').value,
       valor_empenhado: $('e-valor').value, origem: $('e-origem').value, fonte_codigo: $('e-fonte').value,
       acao_governo: $('e-acao').value, natureza_despesa: $('e-nd').value, favorecido_cnpj: $('e-cnpj').value,
-      favorecido_nome: $('e-fav').value, observacao: $('e-obs').value, id_instrumento: $('e-inst').value };
+      favorecido_nome: $('e-fav').value, observacao: $('e-obs').value, id_instrumento: $('e-inst').value,
+      justificativa_sem_vinculo: $('e-just').value.trim() };
+    const tot = window._cob.filter(l => l.marcado).reduce((t, l) => t + Number(l.valor || 0), 0);
+    if (Number(empenho.valor_empenhado || 0) - tot > 0.005 && empenho.justificativa_sem_vinculo.length < 10)
+      return erroModal('O empenho fica com ' + fmtV(Number(empenho.valor_empenhado) - tot) + ' sem vínculo a requisições. Escreva a justificativa (mínimo 10 caracteres).');
+    if (Number(empenho.valor_empenhado || 0) - tot <= 0.005) empenho.justificativa_sem_vinculo = '';
     const cobertura = window._cob.filter(l => l.marcado && Number(l.valor) > 0).map(l => ({ id_requisicao: l.x.id_requisicao, valor: l.valor }));
     const r = await chamar('emp_salvar', { empenho, cobertura });
     if (!r.ok) return erroModal(r.erro);
@@ -535,7 +549,7 @@
       <div class="kv">
         <div><span>Emissão</span>${fmtD(e.data_emissao)}</div><div><span>Valor emitido</span><b>${fmtV(e.valor_empenhado)}</b></div>
         <div><span>Valor atual</span><b>${fmtV(e.valor_atual)}</b></div><div><span>Coberto</span><b>${fmtV(e.coberto)}</b></div>
-        <div><span>Sem vínculo</span><b class="${Math.abs(e.sem_vinculo) > 0.005 ? 'alerta-num' : ''}">${fmtV(e.sem_vinculo)}</b></div>
+        <div><span>Sem vínculo</span><b class="${Math.abs(e.sem_vinculo) > 0.005 ? 'alerta-num' : ''}">${fmtV(e.sem_vinculo)}</b>${Math.abs(e.sem_vinculo) > 0.005 && e.justificativa_sem_vinculo ? `<br><small>${esc(e.justificativa_sem_vinculo)}</small>` : ''}</div>
         <div><span>Origem</span>${esc(ORIGENS[e.origem]||'—')}</div><div><span>Fonte</span>${esc(e.fonte_codigo||'—')} ${esc(e.fonte_nome||'')}</div>
         <div><span>Ação de governo</span>${esc(e.acao_governo||'—')}</div><div><span>Natureza de despesa</span>${esc(e.natureza_despesa||'—')}</div>
         <div><span>Favorecido</span>${esc(e.favorecido_nome||'—')}<br>${esc(e.favorecido_cnpj||'')}</div>
@@ -557,6 +571,7 @@
         <div class="campo"><label>Valor (R$)</label><input type="number" step="0.01" min="0" id="m-valor"></div>
         <div class="campo"><label>Data</label><input type="date" id="m-data" value="${new Date().toISOString().slice(0,10)}"></div>
         <div class="campo"><label>Documento</label><input id="m-doc" placeholder="NE de reforço/anulação"></div>
+        <div class="campo largo"><label>Justificativa (se o reforço não for vinculado a requisições)</label><input id="m-just" value="${esc(e.justificativa_sem_vinculo||'')}" placeholder="Obrigatória quando o empenho fica maior que o que ele cobre"></div>
         <div class="campo" style="justify-content:flex-end"><button class="btn" onclick="lancarMov('${e.id_empenho}')">Lançar</button></div>
       </div></div>
       <div class="rodape">
@@ -566,7 +581,8 @@
       </div>`;
   }
   async function lancarMov(id) {
-    const r = await chamar('emp_movimento', { id_empenho: id, tipo: $('m-tipo').value, valor: $('m-valor').value, data: $('m-data').value, documento: $('m-doc').value });
+    const r = await chamar('emp_movimento', { id_empenho: id, tipo: $('m-tipo').value, valor: $('m-valor').value, data: $('m-data').value, documento: $('m-doc').value,
+      justificativa: $('m-tipo').value === 'reforco' ? $('m-just').value.trim() : '' });
     if (!r.ok) return erroModal(r.erro);
     toast('Lançado.'); await carregar(); verEmpenho(id);
   }
@@ -607,7 +623,7 @@
         <div class="elo" style="${bate ? '' : 'background:#FCEBEB'}"><span>Empenho sem vínculo</span><b class="${bate ? '' : 'alerta-num'}">${fmtV(t.sem_vinculo)}</b><small>${bate ? 'empenhos totalmente vinculados' : 'valor dos empenhos − o que cobrem'}</small></div>
       </div>
       ${!bate ? `<div class="aviso"><b>Há empenho sem vínculo.</b> A soma dos empenhos (${fmtV(t.empenhos)}) não bate com a soma do que eles cobrem (${fmtV(t.empenhado)}).
-        ${cc.sem_vinculo.map(e => `<span class="cod-dem" style="margin-left:6px">${esc(e.numero)}: ${fmtV(e.sem_vinculo)}</span>`).join('')}</div>`
+        ${cc.sem_vinculo.map(e => `<span class="cod-dem" style="margin-left:6px" title="${esc(e.justificativa||'')}">${esc(e.numero)}: ${fmtV(e.sem_vinculo)}</span>${e.justificativa ? `<span class="sub" style="margin-left:6px">Justificativa: ${esc(e.justificativa)}</span>` : ''}`).join('')}</div>`
         : `<div class="ok-box" style="margin-bottom:18px">A soma dos empenhos é igual à soma do que eles cobrem nas requisições.</div>`}
       <div class="secao"><div class="secao-header"><span class="secao-titulo">Por contrato, ata ou forma de atendimento</span></div><div class="tabela-scroll">${tab(cc.por_instrumento, 'Instrumento')}</div></div>
       <div class="secao"><div class="secao-header"><span class="secao-titulo">Por unidade requerente</span></div><div class="tabela-scroll">${tab(cc.por_unidade, 'Unidade')}</div></div>`;
