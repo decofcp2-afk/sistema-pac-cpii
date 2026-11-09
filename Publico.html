@@ -261,9 +261,6 @@
       <div style="font-size:28px;flex-shrink:0">📋</div>
       <div>
         <div style="font-size:15px;font-weight:700;color:#1a1060;margin-bottom:6px" id="painel-titulo">Planejamento e Monitoramento Orçamentário — Painel</div>
-        <p id="painel-aviso-restrito" style="display:none;font-size:12.5px;color:#633806;background:#FAEEDA;border-radius:8px;padding:8px 12px;margin-bottom:10px">
-          Acesso restrito: no momento, este painel só pode ser consultado por usuários logados no sistema.
-        </p>
         <p style="font-size:13px;color:#444441;line-height:1.7;margin-bottom:8px">
           Este painel demonstra à comunidade do Colégio Pedro II como o orçamento institucional está sendo distribuído internamente e quais demandas ele deverá atender, compondo o Plano Anual de Contratações (PAC). 
           <strong>Os valores apresentados são de planejamento e não representam a execução orçamentária ou das contratações</strong> — evidenciam quais áreas e necessidades estão sendo priorizadas.
@@ -407,8 +404,6 @@
     if (a.aberto) {
       document.getElementById('header-sub').textContent = 'Planejamento e Monitoramento Orçamentário — Painel Público';
       document.getElementById('painel-titulo').textContent = 'Planejamento e Monitoramento Orçamentário — Painel Público';
-    } else {
-      document.getElementById('painel-aviso-restrito').style.display = '';
     }
     if (a.logado) {
       document.getElementById('btn-login-rotulo').textContent = 'Voltar ao sistema';
