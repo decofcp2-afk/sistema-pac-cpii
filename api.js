@@ -1955,4 +1955,113 @@ window.google.script.run = _criarRunner(null, null);
   }, true);
 })();
 
+// ── Máscaras de valor (R$) e CNPJ (09/11/2026) ───────────────────────────────
+// Valor: todo campo numérico com centavos (step="0.01") vira texto formatado
+// enquanto se digita (1.145.622,24). O código das telas continua lendo
+// el.value como número simples ("1145622.24") e pode gravar el.value = 1500.
+// CNPJ: campos cujo id contém "cnpj" formatam 00.000.000/0000-00.
+(function () {
+  const nativo = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+  const lerNat = el => nativo.get.call(el);
+  const gravarNat = (el, v) => nativo.set.call(el, v);
+
+  // "1.145.622,24" | "1145622,2" | "1500" → "1145622.24" | "1145622.2" | "1500"
+  const paraNumero = t => String(t == null ? '' : t).trim().replace(/\./g, '').replace(',', '.').replace(/[^\d.\-]/g, '');
+  const agrupar = int => int.replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  // Formata o que está sendo digitado: só dígitos e uma vírgula, até 2 casas.
+  const formatarDigitando = t => {
+    t = String(t || '').replace(/[^\d,]/g, '');
+    const i = t.indexOf(',');
+    if (i < 0) return agrupar(t);
+    const int = t.slice(0, i), dec = t.slice(i + 1).replace(/,/g, '').slice(0, 2);
+    return (agrupar(int) || '0') + ',' + dec;
+  };
+  const formatarFinal = n => {
+    if (n === '' || n == null || isNaN(Number(n))) return '';
+    return Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  function moeda(el) {
+    if (el.dataset.moeda) return;
+    const inicial = lerNat(el);
+    el.dataset.moeda = '1';
+    el.type = 'text';
+    el.inputMode = 'decimal';
+    el.autocomplete = 'off';
+    if (!el.placeholder || el.placeholder === '0.00') el.placeholder = '0,00';
+    Object.defineProperty(el, 'value', {
+      configurable: true,
+      get() { return paraNumero(lerNat(el)); },
+      set(v) {
+        const s = String(v == null ? '' : v);
+        gravarNat(el, s === '' ? '' : formatarFinal(/,/.test(s) ? paraNumero(s) : s.replace(/[^\d.\-]/g, '')));
+      },
+    });
+    Object.defineProperty(el, 'valueAsNumber', { configurable: true, get() { const v = el.value; return v === '' ? NaN : Number(v); } });
+    gravarNat(el, inicial === '' ? '' : formatarFinal(inicial));
+  }
+
+  function cnpj(el) {
+    if (el.dataset.cnpj) return;
+    el.dataset.cnpj = '1';
+    el.inputMode = 'numeric';
+    el.maxLength = 18;
+    if (!el.placeholder) el.placeholder = '00.000.000/0000-00';
+    const v = lerNat(el);
+    if (v) gravarNat(el, mascararCnpj(v));
+  }
+  function mascararCnpj(t) {
+    const d = String(t || '').replace(/\D/g, '').slice(0, 14);
+    return d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+            .replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2');
+  }
+
+  // Reposiciona o cursor: mesmo número de dígitos (e vírgula) à esquerda.
+  function reformatar(el, fn, conta) {
+    const bruto = lerNat(el), pos = el.selectionStart == null ? bruto.length : el.selectionStart;
+    const antes = Array.from(bruto.slice(0, pos)).filter(conta).length;
+    const novo = fn(bruto);
+    if (novo === bruto) return;
+    gravarNat(el, novo);
+    let n = 0, p = 0;
+    while (p < novo.length && n < antes) { if (conta(novo[p])) n++; p++; }
+    try { el.setSelectionRange(p, p); } catch (e) {}
+  }
+
+  // Captura no documento: roda antes do oninput da própria tela.
+  document.addEventListener('input', e => {
+    const el = e.target;
+    if (!el || el.tagName !== 'INPUT') return;
+    if (el.dataset.moeda) {
+      // Ponto digitado (teclado americano/numérico) vale como vírgula decimal.
+      if (e.data === '.') {
+        const b = lerNat(el), pos = el.selectionStart;
+        if (pos && b[pos - 1] === '.' && b.indexOf(',') < 0) {
+          gravarNat(el, b.slice(0, pos - 1) + ',' + b.slice(pos));
+          try { el.setSelectionRange(pos, pos); } catch (x) {}
+        }
+      }
+      reformatar(el, formatarDigitando, c => /[\d,]/.test(c));
+    } else if (el.dataset.cnpj) reformatar(el, mascararCnpj, c => /\d/.test(c));
+  }, true);
+  document.addEventListener('blur', e => {
+    const el = e.target;
+    if (el && el.tagName === 'INPUT' && el.dataset.moeda) { const v = el.value; gravarNat(el, v === '' ? '' : formatarFinal(v)); }
+  }, true);
+
+  function varrer(raiz) {
+    if (!raiz.querySelectorAll) return;
+    raiz.querySelectorAll('input[type="number"][step="0.01"]').forEach(moeda);
+    raiz.querySelectorAll('input[id*="cnpj" i]').forEach(cnpj);
+    if (raiz.matches && raiz.matches('input[type="number"][step="0.01"]')) moeda(raiz);
+    if (raiz.matches && raiz.matches('input[id*="cnpj" i]')) cnpj(raiz);
+  }
+  const iniciar = () => {
+    varrer(document);
+    new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1) varrer(n); })))
+      .observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.body) iniciar(); else document.addEventListener('DOMContentLoaded', iniciar);
+})();
+
 })();

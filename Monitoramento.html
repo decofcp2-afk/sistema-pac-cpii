@@ -178,7 +178,7 @@
   .elo + .elo { border-left: none; }
   .elo span { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; color: #888780; font-weight: 600; }
   .elo b { display: block; font-size: 15px; margin-top: 3px; } .elo small { font-size: 11px; color: #888780; }
-  .cob-linha td input[type=number] { width: 130px; padding: 4px 6px; border: 1px solid #D3D1C7; border-radius: 6px; text-align: right; }
+  .cob-linha td input[data-moeda], .cob-linha td input[type=number] { width: 130px; padding: 4px 6px; border: 1px solid #D3D1C7; border-radius: 6px; text-align: right; }
   .alerta-num { color: #A32D2D; font-weight: 700; }
   .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 16px; font-size: 12.5px; background: #FAFAF8; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
   .kv span { display: block; font-size: 10.5px; color: #888780; text-transform: uppercase; letter-spacing: .3px; }
@@ -243,7 +243,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="api.js?v=202611091700"></script>
+<script src="api.js?v=202611091800"></script>
 <script>
   const token = localStorage.getItem('pac_token') || '';
   let _usuario = null, _ctx = null, _dados = null;

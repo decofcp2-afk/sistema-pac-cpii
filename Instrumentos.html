@@ -207,7 +207,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="api.js?v=202611091700"></script>
+<script src="api.js?v=202611091800"></script>
 <script>
   const token = localStorage.getItem('pac_token') || '';
   let _usuario = null, _ctx = null, _dados = null;
@@ -334,7 +334,7 @@
         <div class="campo so-inst"><label>Valor limite (R$) *</label><input type="number" min="0" step="0.01" id="in-lim" value="${i.valor_limite ?? ''}"></div>
         <div class="campo so-inst"><label>Vigência — início</label><input type="date" id="in-vi" value="${esc(i.vigencia_inicio||'')}"></div>
         <div class="campo so-inst"><label>Vigência — fim</label><input type="date" id="in-vf" value="${esc(i.vigencia_fim||'')}"></div>
-        <div class="campo"><label>Processo SEI</label><input id="in-sei" value="${esc(i.processo_sei||'')}"></div>
+        <div class="campo"><label>Processo SUAP</label><input id="in-sei" value="${esc(i.processo_sei||'')}"></div>
         <div class="campo so-proc"><label>Modalidade</label><input id="in-mod" value="${esc(i.modalidade||'')}" placeholder="Pregão eletrônico, dispensa…"></div>
         <div class="campo so-inst largo"><label>Gerado a partir do processo</label><select id="in-orig" ${i.id_instrumento ? 'disabled' : ''}><option value="">Nenhum</option>${procs.map(p => `<option value="${p.id_instrumento}"${p.id_instrumento===i.id_processo_origem?' selected':''}>${esc(p.numero)} · ${esc(p.objeto)}</option>`).join('')}</select>
           <span class="hint">Ao salvar, o processo fica concluído e as requisições que aguardavam a contratação vão para a seção gestora deste instrumento.</span></div>

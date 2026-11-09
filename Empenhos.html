@@ -178,7 +178,7 @@
   .elo + .elo { border-left: none; }
   .elo span { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; color: #888780; font-weight: 600; }
   .elo b { display: block; font-size: 15px; margin-top: 3px; } .elo small { font-size: 11px; color: #888780; }
-  .cob-linha td input[type=number] { width: 130px; padding: 4px 6px; border: 1px solid #D3D1C7; border-radius: 6px; text-align: right; }
+  .cob-linha td input[data-moeda], .cob-linha td input[type=number] { width: 130px; padding: 4px 6px; border: 1px solid #D3D1C7; border-radius: 6px; text-align: right; }
   .alerta-num { color: #A32D2D; font-weight: 700; }
   .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 16px; font-size: 12.5px; background: #FAFAF8; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
   .kv span { display: block; font-size: 10.5px; color: #888780; text-transform: uppercase; letter-spacing: .3px; }
@@ -236,7 +236,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="api.js?v=202611091700"></script>
+<script src="api.js?v=202611091800"></script>
 <script>
   const token = localStorage.getItem('pac_token') || '';
   let _usuario = null, _ctx = null, _dados = null;
@@ -382,7 +382,7 @@
       ${s.situacao === 'devolvida' ? `<div class="aviso"><b>Devolvida à seção gestora:</b> ${esc(s.motivo||'')}</div>` : ''}
       <div class="kv">
         ${s.numero_instrumento ? `<div><span>Fornecedor</span><b>${esc(s.fornecedor_nome||'—')}</b>${s.fornecedor_cnpj ? '<br>' + esc(s.fornecedor_cnpj) : ''}</div>
-        <div><span>Objeto</span>${esc(s.objeto_instrumento||'')}</div><div><span>Processo SEI</span>${esc(s.processo_sei_instrumento||'—')}</div>` : ''}
+        <div><span>Objeto</span>${esc(s.objeto_instrumento||'')}</div><div><span>Processo SUAP</span>${esc(s.processo_sei_instrumento||'—')}</div>` : ''}
         <div><span>Valor real</span><b>${fmtV(s.total_real)}</b></div><div><span>Empenhado</span><b>${fmtV(s.empenhado)}</b></div>
         <div><span>A empenhar</span><b>${fmtV(s.a_empenhar)}</b></div><div><span>Enviada</span>${fmtDH(s.data_envio)}<br>${esc(s.nome_envio||'')}</div>
         ${s.observacao ? `<div style="grid-column:1/-1"><span>Observação</span>${esc(s.observacao)}</div>` : ''}
@@ -657,7 +657,7 @@
         <tr><th>Objeto</th><td>${esc(s.objeto_instrumento||'')}</td></tr>
         <tr><th>Fornecedor</th><td>${esc(s.fornecedor_nome||'—')}${s.fornecedor_cnpj ? ' — CNPJ ' + esc(s.fornecedor_cnpj) : ''}</td></tr>
         <tr><th>Vigência</th><td>${s.vigencia_inicio ? fmtD(s.vigencia_inicio) + ' a ' : 'até '}${fmtD(s.vigencia_fim)}</td></tr>
-        <tr><th>Processo SEI</th><td>${esc(s.processo_sei_instrumento||'—')}</td></tr>
+        <tr><th>Processo SUAP</th><td>${esc(s.processo_sei_instrumento||'—')}</td></tr>
         ${s.valor_limite != null ? `<tr><th>Valor do instrumento</th><td>${fmtV(s.valor_limite)}</td></tr>
         <tr><th>Saldo antes desta solicitação</th><td>${fmtV(saldoAntes)}</td></tr>
         <tr><th>Saldo depois desta solicitação</th><td>${fmtV(saldoDepois)}</td></tr>` : ''}`
