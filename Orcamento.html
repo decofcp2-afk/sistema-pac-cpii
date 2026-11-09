@@ -192,6 +192,18 @@
       <select id="d-exercicio"></select>
     </div>
     <div class="campo">
+      <label>Ação orçamentária <span class="obrig">*</span></label>
+      <select id="d-acao" onchange="trocarAcao()"><option value="">Selecione...</option></select>
+      <span class="hint">20RI e as demais ações da LOA que entram no planejamento</span>
+    </div>
+    <div class="campo" id="d-acao-nova" style="display:none">
+      <label>Nova ação: código e nome <span class="obrig">*</span></label>
+      <div style="display:flex;gap:8px">
+        <input id="d-acao-cod" maxlength="4" placeholder="Ex.: 2994" style="width:90px;text-transform:uppercase">
+        <input id="d-acao-nome" placeholder="Nome da ação, como na LOA" style="flex:1">
+      </div>
+    </div>
+    <div class="campo">
       <label>Origem do crédito <span class="obrig">*</span></label>
       <select id="d-origem"><option value="">Selecione...</option></select>
       <span class="hint">Lei 4.320/64, arts. 40–41: dotação inicial ou crédito adicional</span>
@@ -204,6 +216,11 @@
     <div class="campo">
       <label>Valor total (R$) <span class="obrig">*</span></label>
       <input type="number" id="d-valor" placeholder="0,00" min="0" step="0.01">
+    </div>
+    <div class="campo">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500">
+        <input type="checkbox" id="d-previsao" style="width:auto"> Valor previsto (depende de arrecadação, ex.: recursos próprios)
+      </label>
     </div>
     <div class="campo">
       <label>Observação</label>
@@ -301,7 +318,7 @@
   </div>
 </div>
 
-<script src="api.js?v=202611091200"></script>
+<script src="api.js?v=202611091600"></script>
 <script>
   const token  = localStorage.getItem('pac_token') || '';
   const appUrl = APPS_SCRIPT_URL;
@@ -522,7 +539,7 @@
     document.getElementById('tabela-dotacoes').innerHTML = `
       <table>
         <thead><tr>
-          <th>Unidade / origem e fonte</th>
+          <th>Unidade / ação, origem e fonte</th>
           <th class="num">Recebido</th>
           <th class="num">Repassado às subunidades</th>
           <th class="num">Saldo disponível</th>
@@ -538,9 +555,10 @@
             const pct       = recebido > 0 ? Math.round((repassado/recebido)*100) : 0;
             const cor       = pct >= 90 ? 'vermelho' : pct >= 70 ? 'amarelo' : 'verde';
             const nomeDot   = nomeUnidade(d.id_unidade_fk);
-            const det = (d.dotacoes_proprias || []).map(x =>
-              `<div style="font-size:11px;color:#888780;margin-top:2px">${x.origem_nome} · fonte ${x.fonte_codigo||'—'} · R$ ${fmtValor(x.valor_total)}</div>`).join('')
-              || '<div style="font-size:11px;color:#888780;margin-top:2px">Recebido por repasse</div>';
+            const det = ((d.dotacoes_proprias || []).map(x =>
+              `<div style="font-size:11px;color:#888780;margin-top:2px" title="${x.acao_nome||''}">Ação ${x.acao_codigo||'—'} · ${x.origem_nome} · fonte ${x.fonte_codigo||'—'} · R$ ${fmtValor(x.valor_total)}${x.previsao ? ' <span style="color:#633806;font-weight:600">(previsão)</span>' : ''}</div>`).join('')
+              || '<div style="font-size:11px;color:#888780;margin-top:2px">Recebido por repasse</div>')
+              + (d.devolvido > 0.005 ? `<div style="font-size:11px;color:#085041;margin-top:2px">${d.e_raiz ? 'Inclui' : 'Devolvido à Reitoria:'} R$ ${fmtValor(d.devolvido)}${d.e_raiz ? ' devolvidos pelas unidades (Monitoramento)' : ' (Monitoramento)'}</div>` : '');
             return `<tr>
               <td><b>${d.sigla || nomeDot}</b>${det}</td>
               <td class="num" style="font-weight:600;color:#3C3489">R$ ${fmtValor(recebido)}</td>
@@ -616,12 +634,18 @@
   }
 
   // ── Modal dotação ─────────────────────────────────────────────────────────
-  let _fontes = [], _origens = [];
+  let _fontes = [], _origens = [], _acoes = [];
+  function trocarAcao() {
+    document.getElementById('d-acao-nova').style.display = document.getElementById('d-acao').value === '__nova' ? '' : 'none';
+  }
   function carregarFontes(cb) {
     if (_fontes.length) { cb && cb(); return; }
     google.script.run.withSuccessHandler(function(resp) {
       if (!resp || !resp.ok) return;
-      _fontes = resp.fontes || []; _origens = resp.origens || [];
+      _fontes = resp.fontes || []; _origens = resp.origens || []; _acoes = resp.acoes || [];
+      document.getElementById('d-acao').innerHTML = '<option value="">Selecione...</option>' +
+        _acoes.map(a => `<option value="${a.codigo}">${a.codigo} — ${a.nome}</option>`).join('') +
+        '<option value="__nova">Outra ação (cadastrar)…</option>';
       document.getElementById('d-origem').innerHTML = '<option value="">Selecione...</option>' +
         _origens.map(o => `<option value="${o.valor}">${o.nome}</option>`).join('');
       document.getElementById('d-fonte').innerHTML = '<option value="">Selecione...</option>' +
@@ -634,7 +658,11 @@
     carregarFontes(function() {
       document.getElementById('d-origem').value = 'loa';
       document.getElementById('d-fonte').value = '';
+      document.getElementById('d-acao').value = _acoes.some(a => a.codigo === '20RI') ? '20RI' : '';
+      document.getElementById('d-acao-cod').value = ''; document.getElementById('d-acao-nome').value = '';
+      trocarAcao();
     });
+    document.getElementById('d-previsao').checked = false;
     document.getElementById('d-unidade').value = '';
     document.getElementById('d-valor').value   = '';
     document.getElementById('d-obs').value     = '';
@@ -660,6 +688,14 @@
     if (!exercicio) { mostrarErroDot('Selecione o exercício.'); return; }
     const origem = document.getElementById('d-origem').value;
     const fonte  = document.getElementById('d-fonte').value;
+    let acao = document.getElementById('d-acao').value;
+    const acaoNova = acao === '__nova';
+    const acaoNome = document.getElementById('d-acao-nome').value.trim();
+    if (acaoNova) acao = document.getElementById('d-acao-cod').value.trim().toUpperCase();
+    if (!acao) { mostrarErroDot('Selecione a ação orçamentária.'); return; }
+    if (acaoNova && !/^[0-9A-Z]{4}$/.test(acao)) { mostrarErroDot('O código da ação tem 4 caracteres (ex.: 2994).'); return; }
+    if (acaoNova && acaoNome.length < 3) { mostrarErroDot('Informe o nome da nova ação.'); return; }
+    const previsao = document.getElementById('d-previsao').checked;
     if (!origem) { mostrarErroDot('Selecione a origem do crédito.'); return; }
     if (!fonte)  { mostrarErroDot('Selecione a fonte de recursos.'); return; }
     if (!valor || Number(valor) <= 0) { mostrarErroDot('Informe um valor válido.'); return; }
@@ -669,6 +705,7 @@
       .withSuccessHandler(function(resp) {
         setBtnLoad('btn-salvar-dotacao', false, 'Cadastrar dotação');
         if (!resp.ok) { mostrarErroDot(resp.erro); return; }
+        if (acaoNova) _fontes = [];   // recarrega a lista de ações na próxima abertura
         fecharModal('overlay-dotacao');
         carregarDotacoes();
       })
@@ -677,7 +714,8 @@
         mostrarErroDot('Erro: ' + err.message);
       })
       .chamarAcao(token, 'salvar_dotacao', JSON.stringify({
-        dotacao: { exercicio: String(exercicio), id_unidade_fk: idUnidade, valor_total: Number(valor), observacao: obs, origem, fonte_codigo: fonte }
+        dotacao: { exercicio: String(exercicio), id_unidade_fk: idUnidade, valor_total: Number(valor), observacao: obs, origem, fonte_codigo: fonte,
+                   acao_codigo: acao, acao_nova: acaoNova, acao_nome: acaoNome, previsao }
       }));
   }
 

@@ -100,6 +100,15 @@ const ORIGENS_DOTACAO = [
 ];
 const _nomeOrigem = v => (ORIGENS_DOTACAO.find(o => o.valor === v) || {}).nome || v || '';
 
+// Devolução de saldo à Reitoria (comando do Monitoramento, 09/11/2026).
+const MOTIVOS_DEVOLUCAO = {
+  economia: 'Economia na contratação (valor real menor que o requisitado)',
+  nao_requisitada: 'Saldo não será requisitado',
+  prazo_encerrado: 'Prazo para requisitar encerrado',
+  restos_a_pagar: 'Executada com restos a pagar',
+  outro: 'Outro motivo',
+};
+
 const _statusTela  = s => (s === 'aprovada' ? 'de_acordo' : s);
 const _statusBanco = s => (s === 'de_acordo' ? 'aprovada' : s);
 
@@ -157,7 +166,8 @@ function _prazoDemanda(d, arv, prazos, proprios) {
 // Demanda homologada + cadeia de valores + prazo + cobranças.
 function _montarDemanda(d, arv, prazos, proprios, cobs) {
   const v = { ...d };
-  ['valor_estimado','requisitado','saldo','aprovado','empenhado','liquidado','pago','residuo'].forEach(k => v[k] = _n(d[k]));
+  ['valor_estimado','requisitado','saldo','aprovado','empenhado','liquidado','pago','residuo','devolvido','devolvivel'].forEach(k => v[k] = _n(d[k]));
+  v.valor_efetivo = v.valor_estimado - v.devolvido;   // homologado menos o devolvido à Reitoria
   // Paga/liquidada só quando cobre todo o aprovado; antes disso, "em execução".
   v.situacao = d.encerrada ? 'encerrada'
              : v.aprovado > 0 && v.pago >= v.aprovado - 0.005 ? 'paga'
@@ -165,7 +175,7 @@ function _montarDemanda(d, arv, prazos, proprios, cobs) {
              : v.liquidado > 0 ? 'em_execucao' : v.empenhado > 0 ? 'empenhada'
              : v.aprovado > 0 ? 'aprovada' : v.requisitado > 0 ? 'requisitada' : 'sem_requisicao';
   v.situacao_nome = SIT_DEMANDA[v.situacao];
-  v.pct_execucao = v.valor_estimado ? Math.round(v.liquidado / v.valor_estimado * 100) : 0;
+  v.pct_execucao = v.valor_efetivo > 0 ? Math.round(v.liquidado / v.valor_efetivo * 100) : 0;
   const pr = _prazoDemanda(d, arv, prazos, proprios);
   v.prazo = pr ? pr.data : null;
   v.prazo_origem = pr ? pr.origem : null;
@@ -443,8 +453,11 @@ const ACOES = {
 
   async listar_fontes() {
     const c = await sb();
-    const { data, error } = await c.from('fontes_recurso').select('codigo,nome').eq('ativo', true).order('codigo');
-    return error ? { ok: false, erro: _erro(error) } : { ok: true, fontes: data, origens: ORIGENS_DOTACAO };
+    const [{ data, error }, { data: acoes }] = await Promise.all([
+      c.from('fontes_recurso').select('codigo,nome').eq('ativo', true).order('codigo'),
+      c.from('acoes_orcamentarias').select('codigo,nome').eq('ativo', true).order('codigo'),
+    ]);
+    return error ? { ok: false, erro: _erro(error) } : { ok: true, fontes: data, origens: ORIGENS_DOTACAO, acoes: acoes || [] };
   },
 
   // Saldo que a unidade ainda pode usar em novas demandas no exercício.
@@ -599,11 +612,13 @@ const ACOES = {
     const c = await sb();
     const ex = Number(exercicio || await _exercicioAtual());
     const p = await _meuPerfil();
-    const [{ data: saldos, error }, arv, { data: dots }] = await Promise.all([
+    const [{ data: saldos, error }, arv, { data: dots }, { data: acoes }] = await Promise.all([
       c.from('v_saldos').select('*').eq('exercicio', ex),
       _arvore(),
       c.from('dotacoes').select('*').eq('exercicio', ex),
+      c.from('acoes_orcamentarias').select('codigo,nome'),
     ]);
+    const nomeAcao = Object.fromEntries((acoes || []).map(a => [a.codigo, a.nome]));
     if (error) return { ok: false, erro: _erro(error) };
     const saldoDe = id => (saldos || []).find(s => s.id_unidade === id);
 
@@ -639,10 +654,14 @@ const ACOES = {
         valor_distribuido_proprio: Number(s.distribuido || 0),
         saldo_proprio:             Number(s.saldo || 0),
         valor_solicitado:          solicitado,
-        // dotações cadastradas diretamente nesta unidade (origem e fonte)
+        // devolvido à Reitoria pelo Monitoramento (na raiz: total recuperado)
+        devolvido:                 Number(s.devolvido || 0),
+        e_raiz:                    !s.id_unidade_pai,
+        // dotações cadastradas diretamente nesta unidade (ação, origem e fonte)
         dotacoes_proprias:         proprias.map(d => ({
           id_dotacao: d.id_dotacao, valor_total: Number(d.valor_total || 0),
           origem: d.origem, origem_nome: _nomeOrigem(d.origem), fonte_codigo: d.fonte_codigo,
+          acao_codigo: d.acao_codigo || '', acao_nome: nomeAcao[d.acao_codigo] || '', previsao: !!d.previsao,
           observacao: d.observacao || '',
         })),
         // nomes antigos, usados por outras telas
@@ -680,14 +699,26 @@ const ACOES = {
     const fonte = x.fonte_codigo || null;
     if (!ORIGENS_DOTACAO.some(o => o.valor === origem)) return { ok: false, erro: 'Origem inválida.' };
     if (!fonte) return { ok: false, erro: 'Selecione a fonte de recursos.' };
+    let acao = String(x.acao_codigo || '').trim().toUpperCase();
+    if (!acao) return { ok: false, erro: 'Selecione a ação orçamentária.' };
+    if (!/^[0-9A-Z]{4}$/.test(acao)) return { ok: false, erro: 'O código da ação tem 4 caracteres (ex.: 20RI).' };
+    if (x.acao_nova) {
+      const nome = String(x.acao_nome || '').trim();
+      if (nome.length < 3) return { ok: false, erro: 'Informe o nome da ação ' + acao + '.' };
+      const { data: ja } = await c.from('acoes_orcamentarias').select('codigo').eq('codigo', acao);
+      if (!ja || !ja.length) {
+        const { error: eA } = await c.from('acoes_orcamentarias').insert({ codigo: acao, nome });
+        if (eA) return { ok: false, erro: _erro(eA) };
+      }
+    }
     let q = c.from('dotacoes').select('id_dotacao')
-      .eq('id_unidade_fk', x.id_unidade_fk).eq('exercicio', ex).eq('origem', origem).eq('fonte_codigo', fonte);
+      .eq('id_unidade_fk', x.id_unidade_fk).eq('exercicio', ex).eq('origem', origem).eq('fonte_codigo', fonte).eq('acao_codigo', acao);
     const { data: existe } = await q;
     if (existe && existe.length)
-      return { ok: false, erro: 'Já existe dotação desta unidade em ' + ex + ' com a mesma origem e fonte. Cadastre outra origem/fonte ou ajuste os repasses.' };
+      return { ok: false, erro: 'Já existe dotação desta unidade em ' + ex + ' com a mesma ação, origem e fonte. Cadastre outra combinação ou ajuste os repasses.' };
     const { error } = await c.from('dotacoes').insert({
       id_unidade_fk: x.id_unidade_fk, exercicio: ex, valor_total: Number(x.valor_total),
-      origem, fonte_codigo: fonte,
+      origem, fonte_codigo: fonte, acao_codigo: acao, previsao: !!x.previsao,
       observacao: x.observacao || null, id_usuario_criou_fk: p.id_usuario,
     });
     return error ? { ok: false, erro: _erro(error) } : { ok: true };
@@ -738,15 +769,12 @@ const ACOES = {
     let exercicio = null;
     try { exercicio = Number(sessionStorage.getItem('pac_exercicio')) || null; } catch (x) {}
     exercicio = exercicio || Number(await _exercicioAtual());
-    const { data: linhas } = await c.from('v_saldos').select('saldo')
-      .eq('id_unidade', dist.id_unidade_destino_fk).eq('exercicio', exercicio);
-    const linha = (linhas || [])[0] || {};
-    const { data: dems } = await c.from('demandas').select('valor_estimado')
-      .eq('id_unidade_fk', dist.id_unidade_destino_fk)
-      .in('status', ['submetida', 'aprovada', 'priorizada', 'homologada'])
-      .eq('exercicio', exercicio);
-    const comprometido = (dems || []).reduce((t, d) => t + Number(d.valor_estimado || 0), 0);
-    const livre = Math.min(Number(dist.valor), Number(linha.saldo || 0) - comprometido);
+    // Saldo livre da subunidade (recebido − repassado − demandas, já
+    // descontadas as devoluções à Reitoria), calculado pelo banco.
+    const { data: livreDest, error: eL } = await c.rpc('saldo_livre_unidade',
+      { p_unidade: dist.id_unidade_destino_fk, p_exercicio: exercicio });
+    if (eL) return { ok: false, erro: _erro(eL) };
+    const livre = Math.min(Number(dist.valor), Number(livreDest || 0));
     const v = Number(valor_cancelar);
     if (!(v > 0) || v > livre)
       return { ok: false, erro: 'Valor maior que o saldo livre da subunidade (R$ ' + Math.max(livre, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ').' };
@@ -852,17 +880,34 @@ const ACOES = {
     demandas.forEach(d => { porSituacao[d.situacao] = (porSituacao[d.situacao] || 0) + 1; });
     const pendencias = demandas.filter(d => d.estado_prazo === 'vencido' || d.estado_prazo === 'a_vencer')
       .sort((a, b) => (a.estado_prazo === b.estado_prazo ? 0 : a.estado_prazo === 'vencido' ? -1 : 1) || String(a.prazo).localeCompare(String(b.prazo)));
-    const residuos = [
-      ...reqs.filter(r => r.residuo > 0.005).map(r => ({ tipo: 'residuo', codigo: r.codigo, codigo_demanda: r.codigo_demanda,
-        id_demanda: r.id_demanda, sigla_unidade: r.sigla_unidade, categoria: r.categoria, valor: r.residuo,
-        instrumento: r.numero_instrumento ? (r.tipo_instrumento === 'ata' ? 'Ata ' : 'Contrato ') + r.numero_instrumento : '—',
-        descricao_objeto: r.descricao_objeto })),
-      ...demandas.filter(d => d.encerrada && d.saldo > 0.005).map(d => ({ tipo: 'nao_requisitado', codigo: '', codigo_demanda: d.codigo,
-        id_demanda: d.id_demanda, sigla_unidade: d.sigla_unidade, categoria: d.categoria, valor: d.saldo, instrumento: '—',
-        descricao_objeto: d.descricao_objeto, motivo: d.motivo_encerramento })),
-    ];
+    // Saldo que pode voltar à Reitoria (decisão do Monitoramento, 09/11/2026):
+    // economia (requisitado − real), demandas que não serão requisitadas e
+    // demandas com prazo para requisitar vencido. O valor sugerido nunca passa
+    // do "devolvível" calculado pelo banco.
+    const residuos = demandas.filter(d => d.devolvivel > 0.005).map(d => {
+      const economia = Math.max(0, d.residuo - d.devolvido);
+      const motivo = d.encerrada ? 'nao_requisitada' : d.estado_prazo === 'vencido' ? 'prazo_encerrado'
+                   : economia > 0.005 ? 'economia' : null;
+      if (!motivo) return null;
+      const valor = motivo === 'economia' ? Math.min(economia, d.devolvivel) : d.devolvivel;
+      return { id_demanda: d.id_demanda, codigo_demanda: d.codigo, descricao_objeto: d.descricao_objeto,
+               sigla_unidade: d.sigla_unidade, categoria: d.categoria, motivo, motivo_nome: MOTIVOS_DEVOLUCAO[motivo],
+               detalhe: motivo === 'nao_requisitada' ? (d.motivo_encerramento || '') : motivo === 'prazo_encerrado' ? 'Prazo: ' + (d.prazo || '') : '',
+               valor, devolvivel: d.devolvivel };
+    }).filter(Boolean);
+    const idsDem = new Set(demandas.map(d => d.id_demanda));
+    const { data: devs } = await c.from('devolucoes_saldo')
+      .select('*, demandas(codigo,descricao_objeto,id_unidade_fk), criador:perfis!devolucoes_saldo_criado_por_fkey(nome), desfez:perfis!devolucoes_saldo_desfeita_por_fkey(nome)')
+      .eq('exercicio', ex).order('data_criacao', { ascending: false });
+    const devolucoes = (devs || []).filter(v => idsDem.has(v.id_demanda)).map(v => ({
+      ...v, valor: _n(v.valor), motivo_nome: MOTIVOS_DEVOLUCAO[v.motivo] || v.motivo,
+      codigo_demanda: v.demandas ? v.demandas.codigo : '', descricao_objeto: v.demandas ? v.demandas.descricao_objeto : '',
+      sigla_unidade: v.demandas ? ((arv.porId[v.demandas.id_unidade_fk] || {}).sigla || '') : '',
+      autor: v.criador ? v.criador.nome : '', autor_desfez: v.desfez ? v.desfez.nome : '',
+    }));
     return {
-      ok: true, exercicio: ex, demandas, requisicoes: reqs, solicitacoes, empenhos, liquidacoes, calendario, pendencias, residuos,
+      ok: true, exercicio: ex, demandas, requisicoes: reqs, solicitacoes, empenhos, liquidacoes, calendario, pendencias, residuos, devolucoes,
+      motivos_devolucao: MOTIVOS_DEVOLUCAO,
       cobertura: cob, itens_liquidacao: itens,
       conciliacao: _conciliar(reqs, empenhos),
       resumo: {
@@ -870,6 +915,7 @@ const ACOES = {
         aprovado: soma(demandas, 'aprovado'), empenhado: soma(demandas, 'empenhado'), liquidado: soma(demandas, 'liquidado'),
         pago: soma(demandas, 'pago'), saldo_requisitar: soma(demandas.filter(d => !d.encerrada), 'saldo'),
         residuos: residuos.reduce((t, x) => t + x.valor, 0),
+        devolvido: devolucoes.filter(v => !v.desfeita_em).reduce((t, v) => t + v.valor, 0),
         por_situacao: porSituacao, por_unidade: agrupar('sigla_unidade'), por_categoria: agrupar('categoria'),
         vencidos: pendencias.filter(p => p.estado_prazo === 'vencido').length,
         a_vencer: pendencias.filter(p => p.estado_prazo === 'a_vencer').length,
@@ -884,11 +930,13 @@ const ACOES = {
     const { data: d, error } = await c.from('v_demandas_saldo').select('*').eq('id_demanda', id_demanda).maybeSingle();
     if (error) return { ok: false, erro: _erro(error) };
     if (!d) return { ok: false, erro: 'Demanda não encontrada ou não homologada.' };
-    const [rR, rP, rPD, rCo] = await Promise.all([
+    const [rR, rP, rPD, rCo, rDv] = await Promise.all([
       c.from('v_requisicoes').select('*').eq('id_demanda', id_demanda).order('codigo'),
       c.from('prazos_requisicao').select('*').eq('exercicio', d.exercicio),
       c.from('prazos_demanda').select('*').eq('id_demanda', id_demanda),
       c.from('cobrancas').select('*, perfis(nome)').eq('id_demanda', id_demanda).order('data_cobranca', { ascending: false }),
+      c.from('devolucoes_saldo').select('*, criador:perfis!devolucoes_saldo_criado_por_fkey(nome), desfez:perfis!devolucoes_saldo_desfeita_por_fkey(nome)')
+        .eq('id_demanda', id_demanda).order('data_criacao', { ascending: false }),
     ]);
     const reqs = (rR.data || []).map(_numReq);
     const ids = reqs.map(r => r.id_requisicao);
@@ -910,7 +958,24 @@ const ACOES = {
       })),
       prazo_proprio: (rPD.data || [])[0] || null,
       cobrancas: (rCo.data || []).map(x => ({ ...x, autor: x.perfis ? x.perfis.nome : '' })),
+      devolucoes: (rDv.data || []).map(v => ({ ...v, valor: _n(v.valor), motivo_nome: MOTIVOS_DEVOLUCAO[v.motivo] || v.motivo,
+        autor: v.criador ? v.criador.nome : '', autor_desfez: v.desfez ? v.desfez.nome : '' })),
+      motivos_devolucao: MOTIVOS_DEVOLUCAO,
     };
+  },
+
+  // Devolução de saldo à Reitoria: o banco confere perfil, escopo e limite.
+  async dev_devolver({ id_demanda, valor, motivo, observacao }) {
+    const c = await sb();
+    const { data, error } = await c.rpc('dev_devolver', { p_demanda: id_demanda, p_valor: Number(valor),
+      p_motivo: motivo, p_observacao: observacao || null });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true, id_devolucao: data };
+  },
+
+  async dev_desfazer({ id_devolucao, motivo }) {
+    const c = await sb();
+    const { error } = await c.rpc('dev_desfazer', { p_id: id_devolucao, p_motivo: motivo || '' });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
   },
 
   async mon_salvar_prazo(params) {
