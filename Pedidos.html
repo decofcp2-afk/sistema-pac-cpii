@@ -486,10 +486,18 @@
       td.v,th.v{text-align:right;white-space:nowrap} tr.tot td{font-weight:bold;background:#F3F8FC}
       .ass{margin-top:46px;text-align:center} .ass .linha{border-top:1px solid #333;width:300px;margin:0 auto 4px}
       .rodape{margin-top:30px;font-size:9pt;color:#555;border-top:1px solid #ccc;padding-top:8px}
-      @media print{ body{background:#fff} .barra{display:none} .folha{margin:0;padding:0;max-width:none} @page{size:A4;margin:18mm 18mm 16mm} }
+      html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      table.pagina{margin:0;font-size:inherit} table.pagina>thead>tr>td,table.pagina>tfoot>tr>td,table.pagina>tbody>tr>td{border:0;padding:0;background:none}
+      .esp-cima,.esp-baixo{height:0}
+      /* Impressão: margens próprias (espaçadores repetidos em cada página), iguais em
+         qualquer configuração de margem do navegador; cores de fundo preservadas. */
+      @page{size:A4;margin:0}
+      @media print{ body{background:#fff} .barra{display:none} .folha{margin:0;padding:0 18mm;max-width:none;width:auto}
+        .esp-cima{height:15mm} .esp-baixo{height:12mm} tr{break-inside:avoid}
+        .data{margin:10px 0 14px} .subt{margin-bottom:14px} h2{margin:14px 0 6px} .ass{margin-top:30px} .rodape{margin-top:12px} .folha{line-height:1.38} h2{break-after:avoid} .ass{break-inside:avoid} }
     </style></head><body>
     <div class="barra"><button onclick="window.print()">Imprimir / salvar em PDF</button></div>
-    <div class="folha">
+    <div class="folha"><table class="pagina"><thead><tr><td class="esp-cima"></td></tr></thead><tfoot><tr><td class="esp-baixo"></td></tr></tfoot><tbody><tr><td>
       <div class="cab"><p class="b">MINISTÉRIO DA EDUCAÇÃO</p><p class="b">COLÉGIO PEDRO II</p><p>${esc(s.nome_gestora||'').toUpperCase()}</p></div>
       <p class="data">Em ${hoje.getDate()} de ${MESES[hoje.getMonth()]} de ${hoje.getFullYear()}.</p>
       <h1>SOLICITAÇÃO DE EMISSÃO DE NOTA DE EMPENHO</h1>
@@ -523,7 +531,7 @@
       </tbody></table>
       <div class="ass"><div class="linha"></div><b>${esc(assinante)}</b><br>${siape ? 'SIAPE ' + esc(siape) + '<br>' : ''}${esc(s.sigla_gestora||'')} — seção gestora</div>
       <p class="rodape">Documento gerado em ${hoje.toLocaleString('pt-BR')} pelo sistema Planejamento e Monitoramento Orçamentário do Colégio Pedro II. Situação da solicitação: ${esc(SIT_SOL[s.situacao_exibicao]||s.situacao_exibicao)}.</p>
-    </div></body></html>`;
+    </td></tr></tbody></table></div></body></html>`;
     const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
     window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 60000);
