@@ -455,8 +455,8 @@ begin
       if v_item is not null then
         select * into it from public.instrumento_itens where id_item = v_item and id_instrumento = inst.id_instrumento;
         if it.id_item is null then raise exception 'Item nao encontrado neste instrumento.'; end if;
-        v_usado := exists (select 1 from public.requisicao_itens ri join public.requisicoes r on r.id_requisicao = ri.id_requisicao
-                            where ri.id_item = v_item and r.situacao <> 'cancelada');
+        v_usado := exists (select 1 from public.requisicao_itens ri join public.requisicoes rq on rq.id_requisicao = ri.id_requisicao
+                            where ri.id_item = v_item and rq.situacao <> 'cancelada');
         if v_usado and abs(it.valor_unitario - (x->>'valor_unitario')::numeric) > 0.00001 then
           raise exception 'Item %: ja ha requisicoes; mude o preco por "Registrar alteracao" (reajuste).', it.numero_item;
         end if;
