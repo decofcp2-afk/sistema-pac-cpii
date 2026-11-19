@@ -163,6 +163,8 @@
   .st-sol-elaboracao { background: #FAEEDA; color: #633806; } .st-sol-enviada { background: #E6F1FB; color: #0C447C; }
   .st-sol-empenhada_parcial { background: #EEEDFE; color: #3C3489; } .st-sol-empenhada { background: #E1F5EE; color: #085041; }
   .st-sol-devolvida { background: #FCEBEB; color: #791F1F; } .st-sol-cancelada { background: #F1EFE8; color: #888780; }
+  .tab-itens td { padding: 5px 7px; } .tab-itens input { width: 100%; padding: 5px 6px; border: 1px solid #D3D1C7; border-radius: 6px; font-size: 12.5px; text-align: right; }
+  .tab-itens input:disabled { background: #F5F4F0; }
 </style>
 </head>
 <body>
@@ -209,7 +211,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="api.js?v=202611092000"></script>
+<script src="api.js?v=202611191500"></script>
 <script>
   const token = localStorage.getItem('pac_token') || '';
   let _usuario = null, _ctx = null, _dados = null;
@@ -231,13 +233,24 @@
     return new Promise(ok => google.script.run.withSuccessHandler(ok)
       .withFailureHandler(e => ok({ ok: false, erro: e.message })).chamarAcao(token, acao, JSON.stringify(params || {})));
   }
-  const SIT_REQ = { aguardando_contratacao: 'Pendente: aguarda contratação', aguardando_gestor: 'Aguardando o gestor',
+  const SIT_REQ = { aguardando_contratacao: 'Aguardando processo de contratação', aguardando_gestor: 'Aguardando o gestor',
     pendente: 'Pendente: devolvida', aprovada: 'Aprovada', em_solicitacao: 'Em solicitação de empenho',
     empenhada: 'Empenhada', liquidada: 'Liquidada', paga: 'Paga', cancelada: 'Cancelada' };
   const FORMAS = { contrato: 'Contrato vigente', ata: 'Ata de registro de preços', nova_contratacao: 'Nova contratação',
     bolsas_editais: 'Bolsas e editais', diarias: 'Diárias', outros: 'Outros' };
-  const TIPOS_INST = { contrato: 'Contrato', ata: 'Ata de RP', processo: 'Processo de contratação' };
-  const SIT_INST = { vigente: 'Vigente', encerrado: 'Encerrado', em_andamento: 'Em andamento', concluido: 'Concluído', fracassado: 'Fracassado' };
+  const TIPOS_INST = { contrato: 'Contrato', ata: 'Ata de RP', dfd: 'DFD' };
+  const SIT_INST = { vigente: 'Vigente', encerrado: 'Encerrado', em_elaboracao: 'Em elaboração', em_contratacao: 'Em contratação', concluido: 'Concluído', cancelado: 'Cancelado' };
+  function fmtV4(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }); }
+  function numBR(v) {
+    let t = String(v == null ? '' : v).trim();
+    if (!t) return 0;
+    if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+    else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+    const n = parseFloat(t); return isNaN(n) ? 0 : n;
+  }
+  const poloDe = idUn => ((_ctx.unidades || []).find(u => u.id === idUn) || {}).polo;
+  const nomePolo = id => { const p = (_ctx.polos || []).find(x => x.id === id); return p ? (p.nome.startsWith('Reitoria') ? 'Reitoria' : p.sigla) : '—'; };
+  const itensDe = idReq => (_dados.itens_req || []).filter(it => it.id_requisicao === idReq).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
   function stReq(s) { return `<span class="st st-${s}">${esc(SIT_REQ[s] || s)}</span>`; }
   function stInst(s) { return `<span class="st st-${s}">${esc(SIT_INST[s] || s)}</span>`; }
   function abrirModal(titulo, html, largo) {
@@ -304,7 +317,7 @@
         <td><span class="cod-req">${esc(x.codigo)}</span><span class="sub">${esc(x.codigo_demanda)}</span></td>
         <td>${esc(x.sigla_unidade)}</td>
         <td style="max-width:240px">${esc(x.descricao_objeto)}${x.observacao ? `<span class="sub">${esc(x.observacao)}</span>` : ''}</td>
-        <td class="num">${fmtN(x.quantidade)}<span class="sub">${esc(x.unidade_medida||'')}</span></td>
+        <td class="num">${x.quantidade == null ? `${itensDe(x.id_requisicao).length} item(ns)` : fmtN(x.quantidade) + `<span class="sub">${esc(x.unidade_medida||'')}</span>`}</td>
         <td class="num">${fmtV(x.valor)}</td>
         <td class="num">${x.valor_real ? fmtV(x.valor_real) : '—'}</td>
         <td class="num">${Number(x.residuo) ? `<b style="color:#085041">${fmtV(x.residuo)}</b>` : '—'}</td>
@@ -346,7 +359,7 @@
     const devolvidas = S.filter(s => s.situacao === 'devolvida'), elab = S.filter(s => s.situacao === 'elaboracao');
     const porInst = {}; R.filter(x => x.id_instrumento).forEach(x => (porInst[x.id_instrumento] = porInst[x.id_instrumento] || []).push(x));
     const porForma = {}; R.filter(x => !x.id_instrumento).forEach(x => (porForma[x.forma] = porForma[x.forma] || []).push(x));
-    const insts = I.filter(i => porInst[i.id_instrumento] || i.disponivel || (i.tipo === 'processo' && i.situacao === 'em_andamento'));
+    const insts = I.filter(i => porInst[i.id_instrumento] || i.disponivel);
     $('conteudo').innerHTML = `
       <div class="cards">
         <div class="card ${ag.length?'amarelo':''}"><div class="card-label">Aguardando análise</div><div class="card-valor">${ag.length}</div><div class="card-det">${fmtV(soma(ag, 'valor'))} requisitados</div></div>
@@ -366,13 +379,29 @@
           <div class="inst-meta" style="margin-top:6px">${i.fornecedor_nome ? `<span>Fornecedor <b>${esc(i.fornecedor_nome)}</b></span>` : ''}
             ${i.vigencia_fim ? `<span>Vigência até <b>${fmtD(i.vigencia_fim)}</b></span>` : ''}
             ${_dados.admin_global ? `<span>Gestão <b>${esc(i.sigla_gestora)}</b></span>` : ''}
-            ${i.valor_limite != null ? `<span>Limite <b>${fmtV(i.valor_limite)}</b></span><span>Aprovado <b>${fmtV(i.consumido)}</b></span><span>Saldo <b style="color:#085041">${fmtV(i.saldo)}</b></span>` : ''}</div>
-          ${i.valor_limite != null ? `<div style="max-width:320px;margin-top:6px">${barra(i.consumido, i.valor_limite)}</div>` : ''}</div>
+            ${i.valor_limite != null ? `<span>Valor total <b>${fmtV(i.valor_limite)}</b></span><span>Aprovado <b>${fmtV(i.consumido)}</b></span>` : ''}</div>
+          ${quadroItens(i)}</div>
           <div class="tabela-scroll">${l.length ? linhas(l, i.id_instrumento) : '<div class="vazio" style="padding:16px">Nenhuma requisição para este instrumento.</div>'}</div></div>`;
       }).join('')}
       ${Object.keys(porForma).map(f => `<div class="secao"><div class="secao-header"><span class="secao-titulo">Atendimento direto — ${esc(FORMAS[f]||f)}</span>${botaoGerar('forma:' + f, porForma[f])}</div>
         <div class="tabela-scroll">${linhas(porForma[f], 'forma:' + f)}</div></div>`).join('')}
       ${!insts.length && !Object.keys(porForma).length ? '<div class="secao"><div class="vazio">Sua seção não é gestora de nenhum contrato ou ata e não recebeu requisições neste exercício.</div></div>' : ''}`;
+  }
+
+  // Saldo dos itens do(s) polo(s) que a seção gere neste instrumento.
+  function quadroItens(i) {
+    const S = (_dados.saldos || []).filter(x => x.id_instrumento === i.id_instrumento);
+    if (!S.length) return '';
+    const polos = [...new Set(S.map(x => x.id_polo))];
+    return polos.map(po => { const L = S.filter(x => x.id_polo === po);
+      const esg = L.filter(x => x.registrado && x.saldo <= 0).length, alerta = L.filter(x => x.registrado && x.saldo > 0 && x.aprovado / x.registrado >= 0.8).length;
+      return `<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12.5px;color:#3C3489">Saldo dos itens — polo ${esc(nomePolo(po))} (${L.length} item(ns)${esg ? `, <b style="color:#A32D2D">${esg} esgotado(s)</b>` : ''}${alerta ? `, <b style="color:#7A4A00">${alerta} acima de 80%</b>` : ''})</summary>
+        <div class="caixa tabela-scroll" style="margin-top:6px"><table><thead><tr><th>Item</th><th>Descrição</th><th>Unidade</th><th class="num">Valor unit.</th><th class="num">Registrado</th><th class="num">Em análise</th><th class="num">Aprovado</th><th class="num">Saldo</th></tr></thead><tbody>
+        ${L.map(x => `<tr><td style="white-space:nowrap">${x.grupo ? 'G' + esc(x.grupo) + ' · ' : ''}<b>${esc(x.numero_item)}</b></td><td style="max-width:280px">${esc(x.descricao)}</td><td>${esc(x.unidade_medida)}</td>
+          <td class="num">${fmtV4(x.valor_unitario)}</td><td class="num">${fmtN(x.registrado)}</td><td class="num">${x.em_analise ? fmtN(x.em_analise) : '—'}</td>
+          <td class="num">${fmtN(x.aprovado)}<div style="max-width:90px;margin-left:auto;margin-top:3px">${barra(x.aprovado, x.registrado)}</div></td>
+          <td class="num"><b style="color:${x.saldo > 0 ? '#085041' : '#A32D2D'}">${fmtN(x.saldo)}</b></td></tr>`).join('')}
+        </tbody></table></div></details>`; }).join('');
   }
 
   // ── Solicitação de empenho ────────────────────────────────────────────────
@@ -425,7 +454,7 @@
         <thead><tr><th>Requisição</th><th>Unidade</th><th>Objeto</th><th class="num">Qtd.</th><th class="num">Previsto</th><th class="num">Real</th><th class="num">Empenhado</th><th></th></tr></thead><tbody>
         ${R.map(x => `<tr><td><span class="cod-req">${esc(x.codigo)}</span><span class="sub">${esc(x.codigo_demanda)}</span></td>
           <td>${esc(x.sigla_unidade)}</td><td style="max-width:220px">${esc(x.descricao_objeto)}</td>
-          <td class="num">${fmtN(x.quantidade)} <span class="sub">${esc(x.unidade_medida||'')}</span></td>
+          <td class="num">${x.quantidade == null ? `${(x.itens || []).length} item(ns)` : fmtN(x.quantidade) + ` <span class="sub">${esc(x.unidade_medida||'')}</span>`}</td>
           <td class="num">${fmtV(x.valor)}</td><td class="num">${fmtV(x.valor_real)}</td>
           <td class="num">${fmtV(x.empenhado)}${x.empenhos.length ? `<span class="sub">${x.empenhos.map(e => esc(e.numero)).join(', ')}</span>` : ''}</td>
           <td style="text-align:right">${editavel && !x.empenhado ? `<button class="btn btn-mini btn-r" onclick="retirar('${s.id_solicitacao}','${x.id_requisicao}')">Retirar</button>` : ''}</td></tr>`).join('')}
@@ -464,10 +493,17 @@
   const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
   function relatorioSolicitacao() {
     const { solicitacao: s, requisicoes: R } = window._sol;
+    const fmtV4 = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
     const hoje = new Date();
     const instTxt = s.numero_instrumento ? `${s.tipo_instrumento === 'ata' ? 'na Ata de Registro de Preços' : 'no Contrato'} nº ${esc(s.numero_instrumento)}` : `em ${esc((FORMAS[s.forma]||'').toLowerCase())} (atendimento direto)`;
     const porND = {};
-    R.forEach(x => { const k = x.natureza_despesa || 'Não informada'; porND[k] = (porND[k] || 0) + Number(x.valor_real || 0); });
+    const temItens = R.some(x => (x.itens || []).length);
+    R.forEach(x => {
+      const it = x.itens || [];
+      if (it.length) it.forEach(i => { const k = i.natureza_despesa || x.natureza_despesa || 'Não informada';
+        porND[k] = (porND[k] || 0) + Math.round(Number(i.quantidade_aprovada || 0) * Number(i.valor_unitario) * 100) / 100; });
+      else { const k = x.natureza_despesa || 'Não informada'; porND[k] = (porND[k] || 0) + Number(x.valor_real || 0); }
+    });
     const saldoDepois = s.saldo_instrumento, saldoAntes = s.saldo_instrumento != null ? s.saldo_instrumento + (s.situacao === 'cancelada' ? 0 : s.total_real) : null;
     const assinante = s.nome_envio || s.nome_criador || (_usuario && _usuario.nome) || '';
     const siape = s.nome_envio ? s.siape_envio : s.siape_criador;
@@ -514,16 +550,22 @@
         <tr><th>Vigência</th><td>${s.vigencia_inicio ? fmtD(s.vigencia_inicio) + ' a ' : 'até '}${fmtD(s.vigencia_fim)}</td></tr>
         <tr><th>Processo SUAP</th><td>${esc(s.processo_sei_instrumento||'—')}</td></tr>
         ${s.valor_limite != null ? `<tr><th>Valor do instrumento</th><td>${fmtV(s.valor_limite)}</td></tr>
-        <tr><th>Saldo antes desta solicitação</th><td>${fmtV(saldoAntes)}</td></tr>
-        <tr><th>Saldo depois desta solicitação</th><td>${fmtV(saldoDepois)}</td></tr>` : ''}`
+        ${temItens ? '' : `<tr><th>Saldo antes desta solicitação</th><td>${fmtV(saldoAntes)}</td></tr>
+        <tr><th>Saldo depois desta solicitação</th><td>${fmtV(saldoDepois)}</td></tr>`}` : ''}`
         : `<tr><th style="width:34%">Forma de atendimento</th><td>${esc(FORMAS[s.forma]||s.forma)} — atendimento direto, sem contrato ou ata</td></tr>`}
       </table>
       <h2>2. REQUISIÇÕES</h2>
       <table><thead><tr><th>Requisição / demanda</th><th>Unidade requerente</th><th>Objeto</th><th class="v">Qtd.</th><th class="v">Previsto</th><th class="v">Real</th><th class="v">Resíduo</th></tr></thead><tbody>
         ${R.map(x => `<tr><td>${esc(x.codigo)}<br><small>${esc(x.codigo_demanda)}</small></td><td>${esc(x.sigla_unidade)}</td><td>${esc(x.descricao_objeto)}</td>
-          <td class="v">${fmtN(x.quantidade)} ${esc(x.unidade_medida||'')}</td><td class="v">${fmtV(x.valor)}</td><td class="v">${fmtV(x.valor_real)}</td><td class="v">${fmtV(x.residuo)}</td></tr>`).join('')}
+          <td class="v">${x.quantidade == null ? (x.itens || []).length + ' item(ns)' : fmtN(x.quantidade) + ' ' + esc(x.unidade_medida||'')}</td><td class="v">${fmtV(x.valor)}</td><td class="v">${fmtV(x.valor_real)}</td><td class="v">${fmtV(x.residuo)}</td></tr>`).join('')}
         <tr class="tot"><td colspan="4">Total</td><td class="v">${fmtV(s.total_previsto)}</td><td class="v">${fmtV(s.total_real)}</td><td class="v">${fmtV(s.total_previsto - s.total_real)}</td></tr>
       </tbody></table>
+      ${temItens ? `<h2>2.1 ITENS</h2>
+      <table><thead><tr><th>Requisição</th><th>Grupo / item</th><th>Descrição</th><th>Unidade</th><th class="v">Qtd. aprovada</th><th class="v">Valor unitário</th><th class="v">Subtotal</th><th>ND</th></tr></thead><tbody>
+        ${R.flatMap(x => (x.itens || []).filter(i => Number(i.quantidade_aprovada) > 0).map(i => `<tr><td>${esc(x.codigo)}</td><td>${i.grupo ? 'G' + esc(i.grupo) + ' / ' : ''}${esc(i.numero_item)}</td>
+          <td>${esc(i.descricao)}</td><td>${esc(i.unidade_medida)}</td><td class="v">${fmtN(i.quantidade_aprovada)}</td><td class="v">${fmtV4(i.valor_unitario)}</td>
+          <td class="v">${fmtV(Number(i.quantidade_aprovada) * Number(i.valor_unitario))}</td><td>${esc(i.natureza_despesa || x.natureza_despesa || '—')}</td></tr>`)).join('')}
+      </tbody></table>` : ''}
       <h2>3. TOTAIS POR NATUREZA DE DESPESA</h2>
       <table><thead><tr><th>Natureza de despesa</th><th class="v">Valor</th></tr></thead><tbody>
         ${Object.keys(porND).sort().map(k => `<tr><td>${esc(k)}</td><td class="v">${fmtV(porND[k])}</td></tr>`).join('')}
@@ -540,24 +582,32 @@
   function analisar(id) {
     const x = _dados.requisicoes.find(r => r.id_requisicao === id);
     const inst = x.id_instrumento ? _dados.instrumentos.find(i => i.id_instrumento === x.id_instrumento) : null;
-    const saldoInst = inst && inst.valor_limite != null ? Number(inst.saldo) + (x.situacao === 'aprovada' ? Number(x.valor_real || 0) : 0) : null;
-    const unit = x.quantidade_demanda ? Number(x.valor_demanda) / Number(x.quantidade_demanda) : null;
+    const itens = itensDe(id);
     const pode = x.situacao === 'aguardando_gestor', aprovada = x.situacao === 'aprovada';
+    const polo = poloDe(x.id_unidade);
+    const saldoItem = idItem => { const s = (_dados.saldos || []).find(z => z.id_item === idItem && z.id_polo === polo); return s ? s.saldo + (aprovada ? Number((itens.find(i => i.id_item === idItem) || {}).quantidade_aprovada || 0) : 0) : null; };
     abrirModal(`<span class="cod-req">${esc(x.codigo)}</span> ${esc(x.descricao_objeto)}<span class="sub">${esc(x.codigo_demanda)} · ${esc(x.nome_unidade)}</span>`, `
       <div class="dados-dem" style="margin-bottom:14px">
-        <div><span>Quantidade pedida</span><b>${fmtN(x.quantidade)} ${esc(x.unidade_medida||'')}</b></div>
         <div><span>Valor requisitado</span><b>${fmtV(x.valor)}</b></div>
-        <div><span>Unitário previsto</span><b>${unit ? fmtV(unit) : '—'}</b></div>
-        <div><span>Atendimento</span><b>${esc(FORMAS[x.forma]||x.forma)}</b>${inst ? `<div style="font-size:11px;color:#888780">${esc(inst.numero)}</div>` : ''}</div>
-        ${saldoInst != null ? `<div><span>Saldo do instrumento</span><b>${fmtV(saldoInst)}</b></div>` : ''}
+        <div><span>Atendimento</span><b>${esc(FORMAS[x.forma]||x.forma)}</b>${inst ? `<div style="font-size:11px;color:#888780">${esc(inst.numero)} · polo ${esc(nomePolo(polo))}</div>` : ''}</div>
+        ${itens.length ? '' : `<div><span>Quantidade pedida</span><b>${x.quantidade == null ? '—' : fmtN(x.quantidade) + ' ' + esc(x.unidade_medida||'')}</b></div>`}
         ${x.observacao ? `<div class="largo"><span>Observação do requerente</span>${esc(x.observacao)}</div>` : ''}
         ${x.motivo ? `<div class="largo"><span>Motivo registrado</span>${esc(x.motivo)}</div>` : ''}
       </div>
+      ${itens.length ? `<div class="bloco"><div class="bloco-titulo">Itens — aprove a quantidade de cada um</div><div class="caixa tabela-scroll"><table class="tab-itens">
+        <thead><tr><th>Item</th><th>Descrição</th><th>Unidade</th><th class="num">Valor unit.</th><th class="num">Pedido</th><th class="num">Saldo do polo</th><th class="num" style="width:110px">Aprovar</th><th class="num">Subtotal</th></tr></thead><tbody>
+        ${itens.map(it => { const sd = saldoItem(it.id_item); const sug = it.quantidade_aprovada != null ? it.quantidade_aprovada : Math.max(0, Math.min(it.quantidade, sd == null ? it.quantidade : sd));
+          return `<tr><td style="white-space:nowrap">${it.grupo ? 'G' + esc(it.grupo) + ' · ' : ''}<b>${esc(it.numero_item)}</b></td><td style="max-width:260px">${esc(it.descricao)}</td><td>${esc(it.unidade_medida)}</td>
+            <td class="num">${fmtV4(it.valor_unitario)}</td><td class="num">${fmtN(it.quantidade)}</td>
+            <td class="num">${sd == null ? '—' : `<b style="color:${sd > 0 ? '#085041' : '#A32D2D'}">${fmtN(sd)}</b>`}</td>
+            <td><input class="num" data-ap="${it.id_item}" data-max="${Math.min(it.quantidade, sd == null ? it.quantidade : sd)}" data-vu="${it.valor_unitario}" value="${String(sug).replace('.', ',')}" oninput="conferir()" ${pode ? '' : 'disabled'}></td>
+            <td class="num" data-st="${it.id_item}"></td></tr>`; }).join('')}
+        </tbody></table></div></div>` : ''}
       ${pode || aprovada ? `<div class="form">
-        <div class="campo"><label>Valor real (R$) *</label><input type="number" min="0" step="0.01" id="an-real" value="${x.valor_real || ''}" oninput="conferir()" ${aprovada ? 'disabled' : ''}>
-          <span class="hint">Preço do ${inst ? (inst.tipo === 'ata' ? 'item na ata' : 'contrato') : 'atendimento'} × quantidade pedida</span></div>
-        <div class="campo" style="justify-content:flex-end"><div id="an-conf"></div></div>
-        <div class="campo largo"><label>Motivo (obrigatório para devolver)</label><textarea id="an-motivo" rows="2" placeholder="Ex.: valor real supera o requisitado; readeque a quantidade"></textarea></div>
+        ${itens.length ? '' : `<div class="campo"><label>Valor real (R$) *</label><input type="number" min="0" step="0.01" id="an-real" value="${x.valor_real || ''}" oninput="conferir()" ${aprovada ? 'disabled' : ''}>
+          <span class="hint">Valor efetivo do atendimento</span></div>`}
+        <div class="campo ${itens.length ? 'largo' : ''}" style="justify-content:flex-end"><div id="an-conf"></div></div>
+        <div class="campo largo"><label>Motivo (obrigatório para devolver)</label><textarea id="an-motivo" rows="2" placeholder="Ex.: quantidade acima do saldo do item; readeque a requisição"></textarea></div>
       </div>
       <div class="rodape">
         <button class="btn btn-r" style="margin-right:auto" onclick="decidir('${x.id_requisicao}','devolver')">Devolver ao requerente</button>
@@ -565,29 +615,43 @@
         <button class="btn" onclick="fecharModal()">Fechar</button>
         ${pode ? `<button class="btn btn-v" id="an-aprovar" onclick="decidir('${x.id_requisicao}','aprovar')" disabled>Aprovar</button>` : ''}
       </div>` : `<div class="rodape"><button class="btn" onclick="fecharModal()">Fechar</button></div>`}`, true);
-    window._an = { x, saldoInst };
-    if (pode) conferir();
+    window._an = { x, itens };
+    conferir();
   }
   function conferir() {
-    const { x, saldoInst } = window._an;
-    const v = Number($('an-real').value || 0), el = $('an-conf'), btn = $('an-aprovar');
-    if (!v) { el.innerHTML = ''; if (btn) btn.disabled = true; return; }
-    let html, ok = true;
-    if (v > Number(x.valor) + 0.004) {
-      ok = false; html = `<div class="bad-box">O valor real supera o requisitado em <b>${fmtV(v - Number(x.valor))}</b>. Não é possível aprovar: devolva para o requerente readequar a quantidade ou o valor.</div>`;
-      if (!$('an-motivo').value) $('an-motivo').value = `O valor real (${fmtV(v)}) supera o requisitado (${fmtV(x.valor)}). Readeque a quantidade ou o valor dentro do saldo da demanda.`;
-    } else if (saldoInst != null && v > saldoInst + 0.004) {
-      ok = false; html = `<div class="bad-box">O instrumento tem só <b>${fmtV(saldoInst)}</b> de saldo. Devolva ou aguarde um aditivo.</div>`;
+    const { x, itens } = window._an;
+    const el = $('an-conf'), btn = $('an-aprovar');
+    if (!el) return;
+    let v = 0, ok = true; const prob = [];
+    if (itens.length) {
+      document.querySelectorAll('[data-ap]').forEach(inp => {
+        const q = numBR(inp.value), max = Number(inp.dataset.max), vu = Number(inp.dataset.vu);
+        const sub = Math.round(q * vu * 100) / 100; v += sub;
+        const c = document.querySelector(`[data-st="${inp.dataset.ap}"]`); if (c) c.textContent = fmtV(sub);
+        if (!inp.disabled && (q < 0 || q > max + 1e-9)) { ok = false; prob.push(`${inp.closest('tr').querySelector('b').textContent}: no máximo ${fmtN(max)}`); }
+      });
+      v = Math.round(v * 100) / 100;
+    } else {
+      v = Number(($('an-real') || {}).value || 0);
+    }
+    if (!v) { el.innerHTML = itens.length ? '<div class="bad-box">Nenhuma quantidade aprovada. Para recusar, devolva com o motivo.</div>' : ''; if (btn) btn.disabled = true; return; }
+    let html;
+    if (!ok) html = `<div class="bad-box">Quantidade acima do pedido ou do saldo do polo — ${prob.map(esc).join('; ')}.</div>`;
+    else if (v > Number(x.valor) + 0.004) {
+      ok = false; html = `<div class="bad-box">O valor real supera o requisitado em <b>${fmtV(v - Number(x.valor))}</b>. Não é possível aprovar: devolva para o requerente readequar.</div>`;
+      if ($('an-motivo') && !$('an-motivo').value) $('an-motivo').value = `O valor real (${fmtV(v)}) supera o requisitado (${fmtV(x.valor)}). Readeque a requisição dentro do saldo da demanda.`;
     } else {
       const r = Number(x.valor) - v;
-      html = `<div class="ok-box">Cabe no requisitado${saldoInst != null ? ' e no saldo do instrumento' : ''}.${r > 0.004 ? ` Resíduo positivo: <b>${fmtV(r)}</b>.` : ''}</div>`;
+      html = `<div class="ok-box">Valor real: <b>${fmtV(v)}</b>.${r > 0.004 ? ` Resíduo (requisitado − real): <b>${fmtV(r)}</b>.` : ''}</div>`;
     }
     el.innerHTML = html; if (btn) btn.disabled = !ok;
   }
   async function decidir(id, acao) {
     const motivo = $('an-motivo') ? $('an-motivo').value.trim() : '';
     if (acao === 'devolver' && motivo.length < 5) return erroModal('Escreva o motivo da devolução.');
-    const r = await chamar('ped_analisar', { id_requisicao: id, acao, valor_real: $('an-real') ? $('an-real').value : null, motivo });
+    const itens = window._an && window._an.itens.length && acao === 'aprovar'
+      ? [...document.querySelectorAll('[data-ap]')].map(inp => ({ id_item: inp.dataset.ap, quantidade_aprovada: numBR(inp.value) })) : null;
+    const r = await chamar('ped_analisar', { id_requisicao: id, acao, valor_real: $('an-real') ? $('an-real').value : null, motivo, itens });
     if (!r.ok) return erroModal(r.erro);
     fecharModal();
     toast(acao === 'aprovar' ? 'Requisição aprovada' + (Number(r.residuo) > 0 ? ` — resíduo de ${fmtV(r.residuo)}` : '') + '.'

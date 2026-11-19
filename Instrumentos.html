@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PMO — Contratos e atas</title>
+<title>PMO — Contratos, atas e DFDs</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background: #F1EFE8; color: #2C2C2A; min-height: 100vh; }
@@ -104,6 +104,8 @@
   .modal-corpo { padding: 18px 24px 22px; }
   .bloco { margin-bottom: 20px; }
   .bloco-titulo { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #888780; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .bloco-titulo .btn + .btn { margin-left: 0; }
+  #in-partes select { width: 100%; max-width: 520px; padding: 6px 8px; border: 1px solid #D3D1C7; border-radius: 7px; font-size: 13px; font-family: inherit; background: #fff; }
   .bloco-titulo .btn { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
   .caixa { border: 1px solid #F1EFE8; border-radius: 10px; overflow: hidden; }
   .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
@@ -160,13 +162,20 @@
   .hist div:last-child { border-bottom: none; }
   .dias { font-size: 11px; color: #888780; }
   .btn:disabled, .btn:disabled:hover { opacity: .4; cursor: not-allowed; }
+  .modal.extra { max-width: 1240px; }
+  .tab-itens td { padding: 4px 5px; } .tab-itens th { padding: 7px 6px; }
+  .tab-itens input { width: 100%; padding: 5px 6px; border: 1px solid #D3D1C7; border-radius: 6px; font-size: 12.5px; font-family: inherit; }
+  .tab-itens input:disabled { background: #F5F4F0; color: #888780; }
+  input.num { text-align: right; }
+  .st-em_elaboracao { background: #FAEEDA; color: #633806; } .st-em_contratacao { background: #E6F1FB; color: #0C447C; }
+  .st-cancelado { background: #F1EFE8; color: #888780; }
 </style>
 </head>
 <body>
 
 <div class="topbar">
   <span class="topbar-logo" title="Planejamento e Monitoramento Orçamentário">PMO</span>
-  <span class="topbar-sub">Contratos, atas e processos</span>
+  <span class="topbar-sub">Contratos, atas e DFDs</span>
   <div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:4px 10px;">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
     <select id="sel-exercicio" style="background:transparent;border:none;color:#fff;font-size:12px;font-weight:600;cursor:pointer;outline:none;padding:0 2px;" onchange="trocarExercicio(this.value)"></select>
@@ -187,8 +196,8 @@
   <main class="main">
     <div class="cabecalho">
       <div>
-        <div class="page-title">Contratos, atas e processos</div>
-        <div class="page-sub">Instrumentos que atendem as requisições, cada um com sua seção gestora</div>
+        <div class="page-title">Contratos, atas e DFDs</div>
+        <div class="page-sub">Instrumentos que atendem as requisições, com os itens e as quantidades de cada polo (Reitoria e campi)</div>
       </div>
       <button class="btn btn-p" id="btn-novo" style="margin-left:auto;display:none" onclick="formInstrumento({})">+ Novo instrumento</button>
     </div>
@@ -207,7 +216,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="api.js?v=202611092000"></script>
+<script src="api.js?v=202611191500"></script>
 <script>
   const token = localStorage.getItem('pac_token') || '';
   let _usuario = null, _ctx = null, _dados = null;
@@ -229,13 +238,13 @@
     return new Promise(ok => google.script.run.withSuccessHandler(ok)
       .withFailureHandler(e => ok({ ok: false, erro: e.message })).chamarAcao(token, acao, JSON.stringify(params || {})));
   }
-  const SIT_REQ = { aguardando_contratacao: 'Pendente: aguarda contratação', aguardando_gestor: 'Aguardando o gestor',
+  const SIT_REQ = { aguardando_contratacao: 'Aguardando processo de contratação', aguardando_gestor: 'Aguardando o gestor',
     pendente: 'Pendente: devolvida', aprovada: 'Aprovada', em_solicitacao: 'Em solicitação de empenho',
     empenhada: 'Empenhada', liquidada: 'Liquidada', paga: 'Paga', cancelada: 'Cancelada' };
   const FORMAS = { contrato: 'Contrato vigente', ata: 'Ata de registro de preços', nova_contratacao: 'Nova contratação',
     bolsas_editais: 'Bolsas e editais', diarias: 'Diárias', outros: 'Outros' };
-  const TIPOS_INST = { contrato: 'Contrato', ata: 'Ata de RP', processo: 'Processo de contratação' };
-  const SIT_INST = { vigente: 'Vigente', encerrado: 'Encerrado', em_andamento: 'Em andamento', concluido: 'Concluído', fracassado: 'Fracassado' };
+  const TIPOS_INST = { contrato: 'Contrato', ata: 'Ata de RP', dfd: 'DFD' };
+  const SIT_INST = { vigente: 'Vigente', encerrado: 'Encerrado', em_elaboracao: 'Em elaboração', em_contratacao: 'Em contratação', concluido: 'Concluído', cancelado: 'Cancelado' };
   function stReq(s) { return `<span class="st st-${s}">${esc(SIT_REQ[s] || s)}</span>`; }
   function stInst(s) { return `<span class="st st-${s}">${esc(SIT_INST[s] || s)}</span>`; }
   function abrirModal(titulo, html, largo) {
@@ -275,7 +284,10 @@
     iniciarPagina();
   })();
 
-  let _tipo = '', _sit = '', _busca = '';
+  let _tipo = '', _sit = '', _busca = '', _polo = '';
+  const TIPOS_ALT = { acrescimo: 'Acréscimo de quantidade', supressao: 'Supressão de quantidade', reajuste: 'Reajuste de preço', correcao: 'Correção', inclusao_item: 'Inclusão de item' };
+  const siglaPolo = id => { const p = (_ctx.polos || []).find(x => x.id === id); return p ? (p.nome.startsWith('Reitoria') ? 'Reitoria' : p.sigla) : '—'; };
+  const nomeUn = id => { const u = (_ctx.unidades || []).find(x => x.id === id); return u ? u.sigla : '—'; };
   function iniciarPagina() {
     if (_ctx.pode_cadastrar) $('btn-novo').style.display = '';
     carregar();
@@ -285,107 +297,384 @@
     if (!r.ok) { $('conteudo').innerHTML = `<div class="vazio">${esc(r.erro)}</div>`; return; }
     _dados = r; render();
   }
+  function participantesTxt(i) {
+    if (i.tipo === 'dfd') return `${esc(i.sigla_demandante || '—')}<span class="sub">polo ${esc(siglaPolo(i.id_polo))}</span>`;
+    const P = i.participantes || [];
+    if (!P.length) return '<span class="sub" style="color:#A32D2D">sem participante</span>';
+    return P.map(p => `<div style="white-space:nowrap">${esc(siglaPolo(p.id_polo))}${p.id_polo === i.id_polo && i.tipo === 'ata' && P.length > 1 ? ' <small>(gerenciador)</small>' : ''} <span class="sub" style="display:inline">· ${esc(p.sigla_gestora)}</span></div>`).join('');
+  }
   function render() {
     const I = _dados.instrumentos;
     const lista = I.filter(i => (!_tipo || i.tipo === _tipo) && (!_sit || i.situacao === _sit) &&
-      (!_busca || [i.numero, i.objeto, i.fornecedor_nome, i.sigla_gestora, i.processo_sei].some(v => String(v||'').toLowerCase().includes(_busca.toLowerCase()))));
+      (!_polo || i.id_polo === _polo || (i.participantes || []).some(p => p.id_polo === _polo)) &&
+      (!_busca || [i.numero, i.objeto, i.fornecedor_nome, i.sigla_gestora, i.processo_sei, i.sigla_demandante].some(v => String(v||'').toLowerCase().includes(_busca.toLowerCase()))));
     const n = t => I.filter(i => i.tipo === t).length;
     $('conteudo').innerHTML = `
       <div class="cards">
         <div class="card"><div class="card-label">Contratos</div><div class="card-valor">${n('contrato')}</div><div class="card-det">${I.filter(i => i.tipo==='contrato' && i.disponivel).length} vigente(s)</div></div>
         <div class="card"><div class="card-label">Atas de RP</div><div class="card-valor">${n('ata')}</div><div class="card-det">${I.filter(i => i.tipo==='ata' && i.disponivel).length} vigente(s)</div></div>
-        <div class="card"><div class="card-label">Processos</div><div class="card-valor">${n('processo')}</div><div class="card-det">${I.filter(i => i.tipo==='processo' && i.situacao==='em_andamento').length} em andamento</div></div>
+        <div class="card"><div class="card-label">DFDs</div><div class="card-valor">${n('dfd')}</div><div class="card-det">${I.filter(i => i.tipo==='dfd' && ['em_elaboracao','em_contratacao'].includes(i.situacao)).length} em andamento</div></div>
       </div>
       <div class="secao"><div class="secao-header"><span class="secao-titulo">${lista.length} instrumento(s)</span>
         <div class="filtros">
           <select onchange="_tipo=this.value;render()"><option value="">Todos os tipos</option>${Object.entries(TIPOS_INST).map(([k, v]) => `<option value="${k}"${k===_tipo?' selected':''}>${v}</option>`).join('')}</select>
+          <select onchange="_polo=this.value;render()" data-sem-busca><option value="">Todos os polos</option>${(_ctx.polos||[]).map(p => `<option value="${p.id}"${p.id===_polo?' selected':''}>${esc(siglaPolo(p.id))}</option>`).join('')}</select>
           <select onchange="_sit=this.value;render()"><option value="">Todas as situações</option>${Object.entries(SIT_INST).map(([k, v]) => `<option value="${k}"${k===_sit?' selected':''}>${v}</option>`).join('')}</select>
           <input type="search" placeholder="Número, objeto, fornecedor, seção…" value="${esc(_busca)}" oninput="_busca=this.value;clearTimeout(window._tb);window._tb=setTimeout(render,250)">
         </div></div>
-        <div class="tabela-scroll">${lista.length ? `<table><thead><tr><th>Instrumento</th><th>Objeto</th><th>Fornecedor</th><th>Gestão</th><th>Vigência</th><th class="num">Limite</th><th class="num">Saldo</th><th>Situação</th><th class="num">Req.</th></tr></thead><tbody>
+        <div class="tabela-scroll">${lista.length ? `<table><thead><tr><th>Instrumento</th><th>Objeto</th><th>Fornecedor</th><th>Polos e gestão</th><th>Vigência</th><th class="num">Valor</th><th class="num">Aprovado</th><th>Situação</th><th class="num">Req.</th></tr></thead><tbody>
           ${lista.map(i => `<tr class="clicavel" onclick="abrirInstrumento('${i.id_instrumento}')">
-            <td><b>${esc(i.numero)}</b><span class="sub">${esc(TIPOS_INST[i.tipo])}${i.numero_processo_origem ? ' · do processo ' + esc(i.numero_processo_origem) : ''}</span></td>
-            <td style="max-width:260px">${esc(i.objeto)}</td>
-            <td>${esc(i.fornecedor_nome||'—')}<span class="sub">${esc(i.fornecedor_cnpj||'')}</span></td>
-            <td>${esc(i.sigla_gestora)}</td>
-            <td>${i.vigencia_fim ? (i.vigencia_inicio ? fmtD(i.vigencia_inicio) + ' a ' : 'até ') + fmtD(i.vigencia_fim) : '—'}</td>
-            <td class="num">${i.valor_limite != null ? fmtV(i.valor_limite) : '—'}</td>
-            <td class="num">${i.saldo != null ? `<b>${fmtV(i.saldo)}</b>${barra(i.consumido, i.valor_limite)}` : '—'}</td>
+            <td><b>${esc(i.numero)}</b><span class="sub">${esc(TIPOS_INST[i.tipo]||i.tipo)}${i.numero_processo_origem ? ' · do DFD ' + esc(i.numero_processo_origem) : ''}${i.tipo !== 'dfd' ? ' · ' + (i.n_itens || 0) + ' item(ns)' : ''}</span></td>
+            <td style="max-width:240px">${esc(i.objeto)}</td>
+            <td>${i.tipo === 'dfd' ? '—' : esc(i.fornecedor_nome||'—')}<span class="sub">${esc(i.fornecedor_cnpj||'')}</span></td>
+            <td>${participantesTxt(i)}</td>
+            <td>${i.tipo === 'dfd' ? (i.data_dfd ? 'DFD de ' + fmtD(i.data_dfd) : '—') : i.vigencia_fim ? (i.vigencia_inicio ? fmtD(i.vigencia_inicio) + ' a ' : 'até ') + fmtD(i.vigencia_fim) : '—'}</td>
+            <td class="num">${i.tipo === 'dfd' ? (i.valor_estimado != null ? fmtV(i.valor_estimado) + '<span class="sub">estimado</span>' : '—') : i.valor_limite != null ? fmtV(i.valor_limite) : '—'}</td>
+            <td class="num">${i.tipo === 'dfd' ? '—' : i.valor_limite ? `${fmtV(i.consumido)}${barra(i.consumido, i.valor_limite)}` : '—'}</td>
             <td>${stInst(i.situacao)}</td><td class="num">${i.n_requisicoes || '—'}</td></tr>`).join('')}
           </tbody></table>` : `<div class="vazio">${I.length ? 'Nenhum instrumento neste filtro.' : 'Nenhum instrumento cadastrado. Use “+ Novo instrumento”.'}</div>`}</div></div>`;
   }
-  function opcoesUnidades(sel) {
-    return _ctx.unidades.slice().sort((a, b) => String(a.sigla).localeCompare(String(b.sigla), 'pt-BR'))
+
+  // ── Ficha ─────────────────────────────────────────────────────────────────
+  async function abrirInstrumento(id) {
+    abrirModal('Carregando…', '<div class="carregando">Carregando…</div>', true);
+    const r = await chamar('inst_detalhe', { id_instrumento: id });
+    if (!r.ok) { $('modal-corpo').innerHTML = `<div class="vazio">${esc(r.erro)}</div>`; return; }
+    window._det = r; fichaInstrumento();
+  }
+  function fichaInstrumento() {
+    const { instrumento: i, itens, saldos, alteracoes, requisicoes, sem_dfd } = window._det;
+    const ed = _ctx.pode_cadastrar;
+    const P = i.participantes || [];
+    const kv = (rot, val) => `<div><span>${rot}</span><b>${val}</b></div>`;
+    const sal = (idItem, idPolo) => saldos.find(s => s.id_item === idItem && s.id_polo === idPolo);
+    const tabelaItens = !itens.length ? '<div class="vazio" style="padding:14px">Nenhum item cadastrado.</div>' : `<div class="tabela-scroll"><table><thead><tr>
+        <th>Grupo / item</th><th>Descrição</th><th>Unidade</th><th class="num">Valor unitário</th>
+        ${P.map(p => `<th class="num">${esc(siglaPolo(p.id_polo))}<br><small>registrado · aprovado · saldo</small></th>`).join('')}</tr></thead><tbody>
+      ${itens.map(it => `<tr><td style="white-space:nowrap">${it.grupo ? 'G' + esc(it.grupo) + ' · ' : ''}<b>${esc(it.numero_item)}</b></td>
+        <td style="max-width:280px">${esc(it.descricao)}${it.natureza_despesa ? `<span class="sub">ND ${esc(it.natureza_despesa)}</span>` : ''}</td>
+        <td>${esc(it.unidade_medida)}</td><td class="num">${fmtV4(it.valor_unitario)}</td>
+        ${P.map(p => { const s = sal(it.id_item, p.id_polo) || { registrado: 0, aprovado: 0, saldo: 0, em_analise: 0 };
+          return `<td class="num">${fmtN(s.registrado)} · ${fmtN(s.aprovado)} · <b style="color:${s.saldo > 0 ? '#085041' : '#A32D2D'}">${fmtN(s.saldo)}</b>
+            ${s.registrado ? `<div style="max-width:120px;margin-left:auto;margin-top:3px">${barra(s.aprovado, s.registrado)}</div>` : ''}${s.em_analise ? `<span class="sub">${fmtN(s.em_analise)} em análise</span>` : ''}</td>`; }).join('')}</tr>`).join('')}
+      </tbody></table></div>`;
+    abrirModal(`${esc(TIPOS_INST[i.tipo])} ${esc(i.numero)} ${stInst(i.situacao)}<span class="sub">${esc(i.objeto)}</span>`, `
+      ${i.tipo !== 'dfd' ? `<div class="mini-cards">
+        <div class="mini"><span>Valor total (itens)</span><b>${fmtV(i.valor_limite)}</b></div>
+        <div class="mini"><span>Aprovado em requisições</span><b>${fmtV(i.consumido)}</b></div>
+        <div class="mini"><span>Itens</span><b>${itens.length}</b></div>
+        <div class="mini"><span>Requisições</span><b>${requisicoes.length}</b></div></div>` : ''}
+      <div class="bloco"><div class="bloco-titulo">Dados</div><div class="dados-dem">
+        ${i.tipo === 'dfd' ? kv('Unidade demandante', esc(i.sigla_demandante || '—')) + kv('Polo', esc(siglaPolo(i.id_polo))) + kv('Data do DFD', fmtD(i.data_dfd))
+            + kv('Valor estimado', i.valor_estimado != null ? fmtV(i.valor_estimado) : '—')
+          : kv('Fornecedor', esc(i.fornecedor_nome || '—') + (i.fornecedor_cnpj ? `<div style="font-size:11px;color:#888780">${esc(i.fornecedor_cnpj)}</div>` : ''))
+            + kv('Vigência', i.vigencia_fim ? (i.vigencia_inicio ? fmtD(i.vigencia_inicio) + ' a ' : 'até ') + fmtD(i.vigencia_fim) : '—')
+            + kv('Gerado do DFD', esc(i.numero_processo_origem || '—'))}
+        ${kv('Processo SUAP', esc(i.processo_sei || '—'))}
+        ${i.observacao ? `<div class="largo"><span>Observação</span>${esc(i.observacao)}</div>` : ''}
+      </div></div>
+      ${i.tipo !== 'dfd' ? `<div class="bloco"><div class="bloco-titulo">Participantes</div><div class="dados-dem">
+          ${P.map(p => kv(esc(siglaPolo(p.id_polo)) + (p.id_polo === i.id_polo && i.tipo === 'ata' && P.length > 1 ? ' — gerenciador' : ''), 'Gestão ' + esc(p.sigla_gestora) + `<div style="font-size:11px;color:#888780">${esc(p.nome_gestora || '')}</div>`)).join('')}
+        </div></div>
+        <div class="bloco"><div class="bloco-titulo">Itens e saldo por polo</div><div class="caixa">${tabelaItens}</div></div>
+        <div class="bloco"><div class="bloco-titulo">Aditivos, apostilamentos e correções</div><div class="caixa hist">
+          ${alteracoes.length ? alteracoes.map(a => `<div><b>${fmtD(a.data || a.data_hora)}</b> · ${esc(TIPOS_ALT[a.tipo] || a.tipo)} · item ${esc(a.item ? (a.item.grupo ? 'G' + a.item.grupo + '/' : '') + a.item.numero_item : '—')}${a.id_polo ? ' · ' + esc(siglaPolo(a.id_polo)) : ''}
+              · ${a.quantidade_antes != null || a.quantidade_depois != null ? `quantidade ${fmtN(a.quantidade_antes)} → <b>${fmtN(a.quantidade_depois)}</b>` : `preço ${a.valor_antes != null ? fmtV4(a.valor_antes) : '—'} → <b>${fmtV4(a.valor_depois)}</b>`}
+              ${a.documento ? ' · ' + esc(a.documento) : ''}${a.autor ? ' · ' + esc(a.autor) : ''}${a.observacao ? `<span class="sub">${esc(a.observacao)}</span>` : ''}</div>`).join('') : '<div>Nenhuma alteração registrada.</div>'}
+        </div></div>` : ''}
+      <div class="bloco"><div class="bloco-titulo">Requisições ${i.tipo === 'dfd' ? 'vinculadas' : ''}</div><div class="caixa">
+        ${requisicoes.length ? `<table><tbody>${requisicoes.map(x => `<tr><td><span class="cod-req">${esc(x.codigo)}</span><span class="sub">${esc(x.codigo_demanda)}</span></td>
+          <td>${esc(x.sigla_unidade)}</td><td style="max-width:280px">${esc(x.descricao_objeto)}</td><td class="num">${fmtV(x.valor)}${x.valor_real ? `<span class="sub">real ${fmtV(x.valor_real)}</span>` : ''}</td><td>${stReq(x.situacao)}</td></tr>`).join('')}</tbody></table>`
+          : '<div class="vazio" style="padding:14px">Nenhuma requisição.</div>'}</div></div>
+      ${i.tipo === 'dfd' && sem_dfd.length && ed ? `<div class="bloco"><div class="bloco-titulo">Requisições de nova contratação do polo ainda sem DFD</div><div class="caixa"><table><tbody>
+        ${sem_dfd.map(x => `<tr><td><span class="cod-req">${esc(x.codigo)}</span><span class="sub">${esc(x.codigo_demanda)}</span></td><td>${esc(x.sigla_unidade)}</td>
+          <td style="max-width:300px">${esc(x.descricao_objeto)}</td><td class="num">${fmtV(x.valor)}</td>
+          <td style="text-align:right"><button class="btn btn-mini" onclick="vincularDfd('${x.id_requisicao}','${i.id_instrumento}')">Vincular a este DFD</button></td></tr>`).join('')}</tbody></table></div></div>` : ''}
+      <div class="rodape">
+        ${ed && !requisicoes.length ? `<button class="btn btn-r" style="margin-right:auto" onclick="excluirInstrumento('${i.id_instrumento}')">Excluir</button>` : ''}
+        ${ed && i.tipo === 'dfd' && ['em_elaboracao','em_contratacao'].includes(i.situacao) ? `<button class="btn" onclick="formInstrumento(null, '${i.id_instrumento}')">Registrar ata ou contrato resultante</button>` : ''}
+        ${ed && i.tipo !== 'dfd' && itens.length ? `<button class="btn" onclick="formAlteracao()">Registrar alteração</button>` : ''}
+        <button class="btn" onclick="fecharModal()">Fechar</button>
+        ${ed ? `<button class="btn btn-p" onclick="formInstrumento(window._det)">Editar</button>` : ''}</div>`, true);
+    $('modal').classList.add('extra');
+  }
+  async function vincularDfd(idReq, idDfd) {
+    const r = await chamar('dfd_vincular', { id_requisicao: idReq, id_dfd: idDfd });
+    if (!r.ok) return erroModal(r.erro);
+    toast('Requisição vinculada ao DFD.'); abrirInstrumento(idDfd);
+  }
+
+  // ── Formulário (novo, edição, ou contrato/ata gerado de um DFD) ───────────
+  // Número digitado ou colado do Excel: "1.234,56" (pt-BR), "25,5", "25.5" ou "1.500" (milhar).
+  function numBR(v) {
+    let t = String(v == null ? '' : v).trim().replace(/[R$\s]/g, '');
+    if (!t) return 0;
+    if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+    else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+    const n = parseFloat(t); return isNaN(n) ? 0 : n;
+  }
+  function fmtV4(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }); }
+  function opcoesUnidades(sel, filtro) {
+    return _ctx.unidades.filter(u => !filtro || filtro(u)).slice().sort((a, b) => String(a.sigla).localeCompare(String(b.sigla), 'pt-BR'))
       .map(u => `<option value="${u.id}"${u.id===sel?' selected':''}>${esc(u.sigla)} — ${esc(String(u.nome).replace(/^[^–]*–\s*/, ''))}</option>`).join('');
   }
-  function abrirInstrumento(id) { formInstrumento(_dados.instrumentos.find(i => i.id_instrumento === id)); }
-  function formInstrumento(i) {
-    const ed = _ctx.pode_cadastrar;
-    const procs = _dados.instrumentos.filter(p => p.tipo === 'processo' && (p.situacao === 'em_andamento' || p.id_instrumento === i.id_processo_origem));
-    abrirModal(i.id_instrumento ? `${esc(TIPOS_INST[i.tipo])} ${esc(i.numero)}` : 'Novo instrumento', `
-      ${i.id_instrumento && i.saldo != null ? `<div class="mini-cards"><div class="mini"><span>Limite</span><b>${fmtV(i.valor_limite)}</b></div><div class="mini"><span>Aprovado em requisições</span><b>${fmtV(i.consumido)}</b></div><div class="mini"><span>Saldo</span><b style="color:#085041">${fmtV(i.saldo)}</b></div><div class="mini"><span>Requisições</span><b>${i.n_requisicoes || 0}</b></div></div>` : ''}
+  function formInstrumento(det, idDfdOrigem) {
+    const i = (det && det.instrumento) || {};
+    const dfd = idDfdOrigem ? _dados.instrumentos.find(x => x.id_instrumento === idDfdOrigem) : null;
+    if (dfd) Object.assign(i, { tipo: 'ata', objeto: dfd.objeto, processo_sei: dfd.processo_sei, id_processo_origem: dfd.id_instrumento });
+    const usado = !!(det && det.requisicoes && det.requisicoes.length);
+    window._f = {
+      i, usado, edit: !!i.id_instrumento,
+      partes: (i.participantes || []).map(p => ({ id_polo: p.id_polo, id_unidade_gestora: p.id_unidade_gestora })),
+      itens: det && det.itens ? det.itens.map(x => ({ ...x })) : [],
+      gerenciador: i.id_polo || null,
+    };
+    if (!_f.partes.length) _f.partes = [{ id_polo: dfd ? dfd.id_polo : (_ctx.meu_polo || (_ctx.polos[0] || {}).id), id_unidade_gestora: '' }];
+    const dfds = _dados.instrumentos.filter(p => p.tipo === 'dfd' && (['em_elaboracao','em_contratacao'].includes(p.situacao) || p.id_instrumento === i.id_processo_origem));
+    abrirModal(i.id_instrumento ? `Editar ${esc(TIPOS_INST[i.tipo])} ${esc(i.numero)}` : dfd ? `Contrato ou ata do DFD ${esc(dfd.numero)}` : 'Novo instrumento', `
       <div class="form">
-        <div class="campo"><label>Tipo *</label><select id="in-tipo" onchange="ajustarTipo()" ${i.id_instrumento ? 'disabled' : ''}>${Object.entries(TIPOS_INST).map(([k, v]) => `<option value="${k}"${k===(i.tipo||'ata')?' selected':''}>${v}</option>`).join('')}</select></div>
+        <div class="campo"><label>Tipo *</label><select id="in-tipo" onchange="ajustarTipo()" ${i.id_instrumento ? 'disabled' : ''}>${Object.entries(TIPOS_INST).filter(([k]) => !dfd || k !== 'dfd').map(([k, v]) => `<option value="${k}"${k===(i.tipo||'ata')?' selected':''}>${v}</option>`).join('')}</select></div>
         <div class="campo"><label id="in-num-lbl">Número *</label><input id="in-num" value="${esc(i.numero||'')}"></div>
-        <div class="campo"><label>Seção gestora *</label><select id="in-gest"><option value="">Selecione…</option>${opcoesUnidades(i.id_unidade_gestora)}</select></div>
+        <div class="campo"><label>Situação</label><select id="in-sit"></select></div>
         <div class="campo largo"><label>Objeto *</label><input id="in-obj" value="${esc(i.objeto||'')}"></div>
         <div class="campo so-inst"><label>Fornecedor — CNPJ</label><input id="in-cnpj" value="${esc(i.fornecedor_cnpj||'')}"></div>
         <div class="campo so-inst"><label>Fornecedor — nome</label><input id="in-forn" value="${esc(i.fornecedor_nome||'')}"></div>
-        <div class="campo so-inst"><label>Valor limite (R$) *</label><input type="number" min="0" step="0.01" id="in-lim" value="${i.valor_limite ?? ''}"></div>
         <div class="campo so-inst"><label>Vigência — início</label><input type="date" id="in-vi" value="${esc(i.vigencia_inicio||'')}"></div>
         <div class="campo so-inst"><label>Vigência — fim</label><input type="date" id="in-vf" value="${esc(i.vigencia_fim||'')}"></div>
+        <div class="campo so-dfd"><label>Data do DFD</label><input type="date" id="in-ddfd" value="${esc(i.data_dfd||'')}"></div>
+        <div class="campo so-dfd"><label>Unidade demandante *</label><select id="in-dem"><option value="">Selecione…</option>${opcoesUnidades(i.id_unidade_demandante)}</select></div>
+        <div class="campo so-dfd"><label>Valor estimado (R$)</label><input type="number" min="0" step="0.01" id="in-vest" value="${i.valor_estimado ?? ''}"></div>
         <div class="campo"><label>Processo SUAP</label><input id="in-sei" value="${esc(i.processo_sei||'')}"></div>
-        <div class="campo so-proc"><label>Modalidade</label><input id="in-mod" value="${esc(i.modalidade||'')}" placeholder="Pregão eletrônico, dispensa…"></div>
-        <div class="campo so-inst largo"><label>Gerado a partir do processo</label><select id="in-orig" ${i.id_instrumento ? 'disabled' : ''}><option value="">Nenhum</option>${procs.map(p => `<option value="${p.id_instrumento}"${p.id_instrumento===i.id_processo_origem?' selected':''}>${esc(p.numero)} · ${esc(p.objeto)}</option>`).join('')}</select>
-          <span class="hint">Ao salvar, o processo fica concluído e as requisições que aguardavam a contratação vão para a seção gestora deste instrumento.</span></div>
-        <div class="campo"><label>Situação</label><select id="in-sit"></select></div>
+        <div class="campo so-orig largo"><label>Gerado a partir do DFD</label><select id="in-orig" ${dfd ? 'disabled' : ''}><option value="">Nenhum</option>${dfds.map(p => `<option value="${p.id_instrumento}"${p.id_instrumento===i.id_processo_origem?' selected':''}>${esc(p.numero)} · ${esc(p.objeto)} · ${esc(siglaPolo(p.id_polo))}</option>`).join('')}</select>
+          <span class="hint">Ao salvar, o DFD fica concluído e as requisições que aguardavam voltam para as seções escolherem os itens e as quantidades.</span></div>
         <div class="campo largo"><label>Observação</label><input id="in-obs" value="${esc(i.observacao||'')}"></div>
       </div>
-      <div class="rodape">
-        ${ed && i.id_instrumento && !i.n_requisicoes ? `<button class="btn btn-r" style="margin-right:auto" onclick="excluirInstrumento('${i.id_instrumento}')">Excluir</button>` : ''}
-        ${ed && i.tipo === 'processo' && i.situacao === 'em_andamento' ? `<button class="btn" style="${i.n_requisicoes ? 'margin-right:auto' : ''}" onclick="formInstrumento({tipo:'ata', id_processo_origem:'${i.id_instrumento}', objeto:${JSON.stringify(i.objeto).replace(/"/g,'&quot;')}, id_unidade_gestora:'${i.id_unidade_gestora}', processo_sei:${JSON.stringify(i.processo_sei||'').replace(/"/g,'&quot;')}})">Registrar ata ou contrato resultante</button>` : ''}
-        <button class="btn" onclick="fecharModal()">Fechar</button>
-        ${ed ? `<button class="btn btn-p" onclick="salvarInstrumento('${i.id_instrumento||''}')">Salvar</button>` : ''}</div>`, true);
-    window._inst = i; ajustarTipo();
-    if (!ed) document.querySelectorAll('#modal-corpo input, #modal-corpo select').forEach(e => e.disabled = true);
+      <div class="bloco so-inst" style="margin-top:18px"><div class="bloco-titulo">Participantes (polo e seção gestora)
+          <button class="btn btn-mini so-ata" onclick="addParte()">+ Participante</button></div>
+        <div id="in-partes"></div>
+        <span class="hint" style="font-size:11px;color:#888780">Cada seção só requisita dos contratos e atas do seu polo (Reitoria ou o seu campus). O gestor de cada polo aprova as requisições do polo e controla as quantidades dele.</span></div>
+      <div class="bloco so-inst"><div class="bloco-titulo">Itens
+          <button class="btn btn-mini" onclick="addItem()">+ Item</button>
+          <button class="btn btn-mini" onclick="toggleColar()">Colar da planilha</button></div>
+        ${usado ? '<div class="info" style="margin-bottom:8px">Este instrumento já tem requisições: preço e quantidade dos itens existentes só mudam por <b>Registrar alteração</b> (aditivo ou apostilamento). Itens novos podem ser incluídos aqui.</div>' : ''}
+        <div id="in-colar" style="display:none;margin-bottom:10px">
+          <div class="info" style="margin-bottom:8px" id="in-colar-modelo"></div>
+          <textarea id="in-colar-txt" rows="6" style="width:100%;padding:8px;border:1px solid #D3D1C7;border-radius:7px;font-family:Consolas,monospace;font-size:12px" placeholder="Cole aqui as linhas copiadas do Excel"></textarea>
+          <div class="rodape" style="margin-top:6px"><label style="font-size:12px;margin-right:auto"><input type="checkbox" id="in-colar-subst"> Substituir os itens já digitados</label>
+            <button class="btn btn-mini" onclick="toggleColar()">Fechar</button><button class="btn btn-mini btn-p" onclick="importarColado()">Importar linhas</button></div>
+        </div>
+        <div class="caixa tabela-scroll"><table class="tab-itens"><thead id="in-itens-cab"></thead><tbody id="in-itens"></tbody></table></div>
+        <div id="in-itens-tot" style="margin-top:6px;font-size:12.5px;text-align:right"></div></div>
+      <div class="rodape"><button class="btn" onclick="${i.id_instrumento ? 'fichaInstrumento()' : 'fecharModal()'}">Voltar</button>
+        <button class="btn btn-p" id="in-salvar" onclick="salvarInstrumento()">Salvar</button></div>`, true);
+    $('modal').classList.add('extra');
+    ajustarTipo();
   }
+  function tipoAtual() { return $('in-tipo').value; }
   function ajustarTipo() {
-    const t = $('in-tipo').value, i = window._inst;
-    document.querySelectorAll('.so-inst').forEach(e => e.style.display = t === 'processo' ? 'none' : '');
-    document.querySelectorAll('.so-proc').forEach(e => e.style.display = t === 'processo' ? '' : 'none');
-    $('in-num-lbl').textContent = t === 'processo' ? 'Número do processo *' : (t === 'ata' ? 'Número da ata *' : 'Número do contrato *');
-    const ops = t === 'processo' ? ['em_andamento', 'fracassado'].concat(i.situacao === 'concluido' ? ['concluido'] : []) : ['vigente', 'encerrado'];
-    $('in-sit').innerHTML = ops.map(s => `<option value="${s}"${s===i.situacao?' selected':''}>${SIT_INST[s]}</option>`).join('');
+    const t = tipoAtual(), i = _f.i;
+    document.querySelectorAll('.so-inst').forEach(e => e.style.display = t === 'dfd' ? 'none' : '');
+    document.querySelectorAll('.so-orig').forEach(e => e.style.display = t === 'dfd' || i.id_instrumento ? 'none' : '');
+    document.querySelectorAll('.so-dfd').forEach(e => e.style.display = t === 'dfd' ? '' : 'none');
+    document.querySelectorAll('.so-ata').forEach(e => e.style.display = t === 'ata' ? '' : 'none');
+    $('in-num-lbl').textContent = t === 'dfd' ? 'Número do DFD *' : (t === 'ata' ? 'Número da ata *' : 'Número do contrato *');
+    const ops = t === 'dfd' ? ['em_elaboracao', 'em_contratacao', 'cancelado'].concat(i.situacao === 'concluido' ? ['concluido'] : []) : ['vigente', 'encerrado'];
+    const cur = i.situacao && ops.includes(i.situacao) ? i.situacao : ops[0];
+    $('in-sit').innerHTML = ops.map(s => `<option value="${s}"${s===cur?' selected':''}>${SIT_INST[s]}</option>`).join('');
+    if (t === 'contrato' && _f.partes.length > 1) _f.partes = _f.partes.slice(0, 1);
+    if (t !== 'dfd') { desenharPartes(); desenharItens(); }
   }
-  async function salvarInstrumento(id) {
-    const t = $('in-tipo').value;
-    const inst = { id_instrumento: id || undefined, tipo: t, numero: $('in-num').value.trim(), objeto: $('in-obj').value.trim(),
-      id_unidade_gestora: $('in-gest').value, processo_sei: $('in-sei').value.trim(), situacao: $('in-sit').value, observacao: $('in-obs').value.trim() };
-    if (t === 'processo') Object.assign(inst, { modalidade: $('in-mod').value.trim(), valor_limite: null, fornecedor_cnpj: null, fornecedor_nome: null, vigencia_inicio: null, vigencia_fim: null });
-    else Object.assign(inst, { fornecedor_cnpj: $('in-cnpj').value.trim(), fornecedor_nome: $('in-forn').value.trim(), valor_limite: $('in-lim').value,
-      vigencia_inicio: $('in-vi').value, vigencia_fim: $('in-vf').value });
-    if (!id && t !== 'processo' && $('in-orig').value) inst.id_processo_origem = $('in-orig').value;
+  // Participantes
+  function desenharPartes() {
+    const t = tipoAtual();
+    if (!_f.gerenciador || !_f.partes.some(p => p.id_polo === _f.gerenciador)) _f.gerenciador = (_f.partes[0] || {}).id_polo;
+    $('in-partes').innerHTML = `<div class="caixa"><table><thead><tr>${t === 'ata' ? '<th style="width:90px">Gerenciador</th>' : ''}<th>Polo</th><th>Seção gestora do polo</th><th></th></tr></thead><tbody>
+      ${_f.partes.map((p, k) => `<tr>
+        ${t === 'ata' ? `<td><input type="radio" name="in-ger" ${p.id_polo === _f.gerenciador ? 'checked' : ''} onchange="_f.gerenciador=_f.partes[${k}].id_polo"></td>` : ''}
+        <td><select data-sem-busca onchange="mudarPolo(${k}, this.value)">${(_ctx.polos||[]).map(x => `<option value="${x.id}"${x.id===p.id_polo?' selected':''}>${esc(x.nome.startsWith('Reitoria') ? x.nome : x.sigla + ' — ' + String(x.nome).replace(/^[^–]*–\s*/, ''))}</option>`).join('')}</select></td>
+        <td><select onchange="_f.partes[${k}].id_unidade_gestora=this.value"><option value="">Selecione…</option>${opcoesUnidades(p.id_unidade_gestora, u => u.polo === p.id_polo)}</select></td>
+        <td style="text-align:right">${t === 'ata' && _f.partes.length > 1 ? `<button class="btn btn-mini btn-r" onclick="removerParte(${k})">Remover</button>` : ''}</td></tr>`).join('')}
+    </tbody></table></div>`;
+  }
+  function mudarPolo(k, polo) {
+    if (_f.partes.some((p, j) => j !== k && p.id_polo === polo)) { toast('Este polo já está na lista.'); desenharPartes(); return; }
+    const ant = _f.partes[k].id_polo;
+    _f.partes[k] = { id_polo: polo, id_unidade_gestora: '' };
+    _f.itens.forEach(it => { it.quantidades = it.quantidades || {}; if (ant in it.quantidades) { it.quantidades[polo] = it.quantidades[ant]; delete it.quantidades[ant]; } });
+    if (_f.gerenciador === ant) _f.gerenciador = polo;
+    desenharPartes(); desenharItens();
+  }
+  function addParte() {
+    const livre = (_ctx.polos || []).find(x => !_f.partes.some(p => p.id_polo === x.id));
+    if (!livre) { toast('Todos os polos já participam.'); return; }
+    _f.partes.push({ id_polo: livre.id, id_unidade_gestora: '' }); desenharPartes(); desenharItens();
+  }
+  function removerParte(k) { _f.partes.splice(k, 1); desenharPartes(); desenharItens(); }
+  // Itens
+  function addItem() {
+    lerItens();
+    const ult = _f.itens[_f.itens.length - 1];
+    _f.itens.push({ grupo: ult ? ult.grupo || '' : '', numero_item: String((Number(ult && ult.numero_item) || _f.itens.length) + 1), descricao: '', unidade_medida: '', valor_unitario: '', natureza_despesa: ult ? ult.natureza_despesa || '' : '', quantidades: {} });
+    desenharItens();
+    const linhas = document.querySelectorAll('#in-itens tr'); const l = linhas[linhas.length - 1]; if (l) { const d = l.querySelector('[data-k="descricao"]'); if (d) d.focus(); }
+  }
+  function removerItem(k) { lerItens(); _f.itens.splice(k, 1); desenharItens(); }
+  function desenharItens() {
+    const P = _f.partes;
+    $('in-itens-cab').innerHTML = `<tr><th style="width:60px">Grupo</th><th style="width:60px">Item</th><th>Descrição *</th><th style="width:90px">Unidade *</th><th class="num" style="width:120px">Valor unit. (R$) *</th><th style="width:100px">ND</th>
+      ${P.map(p => `<th class="num" style="width:95px">Qtd. ${esc(siglaPolo(p.id_polo))}</th>`).join('')}<th></th></tr>`;
+    const trava = it => _f.usado && it.id_item;
+    $('in-itens').innerHTML = _f.itens.map((it, k) => `<tr data-i="${k}">
+      <td><input data-k="grupo" value="${esc(it.grupo||'')}"></td>
+      <td><input data-k="numero_item" value="${esc(it.numero_item||'')}"></td>
+      <td><input data-k="descricao" value="${esc(it.descricao||'')}"></td>
+      <td><input data-k="unidade_medida" value="${esc(it.unidade_medida||'')}"></td>
+      <td><input data-k="valor_unitario" class="num" value="${it.valor_unitario === '' || it.valor_unitario == null ? '' : String(it.valor_unitario).replace('.', ',')}" ${trava(it) ? 'disabled title="Use Registrar alteração (reajuste)"' : ''} oninput="totalItens()"></td>
+      <td><input data-k="natureza_despesa" value="${esc(it.natureza_despesa||'')}" placeholder="3.3.90.30"></td>
+      ${P.map(p => `<td><input data-q="${p.id_polo}" class="num" value="${it.quantidades && it.quantidades[p.id_polo] != null ? String(it.quantidades[p.id_polo]).replace('.', ',') : ''}" ${trava(it) ? 'disabled title="Use Registrar alteração (acréscimo ou supressão)"' : ''} oninput="totalItens()"></td>`).join('')}
+      <td>${trava(it) ? '' : `<button class="btn btn-mini btn-r" onclick="removerItem(${k})" title="Remover item">×</button>`}</td></tr>`).join('')
+      || `<tr><td colspan="${7 + P.length}" class="vazio" style="padding:14px">Nenhum item. Use “+ Item” ou “Colar da planilha”.</td></tr>`;
+    totalItens();
+  }
+  function lerItens() {
+    document.querySelectorAll('#in-itens tr[data-i]').forEach(tr => {
+      const it = _f.itens[Number(tr.dataset.i)]; if (!it) return;
+      tr.querySelectorAll('[data-k]').forEach(inp => { it[inp.dataset.k] = inp.dataset.k === 'valor_unitario' ? (inp.value.trim() === '' ? '' : numBR(inp.value)) : inp.value.trim(); });
+      it.quantidades = it.quantidades || {};
+      tr.querySelectorAll('[data-q]').forEach(inp => { it.quantidades[inp.dataset.q] = inp.value.trim() === '' ? 0 : numBR(inp.value); });
+    });
+  }
+  function totalItens() {
+    lerItens();
+    const tot = _f.itens.reduce((t, it) => t + Number(it.valor_unitario || 0) * Object.values(it.quantidades || {}).reduce((a, b) => a + Number(b || 0), 0), 0);
+    const el = $('in-itens-tot'); if (el) el.innerHTML = `${_f.itens.length} item(ns) · valor total <b>${fmtV(tot)}</b>`;
+  }
+  function toggleColar() {
+    const b = $('in-colar'); b.style.display = b.style.display === 'none' ? '' : 'none';
+    $('in-colar-modelo').innerHTML = `Copie do Excel as linhas com as colunas nesta ordem (sem precisar da linha de títulos):<br>
+      <b>Grupo · Item · Descrição · Unidade · Valor unitário · Natureza de despesa (pode ficar vazia)${_f.partes.map(p => ' · Qtd. ' + esc(siglaPolo(p.id_polo))).join('')}</b>`;
+  }
+  function importarColado() {
+    lerItens();
+    const txt = $('in-colar-txt').value.replace(/\r/g, '');
+    const linhas = txt.split('\n').map(l => l.split('\t')).filter(c => c.some(x => x.trim()));
+    if (!linhas.length) { toast('Nada para importar.'); return; }
+    const novos = [], erros = [];
+    linhas.forEach((c, n) => {
+      const vu = numBR(c[4] || '');
+      if (n === 0 && !vu && /grupo|item|descri/i.test(c.join(' '))) return;   // linha de títulos
+      const it = { grupo: (c[0] || '').trim(), numero_item: (c[1] || '').trim(), descricao: (c[2] || '').trim(), unidade_medida: (c[3] || '').trim(),
+                   valor_unitario: vu || '', natureza_despesa: (c[5] || '').trim(), quantidades: {} };
+      _f.partes.forEach((p, k) => { it.quantidades[p.id_polo] = numBR(c[6 + k] || '') || 0; });
+      if (!it.descricao || !it.numero_item) erros.push(n + 1); else novos.push(it);
+    });
+    if ($('in-colar-subst').checked) _f.itens = _f.itens.filter(it => _f.usado && it.id_item);
+    _f.itens = _f.itens.concat(novos);
+    desenharItens(); $('in-colar').style.display = 'none'; $('in-colar-txt').value = '';
+    toast(`${novos.length} item(ns) importado(s)` + (erros.length ? `; ${erros.length} linha(s) sem item ou descrição ignorada(s)` : '') + '.');
+  }
+  async function salvarInstrumento() {
+    const t = tipoAtual(), i = _f.i;
+    const inst = { id_instrumento: i.id_instrumento || null, tipo: t, numero: $('in-num').value.trim(), objeto: $('in-obj').value.trim(),
+      processo_sei: $('in-sei').value.trim(), situacao: $('in-sit').value, observacao: $('in-obs').value.trim() };
     if (!inst.numero) return erroModal('Informe o número.');
     if (!inst.objeto) return erroModal('Informe o objeto.');
-    if (!inst.id_unidade_gestora) return erroModal('Escolha a seção gestora.');
-    if (t !== 'processo' && !(Number(inst.valor_limite) > 0)) return erroModal('Informe o valor limite.');
-    if (t !== 'processo') {
+    let partes = null, itens = null;
+    if (t === 'dfd') {
+      Object.assign(inst, { data_dfd: $('in-ddfd').value, id_unidade_demandante: $('in-dem').value, valor_estimado: $('in-vest').value });
+      if (!inst.id_unidade_demandante) return erroModal('Escolha a unidade demandante.');
+    } else {
+      Object.assign(inst, { fornecedor_cnpj: $('in-cnpj').value.trim(), fornecedor_nome: $('in-forn').value.trim(),
+        vigencia_inicio: $('in-vi').value, vigencia_fim: $('in-vf').value, id_polo: _f.gerenciador });
+      if (!i.id_instrumento && $('in-orig').value) inst.id_processo_origem = $('in-orig').value;
       const ano = d => Number(String(d).slice(0, 4));
       for (const [d, nome] of [[inst.vigencia_inicio, 'início'], [inst.vigencia_fim, 'fim']])
         if (d && (ano(d) < 2000 || ano(d) > 2100)) return erroModal(`Confira o ano da vigência (${nome}): ${fmtD(d)}.`);
       if (inst.vigencia_inicio && inst.vigencia_fim && inst.vigencia_fim < inst.vigencia_inicio)
         return erroModal(`A vigência termina (${fmtD(inst.vigencia_fim)}) antes de começar (${fmtD(inst.vigencia_inicio)}). Confira as datas.`);
+      partes = _f.partes;
+      if (partes.some(p => !p.id_unidade_gestora)) return erroModal('Escolha a seção gestora de cada polo.');
+      lerItens();
+      itens = _f.itens.map(it => ({ id_item: it.id_item || null, grupo: it.grupo || '', numero_item: it.numero_item, descricao: it.descricao,
+        unidade_medida: it.unidade_medida, valor_unitario: it.valor_unitario, natureza_despesa: it.natureza_despesa || '',
+        quantidades: Object.fromEntries(partes.map(p => [p.id_polo, Number((it.quantidades || {})[p.id_polo] || 0)])) }));
+      if (!itens.length) return erroModal('Cadastre ao menos um item.');
+      const ruim = itens.findIndex(it => !it.numero_item || !it.descricao || !it.unidade_medida || !(Number(it.valor_unitario) > 0));
+      if (ruim >= 0) return erroModal(`Item na linha ${ruim + 1}: preencha item, descrição, unidade e valor unitário.`);
     }
-    if (id) delete inst.tipo;
-    const r = await chamar('inst_salvar', { instrumento: inst });
+    $('in-salvar').disabled = true;
+    const r = await chamar('inst_salvar', { instrumento: inst, participantes: partes, itens });
+    $('in-salvar').disabled = false;
     if (!r.ok) return erroModal(r.erro);
-    fecharModal(); toast('Instrumento salvo.'); carregar();
+    toast('Instrumento salvo.'); await carregar(); abrirInstrumento(r.id_instrumento);
   }
   async function excluirInstrumento(id) {
     if (!confirm('Excluir este instrumento?')) return;
     const r = await chamar('inst_excluir', { id_instrumento: id });
     if (!r.ok) return erroModal(r.erro);
     fecharModal(); toast('Instrumento excluído.'); carregar();
+  }
+
+  // ── Aditivo, apostilamento ou correção ────────────────────────────────────
+  function formAlteracao() {
+    const { instrumento: i } = window._det;
+    abrirModal(`Registrar alteração — ${esc(TIPOS_INST[i.tipo])} ${esc(i.numero)}`, `
+      <div class="form">
+        <div class="campo"><label>Tipo *</label><select id="al-tipo" onchange="desenharAlteracao()" data-sem-busca>
+          <option value="acrescimo">Acréscimo de quantidade</option><option value="supressao">Supressão de quantidade</option>
+          <option value="reajuste">Reajuste de preço</option><option value="correcao">Correção de quantidade ou preço</option></select></div>
+        <div class="campo"><label>Documento *</label><input id="al-doc" placeholder="Termo aditivo nº…, apostilamento nº…"></div>
+        <div class="campo"><label>Data</label><input type="date" id="al-data" value="${new Date().toISOString().slice(0, 10)}"></div>
+        <div class="campo largo"><label>Observação</label><input id="al-obs"></div>
+      </div>
+      <div class="bloco" style="margin-top:14px"><div class="bloco-titulo">Preencha só o que muda</div><div class="caixa tabela-scroll" id="al-itens"></div>
+        <div id="al-aviso" style="margin-top:8px"></div></div>
+      <div class="rodape"><button class="btn" onclick="fichaInstrumento()">Voltar</button><button class="btn btn-p" id="al-salvar" onclick="salvarAlteracao()">Registrar</button></div>`, true);
+    $('modal').classList.add('extra');
+    desenharAlteracao();
+  }
+  function desenharAlteracao() {
+    const { instrumento: i, itens, saldos } = window._det, t = $('al-tipo').value;
+    const P = i.participantes || [];
+    const preco = t === 'reajuste' || t === 'correcao', qtd = t !== 'reajuste';
+    $('al-itens').innerHTML = `<table class="tab-itens"><thead><tr><th>Item</th><th>Descrição</th>${preco ? '<th class="num">Preço atual</th><th class="num" style="width:130px">Novo preço</th>' : ''}
+        ${qtd ? P.map(p => `<th class="num">${esc(siglaPolo(p.id_polo))}<br><small>atual · aprovado</small></th><th class="num" style="width:100px">Nova qtd.</th>`).join('') : ''}</tr></thead><tbody>
+      ${itens.map(it => `<tr data-item="${it.id_item}"><td style="white-space:nowrap">${it.grupo ? 'G' + esc(it.grupo) + ' · ' : ''}<b>${esc(it.numero_item)}</b></td><td style="max-width:260px">${esc(it.descricao)}<span class="sub">${esc(it.unidade_medida)}</span></td>
+        ${preco ? `<td class="num">${fmtV4(it.valor_unitario)}</td><td><input data-preco class="num" oninput="avisoAlteracao()"></td>` : ''}
+        ${qtd ? P.map(p => { const s = saldos.find(x => x.id_item === it.id_item && x.id_polo === p.id_polo) || { registrado: 0, aprovado: 0 };
+          return `<td class="num">${fmtN(s.registrado)} · ${fmtN(s.aprovado)}</td><td><input data-polo="${p.id_polo}" data-atual="${s.registrado}" data-apr="${s.aprovado}" class="num" oninput="avisoAlteracao()"></td>`; }).join('') : ''}</tr>`).join('')}
+    </tbody></table>`;
+    avisoAlteracao();
+  }
+  function avisoAlteracao() {
+    const t = $('al-tipo').value, msgs = [];
+    document.querySelectorAll('#al-itens input[data-polo]').forEach(inp => {
+      if (inp.value.trim() === '') return;
+      const novo = numBR(inp.value), atual = Number(inp.dataset.atual), apr = Number(inp.dataset.apr);
+      const it = inp.closest('tr').querySelector('b').textContent;
+      if (novo < apr) msgs.push(`Item ${it}: não pode ficar abaixo do já aprovado (${fmtN(apr)}).`);
+      if (t === 'acrescimo' && novo <= atual) msgs.push(`Item ${it}: acréscimo precisa aumentar a quantidade.`);
+      if (t === 'supressao' && novo >= atual) msgs.push(`Item ${it}: supressão precisa reduzir a quantidade.`);
+      if (atual && Math.abs(novo - atual) / atual > 0.25 + 1e-9) msgs.push(`Item ${it}: variação de ${Math.round(Math.abs(novo - atual) / atual * 100)}% — confira o limite legal de acréscimos e supressões.`);
+    });
+    $('al-aviso').innerHTML = msgs.length ? `<div class="bad-box">${msgs.map(esc).join('<br>')}</div>` : '';
+  }
+  async function salvarAlteracao() {
+    const { instrumento: i } = window._det, t = $('al-tipo').value;
+    const itens = [];
+    document.querySelectorAll('#al-itens tr[data-item]').forEach(tr => {
+      const idItem = tr.dataset.item;
+      const pr = tr.querySelector('[data-preco]');
+      if (pr && pr.value.trim() !== '') itens.push({ id_item: idItem, valor_unitario: numBR(pr.value) });
+      tr.querySelectorAll('[data-polo]').forEach(inp => { if (inp.value.trim() !== '') itens.push({ id_item: idItem, id_polo: inp.dataset.polo, quantidade: numBR(inp.value) }); });
+    });
+    if (!itens.length) return erroModal('Preencha ao menos um novo preço ou quantidade.');
+    if ($('al-doc').value.trim().length < 3) return erroModal('Informe o documento (termo aditivo, apostilamento…).');
+    $('al-salvar').disabled = true;
+    const r = await chamar('inst_alterar', { id_instrumento: i.id_instrumento, tipo: t, itens, documento: $('al-doc').value.trim(), data: $('al-data').value, observacao: $('al-obs').value.trim() });
+    $('al-salvar').disabled = false;
+    if (!r.ok) return erroModal(r.erro);
+    toast('Alteração registrada.'); await carregar(); abrirInstrumento(i.id_instrumento);
   }
 
 </script>

@@ -223,6 +223,9 @@ const _numReq = r => ({ ...r, valor: _n(r.valor), valor_real: r.valor_real == nu
   residuo: _n(r.residuo), empenhado: _n(r.empenhado), liquidado: _n(r.liquidado), pago: _n(r.pago) });
 const _numSol = s => ({ ...s, total_previsto: _n(s.total_previsto), total_real: _n(s.total_real), empenhado: _n(s.empenhado),
   a_empenhar: _n(s.a_empenhar), saldo_instrumento: s.saldo_instrumento == null ? null : _n(s.saldo_instrumento) });
+const _reqItem = x => ({ id_requisicao: x.id_requisicao, id_item: x.id_item, quantidade: _n(x.quantidade),
+  quantidade_aprovada: x.quantidade_aprovada == null ? null : _n(x.quantidade_aprovada), valor_unitario: _n(x.valor_unitario),
+  ...(x.instrumento_itens || {}) });
 const _numEmp = e => ({ ...e, valor_empenhado: _n(e.valor_empenhado), valor_atual: _n(e.valor_atual), coberto: _n(e.coberto), sem_vinculo: _n(e.sem_vinculo) });
 const _numLiq = l => ({ ...l, valor: _n(l.valor), coberto: _n(l.coberto), sem_vinculo: _n(l.sem_vinculo), pago: _n(l.pago), a_pagar: _n(l.a_pagar) });
 
@@ -235,7 +238,11 @@ async function _arvore() {
   lista.forEach(u => (filhos[u.id_unidade_pai] = filhos[u.id_unidade_pai] || []).push(u.id_unidade));
   const sub = (raiz) => { const out = [], fila = [raiz]; while (fila.length) { const id = fila.shift(); if (out.includes(id)) continue; out.push(id); (filhos[id] || []).forEach(f => fila.push(f)); } return out; };
   const pai = Object.fromEntries(lista.map(u => [u.id_unidade, u.id_unidade_pai]));
-  return { lista, filhos, sub, pai, porId: Object.fromEntries(lista.map(u => [u.id_unidade, u])) };
+  const porId = Object.fromEntries(lista.map(u => [u.id_unidade, u]));
+  // Polo (etapa 5): o campus acima da unidade (ou ela mesma); fora de campus, a raiz (Reitoria).
+  const raiz = (lista.find(u => !u.id_unidade_pai) || {}).id_unidade;
+  const polo = (id) => { let x = id, i = 0; while (x && i++ < 50) { if ((porId[x] || {}).tipo === 'campus') return x; x = pai[x]; } return raiz; };
+  return { lista, filhos, sub, pai, porId, raiz, polo };
 }
 
 const MSG_SEM_CONEXAO = 'Não foi possível conectar ao banco de dados do PAC. '
@@ -1141,9 +1148,15 @@ const ACOES = {
       const { data } = await c.from('empenho_cobertura').select('id_requisicao,valor,id_empenho,empenhos(numero,data_emissao)').in('id_requisicao', ids);
       cob = data || [];
     }
+    let itensReq = [];
+    if (ids.length) {
+      const { data } = await c.from('requisicao_itens').select('id_requisicao,id_item,quantidade,quantidade_aprovada,valor_unitario,instrumento_itens(grupo,numero_item,descricao,unidade_medida,natureza_despesa,ordem)').in('id_requisicao', ids);
+      itensReq = (data || []).map(_reqItem);
+    }
     return {
       ok: true, solicitacao: _numSol(s),
       requisicoes: (reqs || []).map(_numReq).map(r => ({ ...r,
+        itens: itensReq.filter(it => it.id_requisicao === r.id_requisicao).sort((a, b) => (a.ordem || 0) - (b.ordem || 0)),
         empenhos: cob.filter(x => x.id_requisicao === r.id_requisicao).map(x => ({ id_empenho: x.id_empenho, valor: _n(x.valor), ...(x.empenhos || {}) })) })),
       historico: (hist || []).map(h => ({ ...h, autor: h.perfis ? h.perfis.nome : '' })),
     };
@@ -1249,7 +1262,12 @@ const ACOES = {
       pode_cadastrar: p.papel === 'licitacoes',
       unidades_requisitaveis: requisitaveis,
       exercicio: await _exercicioAtual(),
-      unidades: arv.lista.map(u => ({ id: u.id_unidade, sigla: u.sigla, nome: u.nome, tipo: u.tipo, pai: u.id_unidade_pai })),
+      unidades: arv.lista.map(u => ({ id: u.id_unidade, sigla: u.sigla, nome: u.nome, tipo: u.tipo, pai: u.id_unidade_pai, polo: arv.polo(u.id_unidade) })),
+      // Polos (etapa 5): Reitoria (raiz) e campi
+      polos: arv.lista.filter(u => !u.id_unidade_pai || u.tipo === 'campus')
+        .sort((a, b) => (a.id_unidade_pai ? 1 : 0) - (b.id_unidade_pai ? 1 : 0) || String(a.sigla).localeCompare(String(b.sigla), 'pt-BR'))
+        .map(u => ({ id: u.id_unidade, sigla: u.sigla, nome: u.id_unidade_pai ? u.nome : 'Reitoria (' + u.sigla + ')' })),
+      meu_polo: un ? arv.polo(un.id_unidade) : null,
     };
   },
 
@@ -1272,16 +1290,49 @@ const ACOES = {
       ok: true, exercicio: ex,
       requisicoes: (reqs || []).filter(r => meu.has(r.id_unidade)),
       demandas: (dems || []).filter(d => meu.has(d.id_unidade_fk)),
-      instrumentos: (inst || []).filter(i => i.disponivel || (i.tipo === 'processo' && i.situacao === 'em_andamento')),
+      instrumentos: (inst || []).filter(i => i.disponivel || (i.tipo === 'dfd' && ['em_elaboracao','em_contratacao'].includes(i.situacao))),
     };
+  },
+
+  // Itens de um contrato/ata com o saldo do polo da unidade (para a requisição).
+  async req_itens_instrumento({ id_instrumento, id_unidade, id_requisicao }) {
+    const c = await sb();
+    const arv = await _arvore();
+    const polo = arv.polo(id_unidade);
+    const { data, error } = await c.from('v_instrumento_saldos').select('*')
+      .eq('id_instrumento', id_instrumento).eq('id_polo', polo).order('ordem');
+    if (error) return { ok: false, erro: _erro(error) };
+    let meus = [];
+    if (id_requisicao) {
+      const { data: ri } = await c.from('requisicao_itens').select('id_item,quantidade,quantidade_aprovada,valor_unitario').eq('id_requisicao', id_requisicao);
+      meus = ri || [];
+    }
+    return { ok: true, tem_participacao: (data || []).length > 0, polo,
+             itens: (data || []).map(x => ({ ...x, registrado: _n(x.registrado), aprovado: _n(x.aprovado), em_analise: _n(x.em_analise),
+                                            saldo: _n(x.saldo), valor_unitario: _n(x.valor_unitario) })),
+             meus: meus.map(m => ({ ...m, quantidade: _n(m.quantidade), valor_unitario: _n(m.valor_unitario) })) };
+  },
+
+  // Itens de requisições (detalhe, gestão de pedidos e relatório).
+  async req_itens({ ids }) {
+    const c = await sb();
+    if (!ids || !ids.length) return { ok: true, itens: [] };
+    const { data, error } = await c.from('requisicao_itens')
+      .select('id_requisicao,id_item,quantidade,quantidade_aprovada,valor_unitario,instrumento_itens(grupo,numero_item,descricao,unidade_medida,natureza_despesa,ordem)')
+      .in('id_requisicao', ids);
+    if (error) return { ok: false, erro: _erro(error) };
+    return { ok: true, itens: (data || []).map(_reqItem) };
   },
 
   async req_salvar(r) {
     const c = await sb();
+    const porItens = ['contrato', 'ata'].includes(r.forma);
     const { data, error } = await c.rpc('req_salvar', {
       p_id: r.id_requisicao || null, p_demanda: r.id_demanda || null,
-      p_quantidade: Number(r.quantidade), p_valor: Number(r.valor), p_forma: r.forma,
+      p_quantidade: porItens || r.quantidade === '' || r.quantidade == null ? null : Number(r.quantidade),
+      p_valor: porItens ? null : Number(r.valor), p_forma: r.forma,
       p_instrumento: r.id_instrumento || null, p_declaracao: !!r.declaracao, p_observacao: r.observacao || '',
+      p_itens: porItens ? (r.itens || []).map(x => ({ id_item: x.id_item, quantidade: Number(x.quantidade) })) : null,
     });
     return error ? { ok: false, erro: _erro(error) } : { ok: true, ...data };
   },
@@ -1307,30 +1358,47 @@ const ACOES = {
     const ex = Number(exercicio || ctx.exercicio);
     if (!ctx.pode_gerir) return { ok: true, instrumentos: [], requisicoes: [], exercicio: ex };
     const c = await sb();
-    let qi = c.from('v_instrumentos').select('*').order('numero');
+    let qi = c.from('v_instrumentos').select('*').neq('tipo', 'dfd').order('numero');
     let qr = c.from('v_requisicoes').select('*').eq('exercicio', ex).neq('situacao', 'cancelada').order('data_situacao');
+    let qp = c.from('instrumento_participantes').select('id_participacao,id_instrumento,id_polo,id_unidade_gestora');
     if (!ctx.admin_global) {
-      qi = qi.eq('id_unidade_gestora', ctx.unidade.id);
+      const { data: partes } = await qp.eq('id_unidade_gestora', ctx.unidade.id);
+      const idsInst = [...new Set((partes || []).map(x => x.id_instrumento))];
+      qi = qi.in('id_instrumento', idsInst.length ? idsInst : ['00000000-0000-0000-0000-000000000000']);
       qr = qr.eq('id_unidade_gestora', ctx.unidade.id);
+      qp = null;
+      ctx._partes = partes || [];
     }
     let qs = c.from('v_solicitacoes').select('*').eq('exercicio', ex).neq('situacao', 'cancelada').order('codigo', { ascending: false });
     if (!ctx.admin_global) qs = qs.eq('id_unidade_gestora', ctx.unidade.id);
-    const [{ data: inst, error: e1 }, { data: reqs, error: e2 }, { data: sols, error: e3 }] = await Promise.all([qi, qr, qs]);
+    const [{ data: inst, error: e1 }, { data: reqs, error: e2 }, { data: sols, error: e3 }, rp] = await Promise.all([qi, qr, qs, qp || Promise.resolve({ data: ctx._partes })]);
     if (e1 || e2 || e3) return { ok: false, erro: _erro(e1 || e2 || e3) };
+    // Saldo por item das participações geridas pela seção e itens das requisições.
+    const partes = (rp && rp.data) || [];
+    const idsPart = partes.map(x => x.id_participacao);
+    const idsReq = (reqs || []).map(r => r.id_requisicao);
+    const [{ data: saldos }, { data: ri }] = await Promise.all([
+      idsPart.length ? c.from('v_instrumento_saldos').select('*').in('id_participacao', idsPart).order('ordem') : Promise.resolve({ data: [] }),
+      idsReq.length ? c.from('requisicao_itens').select('id_requisicao,id_item,quantidade,quantidade_aprovada,valor_unitario,instrumento_itens(grupo,numero_item,descricao,unidade_medida,natureza_despesa,ordem)').in('id_requisicao', idsReq) : Promise.resolve({ data: [] }),
+    ]);
     return { ok: true, exercicio: ex, instrumentos: inst || [], requisicoes: (reqs || []).map(_numReq),
-             solicitacoes: (sols || []).map(_numSol), admin_global: ctx.admin_global };
+             solicitacoes: (sols || []).map(_numSol), admin_global: ctx.admin_global,
+             participacoes: partes,
+             saldos: (saldos || []).map(x => ({ ...x, registrado: _n(x.registrado), aprovado: _n(x.aprovado), em_analise: _n(x.em_analise), saldo: _n(x.saldo), valor_unitario: _n(x.valor_unitario) })),
+             itens_req: (ri || []).map(_reqItem) };
   },
 
-  async ped_analisar({ id_requisicao, acao, valor_real, motivo }) {
+  async ped_analisar({ id_requisicao, acao, valor_real, motivo, itens }) {
     const c = await sb();
     const { data, error } = await c.rpc('req_analisar', {
       p_id: id_requisicao, p_acao: acao,
       p_valor_real: valor_real === '' || valor_real == null ? null : Number(valor_real), p_motivo: motivo || null,
+      p_itens: itens ? itens.map(x => ({ id_item: x.id_item, quantidade_aprovada: Number(x.quantidade_aprovada || 0) })) : null,
     });
     return error ? { ok: false, erro: _erro(error) } : { ok: true, ...data };
   },
 
-  // Cadastro de contratos, atas e processos (Licitações e administrador).
+  // Cadastro de contratos, atas e DFDs (Licitações e administrador) — etapa 5.
   async inst_listar() {
     const c = await sb();
     const { data, error } = await c.from('v_instrumentos').select('*').order('tipo').order('numero');
@@ -1341,39 +1409,71 @@ const ACOES = {
     return { ok: true, instrumentos: (data || []).map(i => ({ ...i, n_requisicoes: n[i.id_instrumento] || 0 })) };
   },
 
-  async inst_salvar({ instrumento }) {
+  async inst_detalhe({ id_instrumento }) {
     const c = await sb();
-    const p = await _meuPerfil();
-    const campos = ['tipo','numero','objeto','fornecedor_cnpj','fornecedor_nome','vigencia_inicio','vigencia_fim',
-                    'valor_limite','processo_sei','modalidade','situacao','id_unidade_gestora','id_processo_origem','observacao'];
-    const reg = {};
-    campos.forEach(k => { if (k in instrumento) reg[k] = instrumento[k] === '' ? null : instrumento[k]; });
-    if (reg.valor_limite != null) reg.valor_limite = Number(reg.valor_limite);
-    if (!reg.situacao) reg.situacao = reg.tipo === 'processo' ? 'em_andamento' : 'vigente';
-    let q;
-    if (instrumento.id_instrumento) {
-      q = c.from('instrumentos').update(reg).eq('id_instrumento', instrumento.id_instrumento).select('id_instrumento');
-    } else {
-      reg.criado_por = p && p.id_usuario;
-      q = c.from('instrumentos').insert(reg).select('id_instrumento');
+    const [{ data: i, error }, { data: itens }, { data: qtds }, { data: saldos }, { data: alts }, { data: reqs }] = await Promise.all([
+      c.from('v_instrumentos').select('*').eq('id_instrumento', id_instrumento).maybeSingle(),
+      c.from('instrumento_itens').select('*').eq('id_instrumento', id_instrumento).order('ordem'),
+      c.from('instrumento_participantes').select('id_participacao,id_polo').eq('id_instrumento', id_instrumento),
+      c.from('v_instrumento_saldos').select('*').eq('id_instrumento', id_instrumento).order('ordem'),
+      c.from('instrumento_alteracoes').select('*, perfis(nome), instrumento_itens(numero_item,grupo,descricao), instrumento_participantes(id_polo)').eq('id_instrumento', id_instrumento).order('data_hora', { ascending: false }),
+      c.from('v_requisicoes').select('id_requisicao,codigo,codigo_demanda,descricao_objeto,sigla_unidade,id_unidade,situacao,valor,valor_real,forma,data_criacao').eq('id_instrumento', id_instrumento).neq('situacao', 'cancelada').order('codigo'),
+    ]);
+    if (error) return { ok: false, erro: _erro(error) };
+    if (!i) return { ok: false, erro: 'Instrumento não encontrado.' };
+    // DFD: requisições de nova contratação do mesmo polo que ainda não têm DFD.
+    let semDfd = [];
+    if (i.tipo === 'dfd') {
+      const arv = await _arvore();
+      const { data: soltas } = await c.from('v_requisicoes').select('id_requisicao,codigo,codigo_demanda,descricao_objeto,sigla_unidade,id_unidade,valor,data_criacao')
+        .eq('forma', 'nova_contratacao').eq('situacao', 'aguardando_contratacao').is('id_instrumento', null);
+      semDfd = (soltas || []).filter(r => arv.polo(r.id_unidade) === i.id_polo);
     }
-    const { data, error } = await q;
-    if (error) {
-      if (/instrumentos_tipo_numero_key|duplicate key/i.test(error.message))
-        return { ok: false, erro: 'Já existe um instrumento deste tipo com este número.' };
-      return { ok: false, erro: _erro(error) };
-    }
-    if (!data || !data.length) return { ok: false, erro: 'Você não tem permissão para esta operação.' };
-    return { ok: true, id_instrumento: data[0].id_instrumento };
+    // quantidades registradas por item e polo (participações deste instrumento)
+    const poloDaPart = Object.fromEntries((qtds || []).map(p => [p.id_participacao, p.id_polo]));
+    const idsPart = Object.keys(poloDaPart);
+    const { data: qq } = idsPart.length ? await c.from('instrumento_quantidades').select('id_participacao,id_item,quantidade').in('id_participacao', idsPart) : { data: [] };
+    const qPor = {};
+    (qq || []).forEach(q => { qPor[q.id_item] = qPor[q.id_item] || {}; qPor[q.id_item][poloDaPart[q.id_participacao]] = _n(q.quantidade); });
+    return { ok: true, instrumento: i,
+      itens: (itens || []).map(x => ({ ...x, valor_unitario: _n(x.valor_unitario), quantidades: qPor[x.id_item] || {} })),
+      saldos: (saldos || []).map(x => ({ ...x, registrado: _n(x.registrado), aprovado: _n(x.aprovado), em_analise: _n(x.em_analise), saldo: _n(x.saldo), valor_unitario: _n(x.valor_unitario) })),
+      alteracoes: (alts || []).map(a => ({ ...a, autor: a.perfis ? a.perfis.nome : '', item: a.instrumento_itens || null,
+        id_polo: a.instrumento_participantes ? a.instrumento_participantes.id_polo : null })),
+      requisicoes: reqs || [], sem_dfd: semDfd };
+  },
+
+  // instrumento: campos; participantes: [{id_polo, id_unidade_gestora}]; itens: [{..., quantidades: {id_polo: qtd}}]
+  async inst_salvar({ instrumento, participantes, itens }) {
+    const c = await sb();
+    const x = { ...instrumento };
+    ['valor_estimado'].forEach(k => { if (x[k] === '' || x[k] == null) delete x[k]; else x[k] = Number(x[k]); });
+    const { data, error } = await c.rpc('inst_salvar', {
+      p_id: x.id_instrumento || null, p_dados: x,
+      p_participantes: x.tipo === 'dfd' ? null : (participantes || []),
+      p_itens: x.tipo === 'dfd' ? null : (itens || []).map(it => ({ ...it, valor_unitario: Number(it.valor_unitario) })),
+    });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true, ...data };
+  },
+
+  // Aditivo/apostilamento: tipo acrescimo|supressao|reajuste|correcao; itens [{id_item, id_polo?, quantidade?, valor_unitario?}]
+  async inst_alterar({ id_instrumento, tipo, itens, documento, data, observacao }) {
+    const c = await sb();
+    const { error } = await c.rpc('inst_alterar', { p_instrumento: id_instrumento, p_tipo: tipo, p_itens: itens || [],
+      p_documento: documento || '', p_data: data || null, p_observacao: observacao || '' });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
   },
 
   async inst_excluir({ id_instrumento }) {
     const c = await sb();
-    const { count } = await c.from('v_requisicoes').select('id_requisicao', { count: 'exact', head: true }).eq('id_instrumento', id_instrumento);
-    if (count) return { ok: false, erro: 'Este instrumento já tem requisições e não pode ser excluído. Marque-o como encerrado.' };
-    const { data, error } = await c.from('instrumentos').delete().eq('id_instrumento', id_instrumento).select('id_instrumento');
-    if (error) return { ok: false, erro: /foreign key|violates/i.test(error.message) ? 'Há contrato ou ata gerado a partir deste processo.' : _erro(error) };
-    return data && data.length ? { ok: true } : { ok: false, erro: 'Você não tem permissão para esta operação.' };
+    const { error } = await c.rpc('inst_excluir', { p_id: id_instrumento });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
+  },
+
+  async dfd_vincular({ id_requisicao, id_dfd }) {
+    const c = await sb();
+    const { error } = await c.rpc('dfd_vincular', { p_requisicao: id_requisicao, p_dfd: id_dfd });
+    return error ? { ok: false, erro: _erro(error) } : { ok: true };
   },
 
   // ─── Administração de usuários ─────────────────────────────────────────────

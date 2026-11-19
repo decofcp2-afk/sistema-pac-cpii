@@ -160,6 +160,8 @@
   .hist div:last-child { border-bottom: none; }
   .dias { font-size: 11px; color: #888780; }
   .btn:disabled, .btn:disabled:hover { opacity: .4; cursor: not-allowed; }
+  .tab-itens td { padding: 5px 7px; } .tab-itens input { width: 100%; padding: 5px 6px; border: 1px solid #D3D1C7; border-radius: 6px; font-size: 12.5px; text-align: right; }
+  .tab-itens input:disabled { background: #F5F4F0; }
 </style>
 </head>
 <body>
@@ -207,7 +209,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="api.js?v=202611092000"></script>
+<script src="api.js?v=202611191500"></script>
 <script>
   const token = localStorage.getItem('pac_token') || '';
   let _usuario = null, _ctx = null, _dados = null;
@@ -229,13 +231,13 @@
     return new Promise(ok => google.script.run.withSuccessHandler(ok)
       .withFailureHandler(e => ok({ ok: false, erro: e.message })).chamarAcao(token, acao, JSON.stringify(params || {})));
   }
-  const SIT_REQ = { aguardando_contratacao: 'Pendente: aguarda contratação', aguardando_gestor: 'Aguardando o gestor',
+  const SIT_REQ = { aguardando_contratacao: 'Aguardando processo de contratação', aguardando_gestor: 'Aguardando o gestor',
     pendente: 'Pendente: devolvida', aprovada: 'Aprovada', em_solicitacao: 'Em solicitação de empenho',
     empenhada: 'Empenhada', liquidada: 'Liquidada', paga: 'Paga', cancelada: 'Cancelada' };
   const FORMAS = { contrato: 'Contrato vigente', ata: 'Ata de registro de preços', nova_contratacao: 'Nova contratação',
     bolsas_editais: 'Bolsas e editais', diarias: 'Diárias', outros: 'Outros' };
-  const TIPOS_INST = { contrato: 'Contrato', ata: 'Ata de RP', processo: 'Processo de contratação' };
-  const SIT_INST = { vigente: 'Vigente', encerrado: 'Encerrado', em_andamento: 'Em andamento', concluido: 'Concluído', fracassado: 'Fracassado' };
+  const TIPOS_INST = { contrato: 'Contrato', ata: 'Ata de RP', dfd: 'DFD' };
+  const SIT_INST = { vigente: 'Vigente', encerrado: 'Encerrado', em_elaboracao: 'Em elaboração', em_contratacao: 'Em contratação', concluido: 'Concluído', cancelado: 'Cancelado' };
   function stReq(s) { return `<span class="st st-${s}">${esc(SIT_REQ[s] || s)}</span>`; }
   function stInst(s) { return `<span class="st st-${s}">${esc(SIT_INST[s] || s)}</span>`; }
   function abrirModal(titulo, html, largo) {
@@ -321,7 +323,7 @@
           ${lista.map(x => `<tr class="clicavel" onclick="abrirRequisicao('${x.id_requisicao}')">
             <td><span class="cod-req">${esc(x.codigo)}</span><span class="sub">${fmtD(x.data_criacao)} · ${esc(x.sigla_unidade)}</span></td>
             <td style="max-width:260px"><span class="cod-dem">${esc(x.codigo_demanda)}</span><br>${esc(x.descricao_objeto)}</td>
-            <td class="num">${fmtN(x.quantidade)}<span class="sub">${esc(x.unidade_medida||'')}</span></td>
+            <td class="num">${x.quantidade == null ? '<span class="sub">por itens</span>' : fmtN(x.quantidade) + `<span class="sub">${esc(x.unidade_medida||'')}</span>`}</td>
             <td class="num">${fmtV(x.valor)}</td>
             <td>${esc(FORMAS[x.forma]||x.forma)}${x.numero_instrumento ? `<span class="sub">${esc(x.numero_instrumento)} · gestão ${esc(x.sigla_gestora)}</span>` : `<span class="sub">gestão ${esc(x.sigla_gestora)}</span>`}</td>
             <td>${stReq(x.situacao)}<span class="dias">${diasDesde(x.data_situacao)}</span></td>
@@ -331,11 +333,10 @@
       </div>
       <div class="secao">
         <div class="secao-header"><span class="secao-titulo">Demandas homologadas e saldo a requisitar</span></div>
-        <div class="tabela-scroll">${D.length ? `<table><thead><tr><th>Demanda</th><th>Unidade</th><th class="num">Homologado</th><th class="num">Requisitado</th><th class="num">Saldo</th><th class="num">Saldo (qtd.)</th><th></th></tr></thead><tbody>
+        <div class="tabela-scroll">${D.length ? `<table><thead><tr><th>Demanda</th><th>Unidade</th><th class="num">Homologado</th><th class="num">Requisitado</th><th class="num">Saldo</th><th></th></tr></thead><tbody>
           ${D.map(d => `<tr><td style="max-width:320px"><span class="cod-dem">${esc(d.codigo)}</span><br>${esc(d.descricao_objeto)}<span class="sub">${esc(d.categoria||'Sem categoria')}</span></td>
             <td>${esc(d.sigla_unidade)}</td><td class="num">${fmtV(d.valor_estimado)}</td><td class="num">${fmtV(d.requisitado)}</td>
             <td class="num"><b>${fmtV(d.saldo)}</b>${barra(d.requisitado, d.valor_estimado)}</td>
-            <td class="num">${d.saldo_quantidade == null ? '—' : fmtN(d.saldo_quantidade) + ' ' + esc(d.unidade_medida||'')}</td>
             <td style="text-align:right">${Number(d.saldo) > 0 ? `<button class="btn btn-mini" onclick="formRequisicao(null,'${d.id_demanda}')">Requisitar</button>` : ''}</td></tr>`).join('')}
           </tbody></table>` : '<div class="vazio">Nenhuma demanda homologada neste exercício.</div>'}</div>
       </div>`;
@@ -343,11 +344,21 @@
 
   // ── Formulário (nova ou readequação) ──────────────────────────────────────
   let _form = null;
+  function numBR(v) {
+    let t = String(v == null ? '' : v).trim();
+    if (!t) return 0;
+    if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+    else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+    const n = parseFloat(t); return isNaN(n) ? 0 : n;
+  }
+  function fmtV4(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }); }
+  const poloDe = idUn => ((_ctx.unidades || []).find(u => u.id === idUn) || {}).polo;
+  const nomePolo = id => { const p = (_ctx.polos || []).find(x => x.id === id); return p ? (p.nome.startsWith('Reitoria') ? 'Reitoria' : p.sigla) : '—'; };
   function formRequisicao(idReq, idDemanda) {
     const r = idReq ? _dados.requisicoes.find(x => x.id_requisicao === idReq) : null;
     const dems = _dados.demandas.filter(d => Number(d.saldo) > 0 || (r && d.id_demanda === r.id_demanda));
     if (!dems.length) { alert('Não há demanda homologada com saldo a requisitar neste exercício.'); return; }
-    _form = { r, valorManual: !!r };
+    _form = { r, itens: [], qtds: {} };
     const idSel = r ? r.id_demanda : (idDemanda || '');
     abrirModal(r ? `Readequar <span class="cod-req">${esc(r.codigo)}</span>` : 'Nova requisição', `
       ${r && r.motivo ? `<div class="bad-box" style="margin-bottom:12px"><b>Motivo da devolução:</b> ${esc(r.motivo)}${r.valor_real ? `<br>Valor real informado pelo gestor: <b>${fmtV(r.valor_real)}</b>` : ''}</div>` : ''}
@@ -356,19 +367,20 @@
           <select id="fr-dem" onchange="mostrarDemanda()" ${r ? 'disabled' : ''}><option value="">Selecione…</option>
             ${dems.map(d => `<option value="${d.id_demanda}"${d.id_demanda===idSel?' selected':''}>${esc(d.codigo)} · ${esc(d.descricao_objeto)} · saldo ${fmtV(d.saldo)}</option>`).join('')}</select></div>
         <div class="campo largo" id="fr-dados"></div>
-        <div class="campo"><label>Quantidade *</label><input type="number" min="0" step="any" id="fr-qtd" value="${r ? r.quantidade : ''}" oninput="recalcular()"></div>
-        <div class="campo"><label>Valor da requisição (R$) *</label><input type="number" min="0" step="0.01" id="fr-valor" value="${r ? r.valor : ''}" oninput="_form.valorManual=true;recalcular()">
-          <span class="hint" id="fr-hint"></span></div>
         <div class="campo largo"><label>Por onde será atendida *</label>
           <div class="formas">${Object.entries(FORMAS).map(([k, n]) => `<label class="forma" id="fm-${k}"><input type="radio" name="fr-forma" value="${k}" onchange="mudarForma()"${r && r.forma===k?' checked':''}>
             <div>${n}<small>${{contrato:'Contrato já firmado', ata:'Ata já registrada e vigente', nova_contratacao:'Ainda não há contrato nem ata', bolsas_editais:'Pagamento de bolsas e editais', diarias:'Pagamento de diárias', outros:'Outras despesas'}[k]}</small></div></label>`).join('')}</div></div>
         <div class="campo largo" id="fr-inst-box"></div>
+        <div class="campo so-valor"><label>Quantidade</label><input type="number" min="0" step="any" id="fr-qtd" value="${r && r.quantidade ? r.quantidade : ''}" oninput="recalcular()"></div>
+        <div class="campo so-valor"><label>Valor da requisição (R$) *</label><input type="number" min="0" step="0.01" id="fr-valor" value="${r && !['contrato','ata'].includes(r.forma) ? r.valor : ''}" oninput="recalcular()">
+          <span class="hint" id="fr-hint"></span></div>
+        <div class="campo largo" id="fr-itens-box"></div>
         <div class="campo largo"><label>Observação</label><textarea id="fr-obs" rows="2" placeholder="Local de entrega, urgência, especificação…">${esc(r ? r.observacao || '' : '')}</textarea></div>
       </div>
       <div class="rodape">
         ${r ? `<button class="btn btn-r" style="margin-right:auto" onclick="cancelarRequisicao('${r.id_requisicao}')">Cancelar requisição</button>` : ''}
         <button class="btn" onclick="fecharModal()">Fechar</button>
-        <button class="btn btn-p" id="fr-enviar" onclick="enviarRequisicao()">${r ? 'Reenviar ao gestor' : 'Enviar ao gestor'}</button></div>`, true);
+        <button class="btn btn-p" id="fr-enviar" onclick="enviarRequisicao()">${r ? 'Reenviar' : 'Enviar'}</button></div>`, true);
     mostrarDemanda(); mudarForma(r ? r.id_instrumento : null);
   }
   function demandaSel() { return _dados.demandas.find(d => d.id_demanda === $('fr-dem').value); }
@@ -376,8 +388,10 @@
   function saldoPara(d) {
     const r = _form.r && _form.r.id_demanda === d.id_demanda ? _form.r : null;
     return { valor: Number(d.saldo) + (r ? Number(r.valor) : 0),
-             qtd: d.saldo_quantidade == null ? null : Number(d.saldo_quantidade) + (r ? Number(r.quantidade) : 0) };
+             qtd: d.saldo_quantidade == null ? null : Number(d.saldo_quantidade) + (r ? Number(r.quantidade || 0) : 0) };
   }
+  function formaSel() { return (document.querySelector('input[name="fr-forma"]:checked') || {}).value; }
+  function porItens() { return ['contrato', 'ata'].includes(formaSel()); }
   function mostrarDemanda() {
     const d = demandaSel();
     if (!d) { $('fr-dados').innerHTML = ''; return; }
@@ -387,62 +401,117 @@
       <div class="largo"><span>Objeto</span><b>${esc(d.descricao_objeto)}</b>${d.justificativa ? `<div style="font-size:11.5px;color:#888780;margin-top:2px">${esc(d.justificativa).slice(0, 220)}</div>` : ''}</div>
       <div><span>Categoria</span><b>${esc(d.categoria || '—')}</b>${d.natureza_despesa ? `<div style="font-size:11px;color:#888780">ND ${esc(d.natureza_despesa)}</div>` : ''}</div>
       <div><span>Homologado</span><b>${d.quantidade ? fmtN(d.quantidade) + ' ' + esc(d.unidade_medida||'') : '—'}</b><div style="font-size:11px;color:#888780">${fmtV(d.valor_estimado)}</div></div>
-      <div><span>Unitário previsto</span><b>${unit ? fmtV(unit) : '—'}</b></div>
+      <div><span>Polo</span><b>${esc(nomePolo(poloDe(d.id_unidade_fk)))}</b><div style="font-size:11px;color:#888780">${esc(d.sigla_unidade)}</div></div>
       <div><span>Já requisitado</span><b>${fmtV(Number(d.requisitado) - (_form.r ? Number(_form.r.valor) : 0))}</b></div>
       <div><span>Saldo para esta requisição</span><b style="color:#085041">${fmtV(s.valor)}</b><div style="font-size:11px;color:#888780">${s.qtd == null ? '' : fmtN(s.qtd) + ' ' + esc(d.unidade_medida||'')}</div></div>
     </div>`;
-    if (!_form.r && !$('fr-qtd').value && s.qtd != null) { $('fr-qtd').value = s.qtd; }
+    if (formaSel()) mudarForma($('fr-inst') ? $('fr-inst').value : null);
     recalcular();
   }
   function recalcular() {
     const d = demandaSel(); if (!d) return;
     const s = saldoPara(d);
-    const q = Number($('fr-qtd').value || 0);
-    const unit = d.quantidade ? Number(d.valor_estimado) / Number(d.quantidade) : null;
-    if (!_form.valorManual && unit && q) $('fr-valor').value = Math.min(s.valor, Math.round(q * unit * 100) / 100).toFixed(2);
-    const v = Number($('fr-valor').value || 0);
+    if (porItens()) { totalItensReq(); return; }
+    const q = Number($('fr-qtd').value || 0), v = Number($('fr-valor').value || 0);
     const prob = [];
     if (s.qtd != null && q > s.qtd + 1e-9) prob.push(`a quantidade passa do saldo (${fmtN(s.qtd)})`);
     if (v > s.valor + 0.004) prob.push(`o valor passa do saldo (${fmtV(s.valor)})`);
-    $('fr-hint').innerHTML = prob.length ? `<span style="color:#A32D2D">Atenção: ${prob.join(' e ')}.</span>`
-      : unit ? `Previsto: ${fmtN(q)} × ${fmtV(unit)}. Pode ajustar até o saldo.` : '';
+    $('fr-hint').innerHTML = prob.length ? `<span style="color:#A32D2D">Atenção: ${prob.join(' e ')}.</span>` : '';
   }
   function mudarForma(idInst) {
-    const f = (document.querySelector('input[name="fr-forma"]:checked') || {}).value;
+    const f = formaSel(), d = demandaSel();
     document.querySelectorAll('.forma').forEach(el => el.classList.toggle('sel', el.id === 'fm-' + f));
+    document.querySelectorAll('.so-valor').forEach(el => el.style.display = !f || porItens() ? 'none' : '');
     const box = $('fr-inst-box');
+    $('fr-itens-box').innerHTML = '';
     if (!f) { box.innerHTML = ''; return; }
     if (['bolsas_editais','diarias','outros'].includes(f)) {
       box.innerHTML = '<div class="info">Sem contrato nem ata: a sua própria unidade faz a gestão desta requisição e pede o empenho, pela tela Gestão de pedidos.</div>';
-      return;
+      recalcular(); return;
     }
-    const tipo = f === 'nova_contratacao' ? 'processo' : f;
-    const ops = _dados.instrumentos.filter(i => i.tipo === tipo);
+    if (!d) { box.innerHTML = '<div class="info">Escolha a demanda primeiro.</div>'; return; }
+    const polo = poloDe(d.id_unidade_fk);
     const atual = idInst || (_form.r && _form.r.forma === f ? _form.r.id_instrumento : '');
-    box.innerHTML = `<label>${f === 'nova_contratacao' ? 'Processo de contratação *' : (f === 'ata' ? 'Ata de registro de preços *' : 'Contrato *')}</label>
-      ${ops.length ? `<select id="fr-inst"><option value="">Selecione…</option>${ops.map(i => `<option value="${i.id_instrumento}"${i.id_instrumento===atual?' selected':''}>${esc(i.numero)} · ${esc(i.objeto)}${i.fornecedor_nome ? ' · ' + esc(i.fornecedor_nome) : ''} · gestão ${esc(i.sigla_gestora)}${i.saldo != null ? ' · saldo ' + fmtV(i.saldo) : ''}</option>`).join('')}</select>`
-        : `<div class="bad-box">Não há ${f === 'nova_contratacao' ? 'processo de contratação em andamento' : (f === 'ata' ? 'ata vigente' : 'contrato vigente')} cadastrado. Peça à Seção de Licitações para cadastrá-lo.</div>`}
-      ${f === 'nova_contratacao' ? `<label class="check" style="margin-top:8px"><input type="checkbox" id="fr-decl"${_form.r && _form.r.declaracao_sem_instrumento ? ' checked' : ''}>
-        <span>Verifiquei que não há contrato nem ata de registro de preços vigente para este objeto. A requisição fica pendente até o processo gerar a ata ou o contrato.</span></label>` : ''}`;
+    if (f === 'nova_contratacao') {
+      const dfds = _dados.instrumentos.filter(i => i.tipo === 'dfd' && i.id_polo === polo);
+      box.innerHTML = `<label>DFD da contratação</label>
+        <select id="fr-inst"><option value="">DFD ainda não cadastrado — a Licitações vincula depois</option>${dfds.map(i => `<option value="${i.id_instrumento}"${i.id_instrumento===atual?' selected':''}>${esc(i.numero)} · ${esc(i.objeto)} · ${esc(SIT_INST[i.situacao]||i.situacao)}</option>`).join('')}</select>
+        <label class="check" style="margin-top:8px"><input type="checkbox" id="fr-decl"${_form.r && _form.r.declaracao_sem_instrumento ? ' checked' : ''}>
+          <span>Verifiquei que não há contrato nem ata de registro de preços vigente para este objeto no meu polo. A requisição fica <b>aguardando o processo de contratação</b>; quando o contrato ou a ata for cadastrado, ela volta para eu escolher os itens.</span></label>`;
+      recalcular(); return;
+    }
+    const ops = _dados.instrumentos.filter(i => i.tipo === f && (i.participantes || []).some(p => p.id_polo === polo));
+    box.innerHTML = `<label>${f === 'ata' ? 'Ata de registro de preços *' : 'Contrato *'}</label>
+      ${ops.length ? `<select id="fr-inst" onchange="carregarItens()"><option value="">Selecione…</option>${ops.map(i => { const p = i.participantes.find(x => x.id_polo === polo);
+          return `<option value="${i.id_instrumento}"${i.id_instrumento===atual?' selected':''}>${esc(i.numero)} · ${esc(i.objeto)}${i.fornecedor_nome ? ' · ' + esc(i.fornecedor_nome) : ''} · gestão ${esc(p ? p.sigla_gestora : '')}</option>`; }).join('')}</select>`
+        : `<div class="bad-box">Não há ${f === 'ata' ? 'ata vigente' : 'contrato vigente'} com participação do polo ${esc(nomePolo(polo))}. Peça à Seção de Licitações para cadastrá-lo, ou escolha “Nova contratação”.</div>`}`;
+    if (atual && ops.some(i => i.id_instrumento === atual)) carregarItens();
+  }
+  async function carregarItens() {
+    const d = demandaSel(), idInst = $('fr-inst') ? $('fr-inst').value : '';
+    const box = $('fr-itens-box');
+    if (!idInst || !d) { box.innerHTML = ''; _form.itens = []; return; }
+    box.innerHTML = '<div class="carregando">Carregando itens…</div>';
+    const r = await chamar('req_itens_instrumento', { id_instrumento: idInst, id_unidade: d.id_unidade_fk,
+      id_requisicao: _form.r && _form.r.id_instrumento === idInst ? _form.r.id_requisicao : null });
+    if (!r.ok) { box.innerHTML = `<div class="bad-box">${esc(r.erro)}</div>`; return; }
+    _form.itens = r.itens;
+    _form.qtds = Object.fromEntries((r.meus || []).map(m => [m.id_item, m.quantidade]));
+    box.innerHTML = `<label>Itens e quantidades *</label>
+      <div class="filtros" style="margin:4px 0 6px"><input type="search" id="fr-busca-item" placeholder="Buscar item ou descrição…" oninput="desenharItensReq()" style="flex:1"></div>
+      <div class="caixa tabela-scroll" style="max-height:340px;overflow-y:auto"><table class="tab-itens"><thead><tr><th>Item</th><th>Descrição</th><th>Unidade</th><th class="num">Valor unit.</th><th class="num">Saldo do polo</th><th class="num" style="width:110px">Quantidade</th><th class="num">Subtotal</th></tr></thead><tbody id="fr-itens"></tbody></table></div>
+      <div id="fr-itens-tot" style="margin-top:8px"></div>`;
+    desenharItensReq();
+  }
+  function desenharItensReq() {
+    const b = ($('fr-busca-item') || {}).value || '';
+    const nb = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const termos = nb(b).split(/\s+/).filter(Boolean);
+    const lista = _form.itens.filter(it => !termos.length || termos.every(t => nb([it.grupo, it.numero_item, it.descricao].join(' ')).includes(t)) || _form.qtds[it.id_item]);
+    $('fr-itens').innerHTML = lista.map(it => { const q = _form.qtds[it.id_item];
+      return `<tr><td style="white-space:nowrap">${it.grupo ? 'G' + esc(it.grupo) + ' · ' : ''}<b>${esc(it.numero_item)}</b></td>
+        <td style="max-width:280px">${esc(it.descricao)}</td><td>${esc(it.unidade_medida)}</td><td class="num">${fmtV4(it.valor_unitario)}</td>
+        <td class="num"><b style="color:${it.saldo > 0 ? '#085041' : '#A32D2D'}">${fmtN(it.saldo)}</b>${it.em_analise ? `<span class="sub">${fmtN(it.em_analise)} em análise</span>` : ''}</td>
+        <td><input class="num" data-item="${it.id_item}" value="${q ? String(q).replace('.', ',') : ''}" oninput="_form.qtds['${it.id_item}']=numBR(this.value);totalItensReq()" ${it.saldo <= 0 && !q ? 'disabled title="Sem saldo no polo"' : ''}></td>
+        <td class="num" data-sub="${it.id_item}">${q ? fmtV(q * it.valor_unitario) : '—'}</td></tr>`; }).join('')
+      || '<tr><td colspan="7" class="vazio" style="padding:14px">Nenhum item encontrado.</td></tr>';
+    totalItensReq();
+  }
+  function totalItensReq() {
+    const d = demandaSel(); if (!d || !$('fr-itens-tot')) return;
+    const s = saldoPara(d);
+    let tot = 0, n = 0; const prob = [];
+    _form.itens.forEach(it => { const q = Number(_form.qtds[it.id_item] || 0); if (!q) return;
+      n++; tot += q * it.valor_unitario;
+      const cel = document.querySelector(`[data-sub="${it.id_item}"]`); if (cel) cel.textContent = fmtV(q * it.valor_unitario);
+      if (q > it.saldo + 1e-9) prob.push(`item ${it.numero_item}: ${fmtN(q)} passa do saldo do polo (${fmtN(it.saldo)})`); });
+    tot = Math.round(tot * 100) / 100;
+    if (tot > s.valor + 0.004) prob.push(`o total passa do saldo da demanda (${fmtV(s.valor)})`);
+    $('fr-itens-tot').innerHTML = prob.length ? `<div class="bad-box">${n} item(ns) · total <b>${fmtV(tot)}</b>. Atenção: ${prob.map(esc).join('; ')}.</div>`
+      : `<div class="${n ? 'ok-box' : 'info'}">${n ? `${n} item(ns) · total <b>${fmtV(tot)}</b> (saldo da demanda: ${fmtV(s.valor)})` : 'Informe a quantidade dos itens que precisa.'}</div>`;
   }
   async function enviarRequisicao() {
-    const d = demandaSel();
-    const f = (document.querySelector('input[name="fr-forma"]:checked') || {}).value;
+    const d = demandaSel(), f = formaSel();
     if (!d) return erroModal('Escolha a demanda.');
-    if (!(Number($('fr-qtd').value) > 0)) return erroModal('Informe a quantidade.');
-    if (!(Number($('fr-valor').value) > 0)) return erroModal('Informe o valor.');
     if (!f) return erroModal('Escolha por onde a requisição será atendida.');
     const inst = $('fr-inst') ? $('fr-inst').value : '';
-    if (['contrato','ata','nova_contratacao'].includes(f) && !inst) return erroModal('Escolha o instrumento.');
-    if (f === 'nova_contratacao' && !($('fr-decl') && $('fr-decl').checked)) return erroModal('Confirme que verificou não haver contrato ou ata vigente para o objeto.');
+    const dados = { id_requisicao: _form.r ? _form.r.id_requisicao : null, id_demanda: d.id_demanda, forma: f, id_instrumento: inst || null,
+      declaracao: !!($('fr-decl') && $('fr-decl').checked), observacao: $('fr-obs').value };
+    if (porItens()) {
+      if (!inst) return erroModal('Escolha o contrato ou a ata.');
+      dados.itens = Object.entries(_form.qtds).filter(([, q]) => Number(q) > 0).map(([id_item, quantidade]) => ({ id_item, quantidade }));
+      if (!dados.itens.length) return erroModal('Informe a quantidade de ao menos um item.');
+    } else {
+      if (!(Number($('fr-valor').value) > 0)) return erroModal('Informe o valor.');
+      dados.quantidade = $('fr-qtd').value; dados.valor = $('fr-valor').value;
+      if (f === 'nova_contratacao' && !dados.declaracao) return erroModal('Confirme que verificou não haver contrato ou ata vigente para o objeto.');
+    }
     $('fr-enviar').disabled = true;
-    const r = await chamar('req_salvar', { id_requisicao: _form.r ? _form.r.id_requisicao : null, id_demanda: d.id_demanda,
-      quantidade: $('fr-qtd').value, valor: $('fr-valor').value, forma: f, id_instrumento: inst || null,
-      declaracao: !!($('fr-decl') && $('fr-decl').checked), observacao: $('fr-obs').value });
+    const r = await chamar('req_salvar', dados);
     $('fr-enviar').disabled = false;
     if (!r.ok) return erroModal(r.erro);
     fecharModal();
-    toast((_form.r ? 'Requisição reenviada: ' : 'Requisição enviada: ') + r.codigo + (r.situacao === 'aguardando_contratacao' ? ' (aguarda a contratação)' : ''));
+    toast((_form.r ? 'Requisição reenviada: ' : 'Requisição enviada: ') + r.codigo + (r.situacao === 'aguardando_contratacao' ? ' (aguardando o processo de contratação)' : ''));
     carregar();
   }
   async function cancelarRequisicao(id) {
@@ -459,7 +528,7 @@
     const editavel = ['pendente','aguardando_gestor','aguardando_contratacao'].includes(x.situacao);
     abrirModal(`<span class="cod-req">${esc(x.codigo)}</span> ${esc(x.descricao_objeto)}<span class="sub">${esc(x.codigo_demanda)} · ${esc(x.nome_unidade)}</span>`, `
       <div class="mini-cards">
-        <div class="mini"><span>Quantidade</span><b>${fmtN(x.quantidade)} ${esc(x.unidade_medida||'')}</b></div>
+        <div class="mini"><span>Quantidade</span><b>${x.quantidade == null ? 'por itens' : fmtN(x.quantidade) + ' ' + esc(x.unidade_medida||'')}</b></div>
         <div class="mini"><span>Requisitado</span><b>${fmtV(x.valor)}</b></div>
         <div class="mini"><span>Valor real</span><b>${x.valor_real ? fmtV(x.valor_real) : '—'}</b></div>
         <div class="mini"><span>Resíduo</span><b>${Number(x.residuo) ? fmtV(x.residuo) : '—'}</b></div>
@@ -475,18 +544,26 @@
         <div class="dados-dem"><div><span>Solicitação de empenho</span><b>${esc(x.codigo_solicitacao||'—')}</b></div>
           <div><span>Empenhado</span><b>${fmtV(x.empenhado)}</b></div><div><span>Liquidado</span><b>${fmtV(x.liquidado)}</b></div>
           <div><span>Pago</span><b>${fmtV(x.pago)}</b></div></div></div>` : ''}
+      <div class="bloco" id="itens-bloco" style="display:none"><div class="bloco-titulo">Itens</div><div class="caixa tabela-scroll" id="itens-req"></div></div>
       <div class="bloco"><div class="bloco-titulo">Histórico</div><div class="caixa hist" id="hist"><div class="carregando">Carregando…</div></div></div>
       <div class="rodape">${editavel ? `<button class="btn btn-r" style="margin-right:auto" onclick="cancelarRequisicao('${x.id_requisicao}')">Cancelar requisição</button>
         <button class="btn btn-p" onclick="formRequisicao('${x.id_requisicao}')">${x.situacao === 'pendente' ? 'Readequar e reenviar' : 'Alterar'}</button>` : ''}
         <button class="btn" onclick="fecharModal()">Fechar</button></div>`, true);
-    const h = await chamar('req_historico', { id_requisicao: id });
+    const [h, ri] = await Promise.all([chamar('req_historico', { id_requisicao: id }), chamar('req_itens', { ids: [id] })]);
+    if (ri.ok && ri.itens.length) {
+      $('itens-bloco').style.display = '';
+      $('itens-req').innerHTML = `<table><thead><tr><th>Item</th><th>Descrição</th><th class="num">Pedido</th><th class="num">Aprovado</th><th class="num">Valor unit.</th><th class="num">Subtotal</th></tr></thead><tbody>
+        ${ri.itens.sort((a, b) => (a.ordem || 0) - (b.ordem || 0)).map(it => `<tr><td style="white-space:nowrap">${it.grupo ? 'G' + esc(it.grupo) + ' · ' : ''}<b>${esc(it.numero_item)}</b></td><td>${esc(it.descricao)}<span class="sub">${esc(it.unidade_medida)}</span></td>
+          <td class="num">${fmtN(it.quantidade)}</td><td class="num">${it.quantidade_aprovada == null ? '—' : fmtN(it.quantidade_aprovada)}</td><td class="num">${fmtV4(it.valor_unitario)}</td>
+          <td class="num">${fmtV((it.quantidade_aprovada == null ? it.quantidade : it.quantidade_aprovada) * it.valor_unitario)}</td></tr>`).join('')}</tbody></table>`;
+    }
     $('hist').innerHTML = h.ok && h.historico.length ? h.historico.map(e => `<div><b>${fmtDH(e.data_hora)}</b> · ${esc(ACOES_HIST[e.acao]||e.acao)} → ${stReq(e.situacao)}${e.autor ? ' · ' + esc(e.autor) : ''}
       ${e.valor_real ? ` · real ${fmtV(e.valor_real)}` : (e.valor ? ` · ${fmtV(e.valor)}` : '')}${e.motivo ? `<div style="color:#5F5E5A;margin-top:2px">${esc(e.motivo)}</div>` : ''}</div>`).join('')
       : '<div class="vazio" style="padding:14px">Sem histórico.</div>';
   }
   const ACOES_HIST = { enviada: 'Enviada', reenviada: 'Readequada e reenviada', aprovar: 'Aprovada pelo gestor', devolver: 'Devolvida',
     desfazer: 'Voltou para análise', cancelada: 'Cancelada', contratacao_concluida: 'Contratação concluída', contratacao_fracassada: 'Contratação fracassada',
-    solicitacao: 'Incluída em solicitação de empenho', solicitacao_cancelada: 'Solicitação de empenho cancelada',
+    solicitacao: 'Incluída em solicitação de empenho', vinculada_dfd: 'Vinculada ao DFD', solicitacao_cancelada: 'Solicitação de empenho cancelada',
     retirada_da_solicitacao: 'Retirada da solicitação de empenho', execucao: 'Execução atualizada' };
 
 </script>
